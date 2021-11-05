@@ -57,6 +57,38 @@ Sitegeist:
       languageDimensionName: 'language'
 ```
 
+If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
+be configured explicitly for this preset via `options.deeplLanguage`. If this value is set to null the language will neither
+ne used as source nor as target for translations.  
+
+```
+Neos:
+  ContentRepository:
+    contentDimensions:
+      'language':
+        presets:
+        
+          # 
+          # Danish a different loacale identifier than deepl so this has to be configured explicitly
+          #
+          'dk':
+            label: 'Dansk'
+            values: ['dk']
+            uriSegment: 'dk'
+            options:
+              deeplLanguage: 'da'
+              
+          #    
+          # Bavarian language not support by DeepL and is disabled
+          # 
+          'de_bar':
+            label: 'Bayrisch'
+            values: ['de_bar','de']
+            uriSegment: 'de_bar'
+            options:
+              deeplLanguage: ~
+```
+
 To configure a property for automatic translation the setting `options.translateOnAdoption: true` can be used on any 
 property of type "string". Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
 
