@@ -1,0 +1,37 @@
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+
+      #
+      # This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api.
+      # There are free plans that support a limited number but for productive use we recommend using a payed plan.
+      #
+      authenticationKey: ''
+
+      baseUri: 'https://api.deepl.com/v2/'
+      baseUriFree: 'https://api-free.deepl.com/v2/'
+
+      defaultOptions:
+        tag_handling: 'xml'
+        split_sentences: 'nonewlines'
+        preserve_formatting: 1
+        formality: "default"
+
+    nodeTranslation:
+      #
+      # Enable the automatic translations of nodes while they are adopted to another dimension
+      #
+      enabled: true
+
+      #
+      # Translate all inline editable fields without further configuration.
+      #
+      # If this is disabled iline editables can be configured for translation by setting
+      # `options.translateOnAdoption: true` for each property seperatly
+      #
+      translateInlineEditables: true
+
+      #
+      # The name of the language dimension. Usually needs no modification
+      #
+      languageDimensionName: 'language'

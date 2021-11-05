@@ -1,0 +1,14 @@
+'Neos.Neos:Document':
+  properties:
+    title:
+      options:
+        translateOnAdoption: true
+    titleOverride:
+      options:
+        translateOnAdoption: true
+    metaDescription:
+      options:
+        translateOnAdoption: true
+    metaKeywords:
+      options:
+        translateOnAdoption: true
