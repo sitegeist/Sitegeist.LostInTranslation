@@ -39,7 +39,7 @@ class NodeTranslationService
     protected $languageDimensionName;
 
     /**
-     * @Flow\InjectConfiguration(package="", path="nodeTranslation.languageDimensionName")
+     * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
      * @var array
      */
     protected $contentDimensionConfiguration;
@@ -62,7 +62,18 @@ class NodeTranslationService
         $sourceLanguage = explode('_', $node->getContext()->getTargetDimensions()[$this->languageDimensionName])[0];
         $targetLanguage = explode('_', $context->getTargetDimensions()[$this->languageDimensionName])[0];
 
-        if ($sourceLanguage == $targetLanguage) {
+        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceLanguage];
+        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguage];
+
+        if (array_key_exists('options', $sourceLanguagePreset) && array_key_exists('deeplLanguage', $sourceLanguagePreset['options'])) {
+            $sourceLanguage = $sourceLanguagePreset['options']['deeplLanguage'];
+        }
+
+        if (array_key_exists('options', $targetLanguagePreset) && array_key_exists('deeplLanguage', $targetLanguagePreset['options'])) {
+            $targetLanguage = $targetLanguagePreset['options']['deeplLanguage'];
+        }
+
+        if (empty($sourceLanguage) || empty($targetLanguage) || ($sourceLanguage == $targetLanguage)) {
             return;
         }
 
