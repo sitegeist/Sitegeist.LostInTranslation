@@ -69,7 +69,7 @@ Neos:
         presets:
         
           # 
-          # Danish a different loacale identifier than deepl so this has to be configured explicitly
+          # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
           #
           'dk':
             label: 'Dansk'
@@ -79,7 +79,7 @@ Neos:
               deeplLanguage: 'da'
               
           #    
-          # Bavarian language not support by DeepL and is disabled
+          # The bavarian language is not supported by DeepL and is disabled
           # 
           'de_bar':
             label: 'Bayrisch'
