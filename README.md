@@ -4,6 +4,9 @@
 Documents and Contents are translated automatically once editors choose to "create and copy" a version in another language.
 The included DeeplService can be used for other purposes aswell. 
 
+The initial development started as a pr for https://github.com/code-q-web-factory/CodeQ.DeepLTranslationHelper but developed
+into a seperate package.
+
 ### Authors & Sponsors
 
 * Martin Ficzel - ficzel@sitegeist.de
