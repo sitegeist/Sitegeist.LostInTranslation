@@ -20,6 +20,31 @@ Sitegeist.LostInTranslation is available via packagist. Run `composer require si
 
 We use semantic-versioning so every breaking change will increase the major-version number.
 
+## How it works
+
+By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`). 
+To include other `string` properties into the automatic translation the `options.translateOnAdoption: true` 
+can be used in the property configuration. 
+
+Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
+
+```
+'Neos.Neos:Document':
+  properties:
+    title:
+      options:
+        translateOnAdoption: true
+    titleOverride:
+      options:
+        translateOnAdoption: true
+    metaDescription:
+      options:
+        translateOnAdoption: true
+    metaKeywords:
+      options:
+        translateOnAdoption: true
+```
+
 ## Configuration 
 
 This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api. 
@@ -46,7 +71,7 @@ Sitegeist:
       #
       # Translate all inline editable fields without further configuration.
       #
-      # If this is disabled iline editables can be configured for translation by setting
+      # If this is disabled inline editables can be configured for translation by setting
       # `options.translateOnAdoption: true` for each property seperatly
       #
       translateInlineEditables: true
@@ -59,7 +84,7 @@ Sitegeist:
 
 If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
 be configured explicitly for this preset via `options.deeplLanguage`. If this value is set to null the language will neither
-ne used as source nor as target for translations.  
+be used as source nor as target for translations.  
 
 ```
 Neos:
@@ -88,26 +113,9 @@ Neos:
             options:
               deeplLanguage: ~
 ```
+## Performance
 
-To configure a property for automatic translation the setting `options.translateOnAdoption: true` can be used on any 
-property of type "string". Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
-
-```
-'Neos.Neos:Document':
-  properties:
-    title:
-      options:
-        translateOnAdoption: true
-    titleOverride:
-      options:
-        translateOnAdoption: true
-    metaDescription:
-      options:
-        translateOnAdoption: true
-    metaKeywords:
-      options:
-        translateOnAdoption: true
-```
+For every translated node a single request is made to the DeepL API. This can lead to significant delay when Documents with lots of nodes are translated. It is likely that future versions will improve this.
 
 ## Contribution
 
