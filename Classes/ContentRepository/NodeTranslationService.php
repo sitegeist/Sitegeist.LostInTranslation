@@ -32,12 +32,6 @@ class NodeTranslationService
     protected $enabled;
 
     /**
-     * @Flow\InjectConfiguration(path="nodeTranslation.strategy")
-     * @var string
-     */
-    protected string $nodeTranslationStrategy;
-
-    /**
      * @Flow\InjectConfiguration(path="nodeTranslation.translateInlineEditables")
      * @var bool
      */
@@ -48,12 +42,6 @@ class NodeTranslationService
      * @var string
      */
     protected $languageDimensionName;
-
-    /**
-     * @Flow\InjectConfiguration(path="nodeTranslation.translationMapping")
-     * @var array
-     */
-    protected $translationMapping;
 
     /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
@@ -80,7 +68,13 @@ class NodeTranslationService
      */
     public function afterAdoptNode(NodeInterface $node, Context $context, $recursive)
     {
-        if (!$this->enabled && $this->nodeTranslationStrategy !== self::TRANSLATION_STRATEGY_ONCE) {
+        if (!$this->enabled) {
+            return;
+        }
+
+        $targetLanguage = explode('_', $context->getTargetDimensions()[$this->languageDimensionName])[0];
+        $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguage];
+        if (!array_key_exists('options', $languagePreset) || !array_key_exists('translationStrategy', $languagePreset['options']) || $languagePreset['options']['translationStrategy'] !== self::TRANSLATION_STRATEGY_ONCE) {
             return;
         }
 
@@ -95,17 +89,22 @@ class NodeTranslationService
      */
     public function afterNodePublish(NodeInterface $node, Workspace $workspace)
     {
-        if (!$this->enabled && $this->nodeTranslationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
+        if (!$this->enabled) {
             return;
         }
 
         $nodeSourceLanguage = explode('_', $node->getContext()->getTargetDimensions()[$this->languageDimensionName])[0];
-        if (!array_key_exists($nodeSourceLanguage, $this->translationMapping)) {
-            return;
-        }
+        $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
+        foreach($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $language => $languagePreset) {
+            if ($nodeSourceLanguage === $language || $nodeSourceLanguage !== $defaultPreset) {
+                continue;
+            }
 
-        foreach($this->translationMapping[$nodeSourceLanguage] as $targetLanguage) {
-            $context = $this->getContextForLanguageDimensionAndWorkspaceName($targetLanguage, $workspace->getName());
+            if (!array_key_exists('options', $languagePreset) || !array_key_exists('translationStrategy', $languagePreset['options']) || $languagePreset['options']['translationStrategy'] !== self::TRANSLATION_STRATEGY_SYNC) {
+                continue;
+            }
+
+            $context = $this->getContextForLanguageDimensionAndWorkspaceName($language, $workspace->getName());
             $adoptedNode = $context->adoptNode($node);
             $this->translateNode($node, $adoptedNode, $context);
         }
@@ -120,6 +119,11 @@ class NodeTranslationService
     protected function translateNode(NodeInterface $node, NodeInterface $adoptedNode, Context $context): void
     {
         $propertyDefinitions = $node->getNodeType()->getProperties();
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticallyTranslate') ?? true;
+
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
+        }
 
         $sourceLanguage = explode('_', $node->getContext()->getTargetDimensions()[$this->languageDimensionName])[0];
         $targetLanguage = explode('_', $context->getTargetDimensions()[$this->languageDimensionName])[0];
@@ -167,7 +171,7 @@ class NodeTranslationService
             $translateProperty = false;
             $isInlineEditable = $propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false;
             // @deprecated Fallback for renamed setting translateOnAdoption -> translate
-            $isTranslateEnabled = $propertyDefinitions[$propertyName]['options']['translate'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? false);
+            $isTranslateEnabled = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? false);
             if ($this->translateRichtextProperties && $isInlineEditable == true) {
                 $translateProperty = true;
             }

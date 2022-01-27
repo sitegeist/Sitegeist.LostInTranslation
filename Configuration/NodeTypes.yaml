@@ -1,4 +1,6 @@
 'Neos.Neos:Document':
+  options:
+    automaticallyTranslate: true
   properties:
     title:
       options:
@@ -12,3 +14,7 @@
     metaKeywords:
       options:
         translate: true
+
+'Neos.Neos:Content':
+  options:
+    automaticallyTranslate: true

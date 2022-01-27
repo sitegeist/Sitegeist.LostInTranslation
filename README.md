@@ -24,25 +24,36 @@ We use semantic-versioning so every breaking change will increase the major-vers
 
 By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`).
 To include other `string` properties into the automatic translation the `options.translate: true`
-can be used in the property configuration.
+can be used in the property configuration. Also, you can disable automatic translation in general for certain node types
+by setting `options.automaticallyTranslate: false`.
 
 Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
 
-```
+```yaml
 'Neos.Neos:Document':
+  options:
+    automaticallyTranslate: true
   properties:
     title:
       options:
-        translate: true
+        automaticallyTranslate: true
     titleOverride:
       options:
-        translate: true
+        automaticallyTranslate: true
     metaDescription:
       options:
-        translate: true
+        automaticallyTranslate: true
     metaKeywords:
       options:
-        translate: true
+        automaticallyTranslate: true
+```
+
+Also, automatic translation for `Neos.Neos:Content` is enabled by default:
+
+```yaml
+'Neos.Neos:Content':
+  options:
+    automaticallyTranslate: true
 ```
 
 ## Configuration
@@ -50,7 +61,7 @@ Some very common fields from `Neos.Neos:Document` are already configured to do s
 This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api.
 There are free plans that support a limited number but for productive use we recommend using a payed plan.
 
-```
+```yaml
 Sitegeist:
   LostInTranslation:
     DeepLApi:
@@ -59,7 +70,7 @@ Sitegeist:
 
 The translation of nodes can is configured via settings:
 
-```
+```yaml
 Sitegeist:
   LostInTranslation:
     nodeTranslation:
@@ -102,11 +113,15 @@ Sitegeist:
       translationMapping: [ ]
 ```
 
-If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
-be configured explicitly for this preset via `options.deeplLanguage`. If this value is set to null the language will neither
-be used as source nor as target for translations.
+To enable automated translations for a language preset, just set `options.translationStrategy` to  `once` or `sync`.
 
-```
+* `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
+* `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
+
+If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
+be configured explicitly for this preset via `options.deeplLanguage`.
+
+```yaml
 Neos:
   ContentRepository:
     contentDimensions:
@@ -122,6 +137,7 @@ Neos:
             uriSegment: 'dk'
             options:
               deeplLanguage: 'da'
+              translationStrategy: 'once'
 
           #
           # The bavarian language is not supported by DeepL and is disabled
@@ -131,7 +147,7 @@ Neos:
             values: ['de_bar','de']
             uriSegment: 'de_bar'
             options:
-              deeplLanguage: ~
+              translationStrategy: 'sync'
 ```
 ## Performance
 
@@ -145,8 +161,8 @@ We will gladly accept contributions. Please send us pull requests.
 
 ### 2.0.0
 
-* The settings `Sitegeist.LostInTranslation.nodeTranslation.strategy` and `Sitegeist.LostInTranslation.nodeTranslation.translationMapping` were introduced
-* There are now two auto-translation strategies
+* The preset option `translationStrategy` was introduced. There are now two auto-translation strategies
   * Strategy `once` will auto-translate the node once "on adoption", i.e. the editor switches to a different language dimension
   * Strategy `sync` will auto-translate and sync the node according to the `translationMapping` setting every time a node is updated in the source language
-* The Node setting `options.translateOnAdoption` as been renamed to `options.translate`
+* The node setting `options.translateOnAdoption` as been renamed to `options.automaticallyTranslate`
+* The new node option `automaticallyTranslate` was introduced
