@@ -2,17 +2,17 @@
 ## Automatic Translations for Neos via DeeplApi
 
 Documents and Contents are translated automatically once editors choose to "create and copy" a version in another language.
-The included DeeplService can be used for other purposes aswell. 
+The included DeeplService can be used for other purposes aswell.
 
-The initial development started as a pr for https://github.com/code-q-web-factory/CodeQ.DeepLTranslationHelper but developed
-into a seperate package.
+The development was a collaboration of Sitegeist and Code Q.
 
 ### Authors & Sponsors
 
 * Martin Ficzel - ficzel@sitegeist.de
+* Felix Gradinaru - fg@codeq.at
 
 *The development and the public-releases of this package is generously sponsored
-by our employer http://www.sitegeist.de.*
+by our employers http://www.sitegeist.de and http://www.codeq.at.*
 
 ## Installation
 
@@ -22,9 +22,9 @@ We use semantic-versioning so every breaking change will increase the major-vers
 
 ## How it works
 
-By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`). 
-To include other `string` properties into the automatic translation the `options.translateOnAdoption: true` 
-can be used in the property configuration. 
+By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`).
+To include other `string` properties into the automatic translation the `options.translate: true`
+can be used in the property configuration.
 
 Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
 
@@ -33,22 +33,22 @@ Some very common fields from `Neos.Neos:Document` are already configured to do s
   properties:
     title:
       options:
-        translateOnAdoption: true
+        translate: true
     titleOverride:
       options:
-        translateOnAdoption: true
+        translate: true
     metaDescription:
       options:
-        translateOnAdoption: true
+        translate: true
     metaKeywords:
       options:
-        translateOnAdoption: true
+        translate: true
 ```
 
-## Configuration 
+## Configuration
 
-This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api. 
-There are free plans that support a limited number but for productive use we recommend using a payed plan.  
+This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api.
+There are free plans that support a limited number but for productive use we recommend using a payed plan.
 
 ```
 Sitegeist:
@@ -57,7 +57,7 @@ Sitegeist:
       authenticationKey: '.........................'
 ```
 
-The translation of nodes can is configured via Setting:
+The translation of nodes can is configured via settings:
 
 ```
 Sitegeist:
@@ -69,9 +69,16 @@ Sitegeist:
       enabled: true
 
       #
+      # There are two strategies:
+      # (*) once: will translate the node once the editor switches the language dimension and only then
+      # (*) sync: will translate and sync the node anytime the base language has been edited
+      #
+      strategy: 'once'
+
+      #
       # Translate all inline editable fields without further configuration.
       #
-      # If this is disabled inline editables can be configured for translation by setting
+      # If this is disabled iline editables can be configured for translation by setting
       # `options.translateOnAdoption: true` for each property seperatly
       #
       translateInlineEditables: true
@@ -80,11 +87,24 @@ Sitegeist:
       # The name of the language dimension. Usually needs no modification
       #
       languageDimensionName: 'language'
+
+      #
+      # When strategy "sync" is selected, this setting defines which languages
+      # to translate to which other languages
+      #
+      # This example would sync and translate all nodes in language "de" to "it" and "en"
+      #
+      # translationMapping:
+      #   de:
+      #     - 'it'
+      #     - 'en'
+      #
+      translationMapping: [ ]
 ```
 
 If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
 be configured explicitly for this preset via `options.deeplLanguage`. If this value is set to null the language will neither
-be used as source nor as target for translations.  
+be used as source nor as target for translations.
 
 ```
 Neos:
@@ -92,8 +112,8 @@ Neos:
     contentDimensions:
       'language':
         presets:
-        
-          # 
+
+          #
           # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
           #
           'dk':
@@ -102,10 +122,10 @@ Neos:
             uriSegment: 'dk'
             options:
               deeplLanguage: 'da'
-              
-          #    
+
+          #
           # The bavarian language is not supported by DeepL and is disabled
-          # 
+          #
           'de_bar':
             label: 'Bayrisch'
             values: ['de_bar','de']
@@ -120,3 +140,13 @@ For every translated node a single request is made to the DeepL API. This can le
 ## Contribution
 
 We will gladly accept contributions. Please send us pull requests.
+
+## Changelog
+
+### 2.0.0
+
+* The settings `Sitegeist.LostInTranslation.nodeTranslation.strategy` and `Sitegeist.LostInTranslation.nodeTranslation.translationMapping` were introduced
+* There are now two auto-translation strategies
+  * Strategy `once` will auto-translate the node once "on adoption", i.e. the editor switches to a different language dimension
+  * Strategy `sync` will auto-translate and sync the node according to the `translationMapping` setting every time a node is updated in the source language
+* The Node setting `options.translateOnAdoption` as been renamed to `options.translate`

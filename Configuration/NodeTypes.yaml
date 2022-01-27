@@ -2,13 +2,13 @@
   properties:
     title:
       options:
-        translateOnAdoption: true
+        translate: true
     titleOverride:
       options:
-        translateOnAdoption: true
+        translate: true
     metaDescription:
       options:
-        translateOnAdoption: true
+        translate: true
     metaKeywords:
       options:
-        translateOnAdoption: true
+        translate: true
