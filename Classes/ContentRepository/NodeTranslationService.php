@@ -119,7 +119,7 @@ class NodeTranslationService
     protected function translateNode(NodeInterface $node, NodeInterface $adoptedNode, Context $context): void
     {
         $propertyDefinitions = $node->getNodeType()->getProperties();
-        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticallyTranslate') ?? true;
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
 
         if (!$isAutomaticTranslationEnabledForNodeType) {
             return;
@@ -170,7 +170,7 @@ class NodeTranslationService
 
             $translateProperty = false;
             $isInlineEditable = $propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false;
-            // @deprecated Fallback for renamed setting translateOnAdoption -> translate
+            // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
             $isTranslateEnabled = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? false);
             if ($this->translateRichtextProperties && $isInlineEditable == true) {
                 $translateProperty = true;

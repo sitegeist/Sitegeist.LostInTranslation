@@ -1,20 +1,20 @@
 'Neos.Neos:Document':
   options:
-    automaticallyTranslate: true
+    automaticTranslation: true
   properties:
     title:
       options:
-        translate: true
+        automaticTranslation: true
     titleOverride:
       options:
-        translate: true
+        automaticTranslation: true
     metaDescription:
       options:
-        translate: true
+        automaticTranslation: true
     metaKeywords:
       options:
-        translate: true
+        automaticTranslation: true
 
 'Neos.Neos:Content':
   options:
-    automaticallyTranslate: true
+    automaticTranslation: true

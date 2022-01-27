@@ -23,29 +23,29 @@ We use semantic-versioning so every breaking change will increase the major-vers
 ## How it works
 
 By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`).
-To include other `string` properties into the automatic translation the `options.translate: true`
+To include other `string` properties into the automatic translation the `options.automaticTranslation: true`
 can be used in the property configuration. Also, you can disable automatic translation in general for certain node types
-by setting `options.automaticallyTranslate: false`.
+by setting `options.automaticTranslation: false`.
 
 Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
 
 ```yaml
 'Neos.Neos:Document':
   options:
-    automaticallyTranslate: true
+      automaticTranslation: true
   properties:
     title:
       options:
-        automaticallyTranslate: true
+        automaticTranslation: true
     titleOverride:
       options:
-        automaticallyTranslate: true
+        automaticTranslation: true
     metaDescription:
       options:
-        automaticallyTranslate: true
+        automaticTranslation: true
     metaKeywords:
       options:
-        automaticallyTranslate: true
+        automaticTranslation: true
 ```
 
 Also, automatic translation for `Neos.Neos:Content` is enabled by default:
@@ -53,7 +53,7 @@ Also, automatic translation for `Neos.Neos:Content` is enabled by default:
 ```yaml
 'Neos.Neos:Content':
   options:
-    automaticallyTranslate: true
+      automaticTranslation: true
 ```
 
 ## Configuration
@@ -163,6 +163,6 @@ We will gladly accept contributions. Please send us pull requests.
 
 * The preset option `translationStrategy` was introduced. There are now two auto-translation strategies
   * Strategy `once` will auto-translate the node once "on adoption", i.e. the editor switches to a different language dimension
-  * Strategy `sync` will auto-translate and sync the node according to the `translationMapping` setting every time a node is updated in the source language
-* The node setting `options.translateOnAdoption` as been renamed to `options.automaticallyTranslate`
-* The new node option `automaticallyTranslate` was introduced
+  * Strategy `sync` will auto-translate and sync the node every time a node is updated in the default preset language
+* The node setting `options.translateOnAdoption` as been renamed to `options.automaticTranslation`
+* The new node option `options.automaticTranslation` was introduced
