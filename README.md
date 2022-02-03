@@ -106,7 +106,26 @@ Neos:
   ContentRepository:
     contentDimensions:
       'language':
+        
+        #
+        # The `defaultPreset` marks the source of for all translations whith mode `sync`
+        #  
+        label: 'Language'
+        default: 'en'
+        defaultPreset: 'en'
+
         presets:
+
+          #
+          # English is the main language of the editors and spoken by editors,
+          # the automatic translation is disabled therefore
+          #
+          'en':
+            label: 'English'
+            values: ['en']
+            uriSegment: 'en'
+            options:
+              translationStrategy: 'none'
 
           #
           # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly

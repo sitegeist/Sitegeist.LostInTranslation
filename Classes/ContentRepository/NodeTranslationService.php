@@ -18,6 +18,7 @@ class NodeTranslationService
 {
     protected const TRANSLATION_STRATEGY_ONCE = 'once';
     protected const TRANSLATION_STRATEGY_SYNC = 'sync';
+    protected const TRANSLATION_STRATEGY_NONE = 'none';
 
     /**
      * @Flow\Inject
@@ -72,9 +73,10 @@ class NodeTranslationService
             return;
         }
 
-        $targetLanguage = explode('_', $context->getTargetDimensions()[$this->languageDimensionName])[0];
-        $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguage];
-        if (!array_key_exists('options', $languagePreset) || !array_key_exists('translationStrategy', $languagePreset['options']) || $languagePreset['options']['translationStrategy'] !== self::TRANSLATION_STRATEGY_ONCE) {
+        $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
+        $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
+        $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
+        if (!in_array($translationStrategy, [null, self::TRANSLATION_STRATEGY_ONCE, self::TRANSLATION_STRATEGY_SYNC])) {
             return;
         }
 
@@ -89,22 +91,32 @@ class NodeTranslationService
      */
     public function afterNodePublish(NodeInterface $node, Workspace $workspace)
     {
-        if (!$this->enabled) {
+        if (!$this->enabled){
             return;
         }
 
-        $nodeSourceLanguage = explode('_', $node->getContext()->getTargetDimensions()[$this->languageDimensionName])[0];
+        if ($workspace->getName() !== 'live') {
+            return;
+        }
+
+        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
         $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
-        foreach($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $language => $languagePreset) {
-            if ($nodeSourceLanguage === $language || $nodeSourceLanguage !== $defaultPreset) {
+
+        if ($nodeSourceDimensionValue !== $defaultPreset) {
+            return;
+        }
+
+        foreach($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
+            if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
             }
 
-            if (!array_key_exists('options', $languagePreset) || !array_key_exists('translationStrategy', $languagePreset['options']) || $languagePreset['options']['translationStrategy'] !== self::TRANSLATION_STRATEGY_SYNC) {
+            $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
+            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
                 continue;
             }
 
-            $context = $this->getContextForLanguageDimensionAndWorkspaceName($language, $workspace->getName());
+            $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspace->getName());
             $adoptedNode = $context->adoptNode($node);
             $this->translateNode($node, $adoptedNode, $context);
         }
@@ -125,11 +137,14 @@ class NodeTranslationService
             return;
         }
 
-        $sourceLanguage = explode('_', $node->getContext()->getTargetDimensions()[$this->languageDimensionName])[0];
-        $targetLanguage = explode('_', $context->getTargetDimensions()[$this->languageDimensionName])[0];
+        $sourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
 
-        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceLanguage];
-        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguage];
+        $sourceLanguage = explode('_', $sourceDimensionValue)[0];
+        $targetLanguage = explode('_', $targetDimensionValue)[0];
+
+        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceDimensionValue];
+        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
 
         if (array_key_exists('options', $sourceLanguagePreset) && array_key_exists('deeplLanguage', $sourceLanguagePreset['options'])) {
             $sourceLanguage = $sourceLanguagePreset['options']['deeplLanguage'];
