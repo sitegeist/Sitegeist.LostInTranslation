@@ -59,11 +59,14 @@ class NodeTranslationService
         $propertyDefinitions = $node->getNodeType()->getProperties();
         $adoptedNode = $context->getNodeByIdentifier((string)$node->getNodeAggregateIdentifier());
 
-        $sourceLanguage = explode('_', $node->getContext()->getTargetDimensions()[$this->languageDimensionName])[0];
-        $targetLanguage = explode('_', $context->getTargetDimensions()[$this->languageDimensionName])[0];
+        $sourceLanguageDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $targetLanguageDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
 
-        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceLanguage];
-        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguage];
+        $sourceLanguage = explode('_', $sourceLanguageDimensionValue)[0];
+        $targetLanguage = explode('_', $targetLanguageDimensionValue)[0];
+
+        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceLanguageDimensionValue];
+        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguageDimensionValue];
 
         if (array_key_exists('options', $sourceLanguagePreset) && array_key_exists('deeplLanguage', $sourceLanguagePreset['options'])) {
             $sourceLanguage = $sourceLanguagePreset['options']['deeplLanguage'];
