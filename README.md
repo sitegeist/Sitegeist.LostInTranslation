@@ -80,13 +80,6 @@ Sitegeist:
       enabled: true
 
       #
-      # There are two strategies:
-      # (*) once: will translate the node once the editor switches the language dimension and only then
-      # (*) sync: will translate and sync the node anytime the base language has been edited
-      #
-      strategy: 'once'
-
-      #
       # Translate all inline editable fields without further configuration.
       #
       # If this is disabled iline editables can be configured for translation by setting
@@ -98,19 +91,6 @@ Sitegeist:
       # The name of the language dimension. Usually needs no modification
       #
       languageDimensionName: 'language'
-
-      #
-      # When strategy "sync" is selected, this setting defines which languages
-      # to translate to which other languages
-      #
-      # This example would sync and translate all nodes in language "de" to "it" and "en"
-      #
-      # translationMapping:
-      #   de:
-      #     - 'it'
-      #     - 'en'
-      #
-      translationMapping: [ ]
 ```
 
 To enable automated translations for a language preset, just set `options.translationStrategy` to  `once` or `sync`.
@@ -130,6 +110,7 @@ Neos:
 
           #
           # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
+          # Here we use the "once" strategy, which will translate nodes only once on switching the language
           #
           'dk':
             label: 'Dansk'
@@ -140,6 +121,16 @@ Neos:
               translationStrategy: 'once'
 
           #
+          # For German, we want to have a steady sync of nodes
+          #
+          'de':
+            label: 'Bayrisch'
+            values: ['de']
+            uriSegment: 'de'
+            options:
+              translationStrategy: 'sync'
+
+          #
           # The bavarian language is not supported by DeepL and is disabled
           #
           'de_bar':
@@ -147,7 +138,7 @@ Neos:
             values: ['de_bar','de']
             uriSegment: 'de_bar'
             options:
-              translationStrategy: 'sync'
+              translationStrategy: 'none'
 ```
 ## Performance
 
