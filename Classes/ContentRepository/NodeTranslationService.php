@@ -123,21 +123,21 @@ class NodeTranslationService
     }
 
     /**
-     * @param  NodeInterface  $node
-     * @param  NodeInterface  $adoptedNode
+     * @param  NodeInterface  $sourceNode
+     * @param  NodeInterface  $targetNode
      * @param  Context  $context
      * @return void
      */
-    protected function translateNode(NodeInterface $node, NodeInterface $adoptedNode, Context $context): void
+    protected function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
-        $propertyDefinitions = $node->getNodeType()->getProperties();
-        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
+        $isAutomaticTranslationEnabledForNodeType = $sourceNode->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
 
         if (!$isAutomaticTranslationEnabledForNodeType) {
             return;
         }
 
-        $sourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $sourceDimensionValue = $sourceNode->getContext()->getTargetDimensions()[$this->languageDimensionName];
         $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
 
         $sourceLanguage = explode('_', $sourceDimensionValue)[0];
@@ -159,14 +159,14 @@ class NodeTranslationService
         }
 
         // Sync internal properties
-        $adoptedNode->setNodeType($node->getNodeType());
-        $adoptedNode->setRemoved($node->isRemoved());
-        $adoptedNode->setHidden($node->isHidden());
-        $adoptedNode->setHiddenInIndex($node->isHiddenInIndex());
-        $adoptedNode->setHiddenBeforeDateTime($node->getHiddenBeforeDateTime());
-        $adoptedNode->setHiddenAfterDateTime($node->getHiddenAfterDateTime());
+        $targetNode->setNodeType($sourceNode->getNodeType());
+        $targetNode->setRemoved($sourceNode->isRemoved());
+        $targetNode->setHidden($sourceNode->isHidden());
+        $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
+        $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
+        $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
 
-        $properties = (array)$node->getProperties();
+        $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
 
@@ -204,8 +204,8 @@ class NodeTranslationService
             $translatedProperties = $this->translationService->translate($propertiesToTranslate, $targetLanguage, $sourceLanguage);
             $translatedProperties = array_merge($translatedProperties, $properties);
             foreach ($translatedProperties as $propertyName => $translatedValue) {
-                if ($adoptedNode->getProperty($propertyName) != $translatedValue) {
-                    $adoptedNode->setProperty($propertyName, $translatedValue);
+                if ($targetNode->getProperty($propertyName) != $translatedValue) {
+                    $targetNode->setProperty($propertyName, $translatedValue);
                 }
             }
         }
