@@ -73,6 +73,11 @@ class NodeTranslationService
             return;
         }
 
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
+        }
+
         $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
         $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
         $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
@@ -99,6 +104,11 @@ class NodeTranslationService
             return;
         }
 
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
+        }
+
         $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
         $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
 
@@ -117,8 +127,13 @@ class NodeTranslationService
             }
 
             $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspace->getName());
-            $adoptedNode = $context->adoptNode($node);
-            $this->translateNode($node, $adoptedNode, $context);
+            if (!$node->isRemoved()) {
+                $adoptedNode = $context->adoptNode($node);
+                $this->translateNode($node, $adoptedNode, $context);
+            } else {
+                $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
+                if ($adoptedNode !== null) $adoptedNode->setRemoved(true);
+            }
         }
     }
 
@@ -131,11 +146,6 @@ class NodeTranslationService
     protected function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
-        $isAutomaticTranslationEnabledForNodeType = $sourceNode->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
-
-        if (!$isAutomaticTranslationEnabledForNodeType) {
-            return;
-        }
 
         $sourceDimensionValue = $sourceNode->getContext()->getTargetDimensions()[$this->languageDimensionName];
         $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
@@ -160,7 +170,6 @@ class NodeTranslationService
 
         // Sync internal properties
         $targetNode->setNodeType($sourceNode->getNodeType());
-        $targetNode->setRemoved($sourceNode->isRemoved());
         $targetNode->setHidden($sourceNode->isHidden());
         $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
         $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
