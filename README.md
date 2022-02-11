@@ -48,10 +48,10 @@ Some very common fields from `Neos.Neos:Document` are already configured to do s
         automaticTranslation: true
 ```
 
-Also, automatic translation for `Neos.Neos:Content` is enabled by default:
+Also, automatic translation for all types derived from `Neos.Neos:Node` is enabled by default:
 
 ```yaml
-'Neos.Neos:Content':
+'Neos.Neos:Node':
   options:
       automaticTranslation: true
 ```

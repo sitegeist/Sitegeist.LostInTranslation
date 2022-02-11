@@ -1,6 +1,8 @@
-'Neos.Neos:Document':
+'Neos.Neos:Node':
   options:
     automaticTranslation: true
+
+'Neos.Neos:Document':
   properties:
     title:
       options:
@@ -15,6 +17,4 @@
       options:
         automaticTranslation: true
 
-'Neos.Neos:Content':
-  options:
-    automaticTranslation: true
+
