@@ -67,7 +67,7 @@ class NodeTranslationService
      * @param $recursive
      * @return void
      */
-    public function afterAdoptNode(NodeInterface $node, Context $context, $recursive)
+    public function afterAdoptNode(NodeInterface $node, Context $context, $recursive): void
     {
         if (!$this->enabled) {
             return;
@@ -94,7 +94,7 @@ class NodeTranslationService
      * @param  Workspace  $workspace
      * @return void
      */
-    public function afterNodePublish(NodeInterface $node, Workspace $workspace)
+    public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
     {
         if (!$this->enabled){
             return;
@@ -138,6 +138,9 @@ class NodeTranslationService
     }
 
     /**
+     * All translatable properties from the source node are collected and passed translated via deepl and
+     * applied to the target node
+     *
      * @param  NodeInterface  $sourceNode
      * @param  NodeInterface  $targetNode
      * @param  Context  $context
@@ -225,7 +228,7 @@ class NodeTranslationService
      * @param  string  $workspaceName
      * @return Context
      */
-    protected function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live')
+    protected function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
     {
         $dimensionAndWorkspaceIdentifierHash = md5($language . $workspaceName);
 
