@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
+use Neos\ContentRepository\Domain\Model\Workspace;
+use Neos\ContentRepository\Domain\Service\ContextFactory;
+use Neos\ContentRepository\Exception\NodeException;
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Service\Context;
@@ -13,6 +16,9 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  */
 class NodeTranslationService
 {
+    protected const TRANSLATION_STRATEGY_ONCE = 'once';
+    protected const TRANSLATION_STRATEGY_SYNC = 'sync';
+    protected const TRANSLATION_STRATEGY_NONE = 'none';
 
     /**
      * @Flow\Inject
@@ -45,28 +51,113 @@ class NodeTranslationService
     protected $contentDimensionConfiguration;
 
     /**
+     * @var Context[]
+     */
+    protected $contextFirstLevelCache = [];
+
+    /**
+     * @Flow\Inject
+     * @var ContextFactory
+     */
+    protected $contextFactory;
+
+    /**
      * @param NodeInterface $node
      * @param Context $context
      * @param $recursive
      * @return void
      */
-    public function afterAdoptNode(NodeInterface $node, Context $context, $recursive)
+    public function afterAdoptNode(NodeInterface $node, Context $context, $recursive): void
     {
         if (!$this->enabled) {
             return;
         }
 
-        $propertyDefinitions = $node->getNodeType()->getProperties();
-        $adoptedNode = $context->getNodeByIdentifier((string)$node->getNodeAggregateIdentifier());
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
+        }
 
-        $sourceLanguageDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
-        $targetLanguageDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
+        $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
+        $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
+        $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
+        if (!in_array($translationStrategy, [null, self::TRANSLATION_STRATEGY_ONCE, self::TRANSLATION_STRATEGY_SYNC])) {
+            return;
+        }
 
-        $sourceLanguage = explode('_', $sourceLanguageDimensionValue)[0];
-        $targetLanguage = explode('_', $targetLanguageDimensionValue)[0];
+        $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
+        $this->translateNode($node, $adoptedNode, $context);
+    }
 
-        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceLanguageDimensionValue];
-        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetLanguageDimensionValue];
+    /**
+     * @param  NodeInterface  $node
+     * @param  Workspace  $workspace
+     * @return void
+     */
+    public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
+    {
+        if (!$this->enabled){
+            return;
+        }
+
+        if ($workspace->getName() !== 'live') {
+            return;
+        }
+
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
+        }
+
+        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
+
+        if ($nodeSourceDimensionValue !== $defaultPreset) {
+            return;
+        }
+
+        foreach($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
+            if ($nodeSourceDimensionValue === $presetIdentifier) {
+                continue;
+            }
+
+            $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
+            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
+                continue;
+            }
+
+            $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspace->getName());
+            if (!$node->isRemoved()) {
+                $adoptedNode = $context->adoptNode($node);
+                $this->translateNode($node, $adoptedNode, $context);
+            } else {
+                $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
+                if ($adoptedNode !== null) $adoptedNode->setRemoved(true);
+            }
+        }
+    }
+
+    /**
+     * All translatable properties from the source node are collected and passed translated via deepl and
+     * applied to the target node
+     *
+     * @param  NodeInterface  $sourceNode
+     * @param  NodeInterface  $targetNode
+     * @param  Context  $context
+     * @return void
+     */
+    protected function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
+    {
+        $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
+
+        $sourceDimensionValue = $sourceNode->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
+
+        $sourceLanguage = explode('_', $sourceDimensionValue)[0];
+        $targetLanguage = explode('_', $targetDimensionValue)[0];
+
+        $sourceLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$sourceDimensionValue];
+        $targetLanguagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
 
         if (array_key_exists('options', $sourceLanguagePreset) && array_key_exists('deeplLanguage', $sourceLanguagePreset['options'])) {
             $sourceLanguage = $sourceLanguagePreset['options']['deeplLanguage'];
@@ -80,8 +171,16 @@ class NodeTranslationService
             return;
         }
 
+        // Sync internal properties
+        $targetNode->setNodeType($sourceNode->getNodeType());
+        $targetNode->setHidden($sourceNode->isHidden());
+        $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
+        $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
+        $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
+
+        $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
-        foreach ($adoptedNode->getProperties() as $propertyName => $propertyValue) {
+        foreach ($properties as $propertyName => $propertyValue) {
 
             if (empty($propertyValue)) {
                 continue;
@@ -98,7 +197,8 @@ class NodeTranslationService
 
             $translateProperty = false;
             $isInlineEditable = $propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false;
-            $isTranslateEnabled = $propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? false;
+            // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
+            $isTranslateEnabled = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? false);
             if ($this->translateRichtextProperties && $isInlineEditable == true) {
                 $translateProperty = true;
             }
@@ -108,16 +208,45 @@ class NodeTranslationService
 
             if ($translateProperty) {
                 $propertiesToTranslate[$propertyName] = $propertyValue;
+                unset($properties[$propertyName]);
             }
         }
 
         if (count($propertiesToTranslate) > 0) {
             $translatedProperties = $this->translationService->translate($propertiesToTranslate, $targetLanguage, $sourceLanguage);
-            foreach($translatedProperties as $propertyName => $translatedValue) {
-                if ($adoptedNode->getProperty($propertyName) != $translatedValue) {
-                    $adoptedNode->setProperty($propertyName, $translatedValue);
+            $translatedProperties = array_merge($translatedProperties, $properties);
+            foreach ($translatedProperties as $propertyName => $translatedValue) {
+                if ($targetNode->getProperty($propertyName) != $translatedValue) {
+                    $targetNode->setProperty($propertyName, $translatedValue);
                 }
             }
         }
+    }
+
+    /**
+     * @param  string  $language
+     * @param  string  $workspaceName
+     * @return Context
+     */
+    protected function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
+    {
+        $dimensionAndWorkspaceIdentifierHash = md5($language . $workspaceName);
+
+        if (array_key_exists($dimensionAndWorkspaceIdentifierHash, $this->contextFirstLevelCache)) {
+            return $this->contextFirstLevelCache[$dimensionAndWorkspaceIdentifierHash];
+        }
+
+        return $this->contextFirstLevelCache[$dimensionAndWorkspaceIdentifierHash] = $this->contextFactory->create(
+            array(
+                'workspaceName' => $workspaceName,
+                'invisibleContentShown' => true,
+                'dimensions' => array(
+                    $this->languageDimensionName => array($language),
+                ),
+                'targetDimensions' => array(
+                    $this->languageDimensionName => $language,
+                ),
+            )
+        );
     }
 }

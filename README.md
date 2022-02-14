@@ -2,17 +2,17 @@
 ## Automatic Translations for Neos via DeeplApi
 
 Documents and Contents are translated automatically once editors choose to "create and copy" a version in another language.
-The included DeeplService can be used for other purposes aswell. 
+The included DeeplService can be used for other purposes aswell.
 
-The initial development started as a pr for https://github.com/code-q-web-factory/CodeQ.DeepLTranslationHelper but developed
-into a seperate package.
+The development was a collaboration of Sitegeist and Code Q.
 
 ### Authors & Sponsors
 
 * Martin Ficzel - ficzel@sitegeist.de
+* Felix Gradinaru - fg@codeq.at
 
 *The development and the public-releases of this package is generously sponsored
-by our employer http://www.sitegeist.de.*
+by our employers http://www.sitegeist.de and http://www.codeq.at.*
 
 ## Installation
 
@@ -22,44 +22,55 @@ We use semantic-versioning so every breaking change will increase the major-vers
 
 ## How it works
 
-By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`). 
-To include other `string` properties into the automatic translation the `options.translateOnAdoption: true` 
-can be used in the property configuration. 
+By default all inline editable properties are translated using DeepL (see Setting `translateInlineEditables`).
+To include other `string` properties into the automatic translation the `options.automaticTranslation: true`
+can be used in the property configuration. Also, you can disable automatic translation in general for certain node types
+by setting `options.automaticTranslation: false`.
 
 Some very common fields from `Neos.Neos:Document` are already configured to do so by default.
 
-```
+```yaml
 'Neos.Neos:Document':
+  options:
+      automaticTranslation: true
   properties:
     title:
       options:
-        translateOnAdoption: true
+        automaticTranslation: true
     titleOverride:
       options:
-        translateOnAdoption: true
+        automaticTranslation: true
     metaDescription:
       options:
-        translateOnAdoption: true
+        automaticTranslation: true
     metaKeywords:
       options:
-        translateOnAdoption: true
+        automaticTranslation: true
 ```
 
-## Configuration 
+Also, automatic translation for all types derived from `Neos.Neos:Node` is enabled by default:
 
-This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api. 
-There are free plans that support a limited number but for productive use we recommend using a payed plan.  
-
+```yaml
+'Neos.Neos:Node':
+  options:
+      automaticTranslation: true
 ```
+
+## Configuration
+
+This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api.
+There are free plans that support a limited number but for productive use we recommend using a payed plan.
+
+```yaml
 Sitegeist:
   LostInTranslation:
     DeepLApi:
       authenticationKey: '.........................'
 ```
 
-The translation of nodes can is configured via Setting:
+The translation of nodes can is configured via settings:
 
-```
+```yaml
 Sitegeist:
   LostInTranslation:
     nodeTranslation:
@@ -71,7 +82,7 @@ Sitegeist:
       #
       # Translate all inline editable fields without further configuration.
       #
-      # If this is disabled inline editables can be configured for translation by setting
+      # If this is disabled iline editables can be configured for translation by setting
       # `options.translateOnAdoption: true` for each property seperatly
       #
       translateInlineEditables: true
@@ -82,19 +93,43 @@ Sitegeist:
       languageDimensionName: 'language'
 ```
 
-If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
-be configured explicitly for this preset via `options.deeplLanguage`. If this value is set to null the language will neither
-be used as source nor as target for translations.  
+To enable automated translations for a language preset, just set `options.translationStrategy` to  `once` or `sync`.
 
-```
+* `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
+* `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
+
+If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
+be configured explicitly for this preset via `options.deeplLanguage`.
+
+```yaml
 Neos:
   ContentRepository:
     contentDimensions:
       'language':
-        presets:
         
-          # 
+        #
+        # The `defaultPreset` marks the source of for all translations whith mode `sync`
+        #  
+        label: 'Language'
+        default: 'en'
+        defaultPreset: 'en'
+
+        presets:
+
+          #
+          # English is the main language of the editors and spoken by editors,
+          # the automatic translation is disabled therefore
+          #
+          'en':
+            label: 'English'
+            values: ['en']
+            uriSegment: 'en'
+            options:
+              translationStrategy: 'none'
+
+          #
           # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
+          # Here we use the "once" strategy, which will translate nodes only once on switching the language
           #
           'dk':
             label: 'Dansk'
@@ -102,16 +137,27 @@ Neos:
             uriSegment: 'dk'
             options:
               deeplLanguage: 'da'
-              
-          #    
+              translationStrategy: 'once'
+
+          #
+          # For German, we want to have a steady sync of nodes
+          #
+          'de':
+            label: 'Bayrisch'
+            values: ['de']
+            uriSegment: 'de'
+            options:
+              translationStrategy: 'sync'
+
+          #
           # The bavarian language is not supported by DeepL and is disabled
-          # 
+          #
           'de_bar':
             label: 'Bayrisch'
             values: ['de_bar','de']
             uriSegment: 'de_bar'
             options:
-              deeplLanguage: ~
+              translationStrategy: 'none'
 ```
 ## Performance
 
@@ -120,3 +166,13 @@ For every translated node a single request is made to the DeepL API. This can le
 ## Contribution
 
 We will gladly accept contributions. Please send us pull requests.
+
+## Changelog
+
+### 2.0.0
+
+* The preset option `translationStrategy` was introduced. There are now two auto-translation strategies
+  * Strategy `once` will auto-translate the node once "on adoption", i.e. the editor switches to a different language dimension
+  * Strategy `sync` will auto-translate and sync the node every time a node is updated in the default preset language
+* The node setting `options.translateOnAdoption` as been renamed to `options.automaticTranslation`
+* The new node option `options.automaticTranslation` was introduced
