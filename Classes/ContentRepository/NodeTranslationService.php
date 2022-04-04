@@ -198,11 +198,11 @@ class NodeTranslationService
             $translateProperty = false;
             $isInlineEditable = $propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false;
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
-            $isTranslateEnabled = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? false);
-            if ($this->translateRichtextProperties && $isInlineEditable == true) {
+            $isTranslateEnabledForProperty = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? null);
+            if ($this->translateRichtextProperties && $isInlineEditable == true && is_null($isTranslateEnabledForProperty)) {
                 $translateProperty = true;
             }
-            if ($isTranslateEnabled) {
+            if ($isTranslateEnabledForProperty === true) {
                 $translateProperty = true;
             }
 
