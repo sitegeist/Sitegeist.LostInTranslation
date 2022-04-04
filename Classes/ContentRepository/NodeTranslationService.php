@@ -195,16 +195,10 @@ class NodeTranslationService
                 continue;
             }
 
-            $translateProperty = false;
             $isInlineEditable = $propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false;
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
             $isTranslateEnabledForProperty = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? null);
-            if ($this->translateRichtextProperties && $isInlineEditable == true && is_null($isTranslateEnabledForProperty)) {
-                $translateProperty = true;
-            }
-            if ($isTranslateEnabledForProperty === true) {
-                $translateProperty = true;
-            }
+            $translateProperty = $isTranslateEnabledForProperty == true || (is_null($isTranslateEnabledForProperty) && $this->translateRichtextProperties && $isInlineEditable == true);
 
             if ($translateProperty) {
                 $propertiesToTranslate[$propertyName] = $propertyValue;
