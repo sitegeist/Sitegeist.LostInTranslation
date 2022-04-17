@@ -106,10 +106,10 @@ Neos:
   ContentRepository:
     contentDimensions:
       'language':
-        
+
         #
         # The `defaultPreset` marks the source of for all translations whith mode `sync`
-        #  
+        #
         label: 'Language'
         default: 'en'
         defaultPreset: 'en'
@@ -159,6 +159,25 @@ Neos:
             options:
               translationStrategy: 'none'
 ```
+
+### Ignoring Terms
+
+You can define terms that should be ignored by DeepL in the configuration.
+The terms will are evaluated case-insensitive when searching for them, however
+they will always be replaced with their actual occurrence.
+
+This is how an example configuration could look like:
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+      ignoredTerms:
+        - 'Sitegeist'
+        - 'Neos.io'
+        - 'Hamburg'
+```
+
 ## Performance
 
 For every translated node a single request is made to the DeepL API. This can lead to significant delay when Documents with lots of nodes are translated. It is likely that future versions will improve this.
