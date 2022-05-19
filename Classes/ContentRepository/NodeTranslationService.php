@@ -177,6 +177,7 @@ class NodeTranslationService
         $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
         $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
         $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
+        $targetNode->setIndex($sourceNode->getIndex());
 
         $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
