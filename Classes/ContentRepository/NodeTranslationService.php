@@ -5,7 +5,6 @@ namespace Sitegeist\LostInTranslation\ContentRepository;
 
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
-use Neos\ContentRepository\Exception\NodeException;
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Service\Context;
@@ -16,9 +15,9 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  */
 class NodeTranslationService
 {
-    protected const TRANSLATION_STRATEGY_ONCE = 'once';
-    protected const TRANSLATION_STRATEGY_SYNC = 'sync';
-    protected const TRANSLATION_STRATEGY_NONE = 'none';
+    public const TRANSLATION_STRATEGY_ONCE = 'once';
+    public const TRANSLATION_STRATEGY_SYNC = 'sync';
+    public const TRANSLATION_STRATEGY_NONE = 'none';
 
     /**
      * @Flow\Inject
@@ -81,7 +80,7 @@ class NodeTranslationService
         $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
         $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
         $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
-        if (!in_array($translationStrategy, [null, self::TRANSLATION_STRATEGY_ONCE, self::TRANSLATION_STRATEGY_SYNC])) {
+        if ($translationStrategy !== self::TRANSLATION_STRATEGY_ONCE) {
             return;
         }
 
@@ -96,7 +95,7 @@ class NodeTranslationService
      */
     public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
     {
-        if (!$this->enabled){
+        if (!$this->enabled) {
             return;
         }
 
@@ -144,9 +143,10 @@ class NodeTranslationService
      * @param  NodeInterface  $sourceNode
      * @param  NodeInterface  $targetNode
      * @param  Context  $context
+     * @param  bool  $translate
      * @return void
      */
-    protected function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
+    public function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context, bool $translate = true): void
     {
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
 
@@ -182,7 +182,6 @@ class NodeTranslationService
         $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
-
             if (empty($propertyValue)) {
                 continue;
             }
@@ -207,13 +206,14 @@ class NodeTranslationService
             }
         }
 
-        if (count($propertiesToTranslate) > 0) {
+        if (count($propertiesToTranslate) > 0 && $translate) {
             $translatedProperties = $this->translationService->translate($propertiesToTranslate, $targetLanguage, $sourceLanguage);
-            $translatedProperties = array_merge($translatedProperties, $properties);
-            foreach ($translatedProperties as $propertyName => $translatedValue) {
-                if ($targetNode->getProperty($propertyName) != $translatedValue) {
-                    $targetNode->setProperty($propertyName, $translatedValue);
-                }
+            $properties = array_merge($translatedProperties, $properties);
+        }
+
+        foreach ($properties as $propertyName => $propertyValue) {
+            if ($targetNode->getProperty($propertyName) != $propertyValue) {
+                $targetNode->setProperty($propertyName, $propertyValue);
             }
         }
     }
@@ -223,7 +223,7 @@ class NodeTranslationService
      * @param  string  $workspaceName
      * @return Context
      */
-    protected function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
+    public function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
     {
         $dimensionAndWorkspaceIdentifierHash = md5($language . $workspaceName);
 
@@ -235,6 +235,8 @@ class NodeTranslationService
             array(
                 'workspaceName' => $workspaceName,
                 'invisibleContentShown' => true,
+                'removedContentShown' => true,
+                'inaccessibleContentShown' => true,
                 'dimensions' => array(
                     $this->languageDimensionName => array($language),
                 ),
