@@ -65,6 +65,12 @@ class DeepLTranslationService implements TranslationServiceInterface
         }
         $body .= '&target_lang=' . urlencode($targetLanguage);
         foreach($values as $part) {
+            // All ignored terms will be wrapped in a <ignored> tag
+            // which will be ignored by DeepL
+            if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
+                $part = preg_replace('/(' . implode('|', $this->settings['ignoredTerms']) . ')/i', '<ignore>$1</ignore>', $part);
+            }
+
             $body .= '&text=' . urlencode($part);
         }
 
@@ -91,7 +97,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
             $translations = array_map(
                 function($part) {
-                    return $part['text'];
+                    return preg_replace('/(<ignore>|<\/ignore>)/i', '', $part['text']);
                 },
                 $returnedData['translations']
             );

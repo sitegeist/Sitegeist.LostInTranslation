@@ -15,7 +15,15 @@ Sitegeist:
         tag_handling: 'xml'
         split_sentences: 'nonewlines'
         preserve_formatting: 1
-        formality: "default"
+        formality: 'default'
+        ignore_tags: 'ignore'
+
+      #
+      # Here you can define terms that will be wrapped with an <ignore> tag
+      # and hence ignored by the DeepL API.
+      # For example: brand names, city names, etc.
+      #
+      ignoredTerms: []
 
     nodeTranslation:
       #
