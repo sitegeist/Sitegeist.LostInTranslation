@@ -188,7 +188,7 @@ class NodeTranslationService
             if (!array_key_exists($propertyName, $propertyDefinitions)) {
                 continue;
             }
-            if ($propertyDefinitions[$propertyName]['type'] != 'string' || !is_string($propertyValue)) {
+            if (!isset($propertyDefinitions[$propertyName]['type']) || $propertyDefinitions[$propertyName]['type'] != 'string' || !is_string($propertyValue)) {
                 continue;
             }
             if ((trim(strip_tags($propertyValue))) == "") {
