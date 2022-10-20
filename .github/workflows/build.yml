@@ -33,6 +33,9 @@ jobs:
                   extensions: mbstring, xml, json, zlib, iconv, intl, pdo_sqlite
                   ini-values: date.timezone="Africa/Tunis", opcache.fast_shutdown=0, apc.enable_cli=on
 
+            - name: Allow plugins
+              run: composer config allow-plugins.neos/composer-plugin true
+
             - name: Set Neos Version
               run: composer require neos/neos ^${{ matrix.neos-versions }} --no-progress --no-interaction
 
