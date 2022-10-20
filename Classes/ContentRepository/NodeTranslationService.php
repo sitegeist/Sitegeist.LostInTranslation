@@ -182,6 +182,11 @@ class NodeTranslationService
         $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
         $targetNode->setIndex($sourceNode->getIndex());
 
+        // Move node if parents are not matching
+        if ($sourceNode->getParent() !== $targetNode->getParent()) {
+            $targetNode->moveInto($sourceNode->getParent());
+        }
+
         $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
