@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
-use Neos\ContentRepository\Domain\Model\Workspace;
-use Neos\ContentRepository\Domain\Service\ContextFactory;
-use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
+use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
+use Neos\ContentRepository\Domain\Service\ContextFactory;
+use Neos\ContentRepository\Exception\NodeExistsException;
+use Neos\Flow\Annotations as Flow;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -174,6 +175,14 @@ class NodeTranslationService
             return;
         }
 
+        // Move node if targetNode has no parent or node parents are not matching
+        if (!$targetNode->getParent() || ($sourceNode->getParent()->getIdentifier() !== $targetNode->getParent()->getIdentifier())) {
+            try {
+                $targetNode->moveInto($sourceNode->getParent());
+            } catch (NodeExistsException $e) {
+            }
+        }
+
         // Sync internal properties
         $targetNode->setNodeType($sourceNode->getNodeType());
         $targetNode->setHidden($sourceNode->isHidden());
@@ -181,11 +190,6 @@ class NodeTranslationService
         $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
         $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
         $targetNode->setIndex($sourceNode->getIndex());
-
-        // Move node if parents are not matching
-        if ($sourceNode->getParent() !== $targetNode->getParent()) {
-            $targetNode->moveInto($sourceNode->getParent());
-        }
 
         $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
