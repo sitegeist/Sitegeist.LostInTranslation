@@ -43,9 +43,9 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected $streamFactory;
 
     /**
-     * @param array<string,string> $texts
-     * @param string $targetLanguage
-     * @param string|null $sourceLanguage
+     * @param  array<string,string>  $texts
+     * @param  string  $targetLanguage
+     * @param  string|null  $sourceLanguage
      * @return array
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
@@ -101,6 +101,7 @@ class DeepLTranslationService implements TranslationServiceInterface
                 },
                 $returnedData['translations']
             );
+
             return array_combine($keys, $translations);
         } else {
             if ($apiResponse->getStatusCode() === 403) {
@@ -112,11 +113,12 @@ class DeepLTranslationService implements TranslationServiceInterface
             } elseif ($apiResponse->getStatusCode() === 400) {
                 $this->logger->warning('Your DeepL API request was not well-formed. Please check the source and the target language in particular.', [
                     'sourceLanguage' => $sourceLanguage,
-                    'targetLanguage' => $targetLanguage
+                    'targetLanguage' => $targetLanguage,
                 ]);
             } else {
                 $this->logger->warning('Unexpected status from Deepl API', ['status' => $apiResponse->getStatusCode()]);
             }
+
             return $texts;
         }
     }

@@ -9,7 +9,9 @@ use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\ContentRepository\Exception\NodeExistsException;
+use Neos\ContentRepository\Service\Utility\NodePublishingDependencySolver;
 use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Service\PublishingService;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -22,10 +24,21 @@ class NodeTranslationService
     public const TRANSLATION_STRATEGY_NONE = 'none';
 
     /**
+     * @var bool
+     */
+    protected $isActive = false;
+
+    /**
      * @Flow\Inject
      * @var TranslationServiceInterface
      */
     protected $translationService;
+
+    /**
+     * @Flow\Inject
+     * @var PublishingService
+     */
+    protected $publishingService;
 
     /**
      * @Flow\InjectConfiguration(path="nodeTranslation.enabled")
@@ -63,8 +76,27 @@ class NodeTranslationService
     protected $contextFactory;
 
     /**
-     * @param NodeInterface $node
-     * @param Context $context
+     * @Flow\Inject
+     * @var \Neos\Flow\Security\Context
+     */
+    protected $securityContext;
+
+    /**
+     * @var array<NodeInterface>
+     */
+    protected $nodesToPublish = [];
+
+    /**
+     * @return bool
+     */
+    public function isActive(): bool
+    {
+        return $this->isActive;
+    }
+
+    /**
+     * @param  NodeInterface  $node
+     * @param  Context  $context
      * @param $recursive
      * @return void
      */
@@ -86,8 +118,12 @@ class NodeTranslationService
             return;
         }
 
+        $this->isActive = true;
+
         $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
         $this->syncNode($node, $adoptedNode, $context);
+
+        $this->isActive = false;
     }
 
     /**
@@ -117,6 +153,8 @@ class NodeTranslationService
             return;
         }
 
+        $this->isActive = true;
+
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -138,6 +176,16 @@ class NodeTranslationService
                 }
             }
         }
+
+        $sorter = new NodePublishingDependencySolver();
+        /** @var NodeInterface $node */
+        foreach ($sorter->sort($this->nodesToPublish) as $node) {
+            $node->getContext()->getFirstLevelNodeCache()->flush();
+            $this->publishingService->publishNode($node);
+        }
+
+        $this->nodesToPublish = [];
+        $this->isActive = false;
     }
 
     /**
@@ -175,6 +223,9 @@ class NodeTranslationService
             return;
         }
 
+        // Mark node for publishing
+        $this->nodesToPublish[$targetNode->getContextPath()] = $targetNode;
+
         // Move node if targetNode has no parent or node parents are not matching
         if (!$targetNode->getParent() || ($sourceNode->getParent()->getIdentifier() !== $targetNode->getParent()->getIdentifier())) {
             try {
@@ -191,7 +242,7 @@ class NodeTranslationService
         $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
         $targetNode->setIndex($sourceNode->getIndex());
 
-        $properties = (array)$sourceNode->getProperties();
+        $properties = (array) $sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
             if (empty($propertyValue)) {
