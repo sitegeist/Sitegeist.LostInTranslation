@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
+use InvalidArgumentException;
+
 class DeepLAuthenticationKey
 {
     /**
@@ -19,7 +21,7 @@ class DeepLAuthenticationKey
     public function __construct(string $authenticationKey)
     {
         if (empty($authenticationKey)) {
-            throw new \InvalidArgumentException('Empty strings are not allowed as authentication key');
+            throw new InvalidArgumentException('Empty strings are not allowed as authentication key');
         }
 
         $this->authenticationKey = $authenticationKey;
