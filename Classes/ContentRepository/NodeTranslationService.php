@@ -54,6 +54,12 @@ class NodeTranslationService
     protected $languageDimensionName;
 
     /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.skipAuthorizationChecks")
+     * @var bool
+     */
+    protected $skipAuthorizationChecks;
+
+    /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
      * @var array
      */
@@ -125,7 +131,13 @@ class NodeTranslationService
             return;
         }
 
-        $this->syncNode($node);
+        if ($this->skipAuthorizationChecks) {
+            $this->securityContext->withoutAuthorizationChecks(function () use ($node) {
+                $this->syncNode($node);
+            });
+        } else {
+            $this->syncNode($node);
+        }
     }
 
     /**
