@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
+use InvalidArgumentException;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
+use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\ContentRepository\Exception\NodeExistsException;
-use Neos\ContentRepository\Service\Utility\NodePublishingDependencySolver;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -82,9 +83,10 @@ class NodeTranslationService
     protected $securityContext;
 
     /**
-     * @var array<NodeInterface>
+     * @Flow\Inject()
+     * @var NodeDataRepository
      */
-    protected $nodesToPublish = [];
+    protected $nodeDataRepository;
 
     /**
      * @return bool
@@ -166,25 +168,20 @@ class NodeTranslationService
             }
 
             $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspace->getName());
+            $context->getFirstLevelNodeCache()->flush();
             if (!$node->isRemoved()) {
                 $adoptedNode = $context->adoptNode($node);
                 $this->syncNode($node, $adoptedNode, $context);
+                $context->getFirstLevelNodeCache()->flush();
+                $this->publishingService->publishNode($adoptedNode);
+                $this->nodeDataRepository->persistEntities();
             } else {
                 $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
-                if ($adoptedNode !== null) {
-                    $adoptedNode->setRemoved(true);
-                }
+                if ($adoptedNode !== null) $adoptedNode->setRemoved(true);
+                $context->getFirstLevelNodeCache()->flush();
             }
         }
 
-        $sorter = new NodePublishingDependencySolver();
-        /** @var NodeInterface $node */
-        foreach ($sorter->sort($this->nodesToPublish) as $node) {
-            $node->getContext()->getFirstLevelNodeCache()->flush();
-            $this->publishingService->publishNode($node);
-        }
-
-        $this->nodesToPublish = [];
         $this->isActive = false;
     }
 
@@ -223,14 +220,12 @@ class NodeTranslationService
             return;
         }
 
-        // Mark node for publishing
-        $this->nodesToPublish[$targetNode->getContextPath()] = $targetNode;
-
         // Move node if targetNode has no parent or node parents are not matching
-        if (!$targetNode->getParent() || ($sourceNode->getParent()->getIdentifier() !== $targetNode->getParent()->getIdentifier())) {
+        if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
             try {
-                $targetNode->moveInto($sourceNode->getParent());
-            } catch (NodeExistsException $e) {
+                $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
+                $targetNode->moveInto($referenceNode);
+            } catch (NodeExistsException|InvalidArgumentException $e) {
             }
         }
 
