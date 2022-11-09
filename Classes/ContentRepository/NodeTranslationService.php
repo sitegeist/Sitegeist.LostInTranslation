@@ -123,7 +123,7 @@ class NodeTranslationService
         $this->isActive = true;
 
         $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
-        $this->syncNode($node, $adoptedNode, $context);
+        $this->syncNodeInternal($node, $adoptedNode, $context);
 
         $this->isActive = false;
     }
@@ -143,48 +143,7 @@ class NodeTranslationService
             return;
         }
 
-        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
-        if (!$isAutomaticTranslationEnabledForNodeType) {
-            return;
-        }
-
-        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
-        $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
-
-        if ($nodeSourceDimensionValue !== $defaultPreset) {
-            return;
-        }
-
-        $this->isActive = true;
-
-        foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
-            if ($nodeSourceDimensionValue === $presetIdentifier) {
-                continue;
-            }
-
-            $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
-            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
-                continue;
-            }
-
-            $context = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, $nodeSourceDimensionValue, $workspace->getName());
-            $context->getFirstLevelNodeCache()->flush();
-            if (!$node->isRemoved()) {
-                $adoptedNode = $context->adoptNode($node);
-                $this->syncNode($node, $adoptedNode, $context);
-                $context->getFirstLevelNodeCache()->flush();
-                $this->publishingService->publishNode($adoptedNode);
-                $this->nodeDataRepository->persistEntities();
-            } else {
-                $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
-                if ($adoptedNode !== null) {
-                    $adoptedNode->setRemoved(true);
-                }
-                $context->getFirstLevelNodeCache()->flush();
-            }
-        }
-
-        $this->isActive = false;
+        $this->syncNode($node);
     }
 
     /**
@@ -197,7 +156,7 @@ class NodeTranslationService
      * @param  bool  $translate
      * @return void
      */
-    public function syncNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context, bool $translate = true): void
+    protected function syncNodeInternal(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context, bool $translate = true): void
     {
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
 
@@ -279,20 +238,8 @@ class NodeTranslationService
     }
 
     /**
-     * @param  NodeInterface  $sourceNode
-     * @param  NodeInterface  $targetNode
-     * @param  Context  $context
-     * @return void
-     *
-     * @deprecated
-     */
-    public function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
-    {
-        $this->syncNode($sourceNode, $targetNode, $context, true);
-    }
-
-    /**
-     * @param  string  $language
+     * @param  string  $targetLanguage
+     * @param  string|null  $sourceLanguage
      * @param  string  $workspaceName
      * @return Context
      */
@@ -335,5 +282,61 @@ class NodeTranslationService
     public function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
     {
         return $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($language, null, $workspaceName);
+    }
+
+    /**
+     * Checks the requirements if a node can be synchronised and executes the sync.
+     *
+     * @param  NodeInterface  $node
+     * @param  string  $workspaceName
+     * @param  bool  $translate
+     * @return void
+     */
+    public function syncNode(NodeInterface $node, string $workspaceName = 'live', bool $translate = true): void
+    {
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
+        }
+
+        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
+
+        if ($nodeSourceDimensionValue !== $defaultPreset) {
+            return;
+        }
+
+        $this->isActive = true;
+
+        foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
+            if ($nodeSourceDimensionValue === $presetIdentifier) {
+                continue;
+            }
+
+            $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
+            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
+                continue;
+            }
+
+            if (!$node->isRemoved()) {
+                $context = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, $nodeSourceDimensionValue, $workspaceName);
+                $context->getFirstLevelNodeCache()->flush();
+
+                $adoptedNode = $context->adoptNode($node);
+                $this->syncNodeInternal($node, $adoptedNode, $context, $translate);
+
+                $context->getFirstLevelNodeCache()->flush();
+                $this->publishingService->publishNode($adoptedNode);
+                $this->nodeDataRepository->persistEntities();
+            } else {
+                $removeContext = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, null, $workspaceName);
+                $adoptedNode = $removeContext->getNodeByIdentifier($node->getIdentifier());
+                if ($adoptedNode !== null) {
+                    $adoptedNode->setRemoved(true);
+                }
+            }
+        }
+
+        $this->isActive = false;
     }
 }
