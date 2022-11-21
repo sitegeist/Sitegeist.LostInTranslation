@@ -5,9 +5,11 @@ namespace Sitegeist\LostInTranslation\Command;
 use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Service\Context;
+use Neos\Eel\Exception;
 use Neos\Eel\FlowQuery\FlowQuery;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\CommandController;
+use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Persistence\PersistenceManagerInterface;
 use Neos\Neos\Domain\Model\Site;
 use Neos\Neos\Domain\Repository\SiteRepository;
@@ -69,9 +71,12 @@ class TranslationCommandController extends CommandController
      *
      * @param  string  $siteNodeName
      * @param  bool  $translate
+     * @param  string|null  $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
      * @return void
+     * @throws Exception
+     * @throws StopCommandException
      */
-    public function syncCommand(string $siteNodeName, bool $translate = false): void
+    public function syncCommand(string $siteNodeName, bool $translate = false, string $nodeTypeFilter = null): void
     {
         /** @var Site|null $site */
         $site = $this->siteRepository->findOneByNodeName($siteNodeName);
@@ -83,8 +88,14 @@ class TranslationCommandController extends CommandController
 
         $siteNode = $this->getContentContext()->getNode('/sites/' . $siteNodeName);
 
+        if (is_null($nodeTypeFilter)) {
+            $nodeTypeFilter = '[instanceof Neos.Neos:Document][!instanceof Neos.Neos:Shortcut]';
+        } else {
+            $nodeTypeFilter = sprintf('[instanceof %s]', $nodeTypeFilter);
+        }
+
         $documentNodeQuery = new FlowQuery([$siteNode]);
-        $documentNodeQuery->pushOperation('find', ['[instanceof Neos.Neos:Document][!instanceof Neos.Neos:Shortcut]']);
+        $documentNodeQuery->pushOperation('find', [$nodeTypeFilter]);
         $documentNodes = $documentNodeQuery->get();
         array_unshift($documentNodes, $siteNode);
 
