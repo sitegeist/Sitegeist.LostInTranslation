@@ -1,0 +1,6 @@
+Sitegeist_LostInTranslation_TranslationCache:
+  frontend: Neos\Cache\Frontend\StringFrontend
+  backend: Neos\Cache\Backend\FileBackend
+  backendOptions:
+    # one week
+    defaultLifetime: 302400

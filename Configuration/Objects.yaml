@@ -1,0 +1,9 @@
+Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService:
+  properties:
+    translationCache:
+      object:
+        factoryObjectName: Neos\Flow\Cache\CacheManager
+        factoryMethodName: getCache
+        arguments:
+          1:
+            value: Sitegeist_LostInTranslation_TranslationCache

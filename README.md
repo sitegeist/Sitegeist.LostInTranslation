@@ -178,6 +178,19 @@ Sitegeist:
         - 'Hamburg'
 ```
 
+### Translation Cache
+
+The plugin includes an option to enable a translation cache that stores the individual text parts and their translated result for up to one week.
+To enable this cache, you need to set the following setting:
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+      enableCache: false
+```
+
+
 ## Performance
 
 For every translated node a single request is made to the DeepL API. This can lead to significant delay when Documents with lots of nodes are translated. It is likely that future versions will improve this.
