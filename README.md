@@ -180,6 +180,29 @@ Sitegeist:
         - 'Hamburg'
 ```
 
+## Eel Helper
+
+The package also provides two Eel helper to translate texts in Fusion.
+
+**:warning: Every one of these Eel helpers make an individual request to DeepL.** Thus having many of them on one page can significantly slow down the performance for if the page is uncached.
+:bulb: It is recommended to enable the [translation cache](#translation-cache).
+
+To translate a single text you can use:
+
+```neosfusion
+# ${Sitegeist.LostInTranslation.translate(string textToBeTranslated, string targetLanguage, string|null sourceLanguage = null): string}
+${Sitegeist.LostInTranslation.translate('Hello world!', 'de', 'en')}
+# Output: Hallo Welt!
+```
+
+To translate an array of texts you can use:
+
+```neosfusion
+# ${Sitegeist.LostInTranslation.translate(array textsToBeTranslated, string targetLanguage, string|null sourceLanguage = null): array}
+${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de', 'en')}
+# Output: ['Hallo Welt!', 'Mein Name ist...']
+```
+
 ## Performance
 
 For every translated node a single request is made to the DeepL API. This can lead to significant delay when Documents with lots of nodes are translated. It is likely that future versions will improve this.
