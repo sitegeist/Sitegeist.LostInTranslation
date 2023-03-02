@@ -8,6 +8,7 @@ use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\Flow\Core\Bootstrap;
 use Neos\Flow\Package\Package as BasePackage;
+use Neos\Flow\Persistence\Doctrine\PersistenceManager;
 use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
 
 /**
@@ -23,6 +24,7 @@ class Package extends BasePackage
     {
         $dispatcher = $bootstrap->getSignalSlotDispatcher();
         $dispatcher->connect(Context::class, 'afterAdoptNode', NodeTranslationService::class, 'afterAdoptNode', false);
-        $dispatcher->connect(Workspace::class, 'afterNodePublishing', NodeTranslationService::class, 'afterNodePublish', false);
+        $dispatcher->connect(Workspace::class, 'beforeNodePublishing', NodeTranslationService::class, 'collectNodesToBeTranslated', false);
+        $dispatcher->connect(PersistenceManager::class, 'allObjectsPersisted', NodeTranslationService::class, 'translateNodes', false);
     }
 }
