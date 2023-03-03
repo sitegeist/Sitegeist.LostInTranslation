@@ -4,6 +4,8 @@ namespace Sitegeist\LostInTranslation\Command;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
+use Neos\ContentRepository\Domain\Model\Workspace;
+use Neos\ContentRepository\Domain\Repository\WorkspaceRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\Eel\Exception;
 use Neos\Eel\FlowQuery\FlowQuery;
@@ -50,9 +52,14 @@ class TranslationCommandController extends CommandController
 
     /**
      * @Flow\Inject
-     * @var ContentContextFactory
+     * @var WorkspaceRepository
      */
-    protected $contentContextFactory;
+    protected $workspaceRepository;
+
+    /**
+     * @var Workspace
+     */
+    protected $liveWorkspace;
 
     /**
      * @Flow\Inject
@@ -67,8 +74,14 @@ class TranslationCommandController extends CommandController
     protected $persistenceManager;
 
     /**
-     * @Flow\Internal
-     *
+     * @return void
+     */
+    public function initializeObject(): void
+    {
+        $this->liveWorkspace = $this->workspaceRepository->findByIdentifier('live');
+    }
+
+    /**
      * @param  string  $siteNodeName
      * @param  bool  $translate
      * @param  string|null  $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
@@ -107,9 +120,10 @@ class TranslationCommandController extends CommandController
             $documentNodePath = $documentNode->getPath();
             $rootNode = $this->getContentContext()->getNode($documentNodePath);
             $this->processNode($rootNode, $translate);
-            $this->persistenceManager->persistAll();
             $this->output->progressAdvance();
         }
+
+        $this->nodeTranslationService->translateNodes();
 
         $this->output->progressFinish();
         $this->quit();
@@ -122,8 +136,7 @@ class TranslationCommandController extends CommandController
      */
     protected function processNode(NodeInterface $node, bool $translate)
     {
-        $this->nodeTranslationService->syncNode($node, 'live', $translate);
-
+        $this->nodeTranslationService->collectNodesToBeTranslated($node, $this->liveWorkspace, $translate);
         foreach ($node->getChildNodes() as $childNode) {
             if ($childNode->getNodeType()->isOfType('Neos.Neos:Document')) {
                 continue;
