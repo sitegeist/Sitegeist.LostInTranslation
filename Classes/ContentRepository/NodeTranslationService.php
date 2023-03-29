@@ -198,7 +198,7 @@ class NodeTranslationService
         $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
         $targetNode->setIndex($sourceNode->getIndex());
 
-        $properties = (array) $sourceNode->getProperties();
+        $properties = (array) $sourceNode->getProperties(true);
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
             if (empty($propertyValue)) {
