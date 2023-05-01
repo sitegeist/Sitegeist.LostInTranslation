@@ -202,22 +202,16 @@ class NodeTranslationService
     }
 
     /**
-     * @param  string  $targetLanguage
-     * @param  string|null  $sourceLanguage
+     * @param  string  $language
      * @param  string  $workspaceName
      * @return Context
      */
-    public function getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName(string $targetLanguage, string $sourceLanguage = null, string $workspaceName = 'live'): Context
+    public function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
     {
-        $dimensionAndWorkspaceIdentifierHash = md5(trim($sourceLanguage . $targetLanguage . $workspaceName));
+        $dimensionAndWorkspaceIdentifierHash = md5(trim($language . $workspaceName));
 
         if (array_key_exists($dimensionAndWorkspaceIdentifierHash, $this->contextFirstLevelCache)) {
             return $this->contextFirstLevelCache[$dimensionAndWorkspaceIdentifierHash];
-        }
-
-        $languageDimensions = array($targetLanguage);
-        if (!is_null($sourceLanguage)) {
-            $languageDimensions[] = $sourceLanguage;
         }
 
         return $this->contextFirstLevelCache[$dimensionAndWorkspaceIdentifierHash] = $this->contextFactory->create(
@@ -227,25 +221,13 @@ class NodeTranslationService
                 'removedContentShown' => true,
                 'inaccessibleContentShown' => true,
                 'dimensions' => array(
-                    $this->languageDimensionName => $languageDimensions,
+                    $this->languageDimensionName => array($language),
                 ),
                 'targetDimensions' => array(
-                    $this->languageDimensionName => $targetLanguage,
+                    $this->languageDimensionName => $language,
                 ),
             )
         );
-    }
-
-    /**
-     * @param  string  $language
-     * @param  string  $workspaceName
-     * @return Context
-     *
-     * @deprecated
-     */
-    public function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
-    {
-        return $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($language, null, $workspaceName);
     }
 
     /**
@@ -280,7 +262,7 @@ class NodeTranslationService
             }
 
             if (!$sourceNode->isRemoved()) {
-                $context = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, $nodeSourceDimensionValue, $workspaceName);
+                $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $context->getFirstLevelNodeCache()->flush();
 
                 $targetNode = $context->adoptNode($sourceNode);
@@ -308,7 +290,7 @@ class NodeTranslationService
                 $this->publishingService->publishNode($targetNode);
                 $this->nodeDataRepository->persistEntities();
             } else {
-                $removeContext = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, null, $workspaceName);
+                $removeContext = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $targetNode = $removeContext->getNodeByIdentifier($sourceNode->getIdentifier());
                 if ($targetNode !== null) {
                     $targetNode->setRemoved(true);
