@@ -108,7 +108,7 @@ class NodeTranslationService
         }
 
         $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
-        $this->syncNodeInternal($node, $adoptedNode, $context);
+        $this->translateNode($node, $adoptedNode, $context);
     }
 
     /**
@@ -138,7 +138,7 @@ class NodeTranslationService
      * @param  Context  $context
      * @return void
      */
-    protected function syncNodeInternal(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
+    protected function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
 
@@ -302,7 +302,7 @@ class NodeTranslationService
                 $context->getFirstLevelNodeCache()->flush();
 
                 $adoptedNode = $context->adoptNode($node);
-                $this->syncNodeInternal($node, $adoptedNode, $context);
+                $this->translateNode($node, $adoptedNode, $context);
 
                 $context->getFirstLevelNodeCache()->flush();
                 $this->publishingService->publishNode($adoptedNode);
