@@ -138,7 +138,7 @@ class NodeTranslationService
      * @param  Context  $context
      * @return void
      */
-    protected function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
+    public function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
 
