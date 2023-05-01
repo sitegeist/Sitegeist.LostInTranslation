@@ -1,11 +1,11 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
 class DeepLAuthenticationKey
 {
-
     /**
      * @var string
      */

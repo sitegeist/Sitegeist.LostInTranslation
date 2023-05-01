@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
@@ -17,7 +18,6 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  */
 class DeepLTranslationService implements TranslationServiceInterface
 {
-
     /**
      * @var array
      * @Flow\InjectConfiguration(path="DeepLApi")
@@ -64,7 +64,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             $body .= '&source_lang=' . urlencode($sourceLanguage);
         }
         $body .= '&target_lang=' . urlencode($targetLanguage);
-        foreach($values as $part) {
+        foreach ($values as $part) {
             // All ignored terms will be wrapped in a <ignored> tag
             // which will be ignored by DeepL
             if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
@@ -96,7 +96,7 @@ class DeepLTranslationService implements TranslationServiceInterface
                 return $texts;
             }
             $translations = array_map(
-                function($part) {
+                function ($part) {
                     return preg_replace('/(<ignore>|<\/ignore>)/i', '', $part['text']);
                 },
                 $returnedData['translations']

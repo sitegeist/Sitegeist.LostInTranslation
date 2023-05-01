@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
@@ -96,7 +97,7 @@ class NodeTranslationService
      */
     public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
     {
-        if (!$this->enabled){
+        if (!$this->enabled) {
             return;
         }
 
@@ -116,7 +117,7 @@ class NodeTranslationService
             return;
         }
 
-        foreach($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
+        foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
             }
@@ -132,7 +133,9 @@ class NodeTranslationService
                 $this->translateNode($node, $adoptedNode, $context);
             } else {
                 $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
-                if ($adoptedNode !== null) $adoptedNode->setRemoved(true);
+                if ($adoptedNode !== null) {
+                    $adoptedNode->setRemoved(true);
+                }
             }
         }
     }
@@ -181,7 +184,6 @@ class NodeTranslationService
         $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
-
             if (empty($propertyValue)) {
                 continue;
             }
