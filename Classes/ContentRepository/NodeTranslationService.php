@@ -136,10 +136,9 @@ class NodeTranslationService
      * @param  NodeInterface  $sourceNode
      * @param  NodeInterface  $targetNode
      * @param  Context  $context
-     * @param  bool  $translate
      * @return void
      */
-    protected function syncNodeInternal(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context, bool $translate = true): void
+    protected function syncNodeInternal(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
 
@@ -208,7 +207,7 @@ class NodeTranslationService
             }
         }
 
-        if ($translate && count($propertiesToTranslate) > 0) {
+        if (count($propertiesToTranslate) > 0) {
             $translatedProperties = $this->translationService->translate($propertiesToTranslate, $targetLanguage, $sourceLanguage);
             $properties = array_merge($translatedProperties, $properties);
         }
@@ -272,10 +271,9 @@ class NodeTranslationService
      *
      * @param  NodeInterface  $node
      * @param  string  $workspaceName
-     * @param  bool  $translate
      * @return void
      */
-    public function syncNode(NodeInterface $node, string $workspaceName = 'live', bool $translate = true): void
+    public function syncNode(NodeInterface $node, string $workspaceName = 'live'): void
     {
         $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
         if (!$isAutomaticTranslationEnabledForNodeType) {
@@ -304,7 +302,7 @@ class NodeTranslationService
                 $context->getFirstLevelNodeCache()->flush();
 
                 $adoptedNode = $context->adoptNode($node);
-                $this->syncNodeInternal($node, $adoptedNode, $context, $translate);
+                $this->syncNodeInternal($node, $adoptedNode, $context);
 
                 $context->getFirstLevelNodeCache()->flush();
                 $this->publishingService->publishNode($adoptedNode);
