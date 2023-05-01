@@ -10,7 +10,6 @@ use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
-use Neos\ContentRepository\Exception\NodeExistsException;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -163,23 +162,6 @@ class NodeTranslationService
             return;
         }
 
-        // Move node if targetNode has no parent or node parents are not matching
-        if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
-            try {
-                $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
-                $targetNode->moveInto($referenceNode);
-            } catch (NodeExistsException | InvalidArgumentException $e) {
-            }
-        }
-
-        // Sync internal properties
-        $targetNode->setNodeType($sourceNode->getNodeType());
-        $targetNode->setHidden($sourceNode->isHidden());
-        $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
-        $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
-        $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
-        $targetNode->setIndex($sourceNode->getIndex());
-
         $properties = (array) $sourceNode->getProperties(true);
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
@@ -269,18 +251,18 @@ class NodeTranslationService
     /**
      * Checks the requirements if a node can be synchronised and executes the sync.
      *
-     * @param  NodeInterface  $node
+     * @param  NodeInterface  $sourceNode
      * @param  string  $workspaceName
      * @return void
      */
-    public function syncNode(NodeInterface $node, string $workspaceName = 'live'): void
+    public function syncNode(NodeInterface $sourceNode, string $workspaceName = 'live'): void
     {
-        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        $isAutomaticTranslationEnabledForNodeType = $sourceNode->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
         if (!$isAutomaticTranslationEnabledForNodeType) {
             return;
         }
 
-        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $nodeSourceDimensionValue = $sourceNode->getContext()->getTargetDimensions()[$this->languageDimensionName];
         $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
 
         if ($nodeSourceDimensionValue !== $defaultPreset) {
@@ -297,21 +279,39 @@ class NodeTranslationService
                 continue;
             }
 
-            if (!$node->isRemoved()) {
+            if (!$sourceNode->isRemoved()) {
                 $context = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, $nodeSourceDimensionValue, $workspaceName);
                 $context->getFirstLevelNodeCache()->flush();
 
-                $adoptedNode = $context->adoptNode($node);
-                $this->translateNode($node, $adoptedNode, $context);
+                $targetNode = $context->adoptNode($sourceNode);
+
+                // Move node if targetNode has no parent or node parents are not matching
+                if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
+                    try {
+                        $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
+                        $targetNode->moveInto($referenceNode);
+                    } catch (InvalidArgumentException $e) {
+                    }
+                }
+
+                // Sync internal properties
+                $targetNode->setNodeType($sourceNode->getNodeType());
+                $targetNode->setHidden($sourceNode->isHidden());
+                $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
+                $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
+                $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
+                $targetNode->setIndex($sourceNode->getIndex());
+
+                $this->translateNode($sourceNode, $targetNode, $context);
 
                 $context->getFirstLevelNodeCache()->flush();
-                $this->publishingService->publishNode($adoptedNode);
+                $this->publishingService->publishNode($targetNode);
                 $this->nodeDataRepository->persistEntities();
             } else {
                 $removeContext = $this->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($presetIdentifier, null, $workspaceName);
-                $adoptedNode = $removeContext->getNodeByIdentifier($node->getIdentifier());
-                if ($adoptedNode !== null) {
-                    $adoptedNode->setRemoved(true);
+                $targetNode = $removeContext->getNodeByIdentifier($sourceNode->getIdentifier());
+                if ($targetNode !== null) {
+                    $targetNode->setRemoved(true);
                 }
             }
         }
