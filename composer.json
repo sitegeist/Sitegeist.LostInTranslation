@@ -8,7 +8,8 @@
         "neos/http-factories": "^6.3 || ^7.0 || ^8.0 || dev-master"
     },
     "require-dev": {
-        "phpstan/phpstan": "^0.12.78"
+        "phpstan/phpstan": "0.12.99",
+        "squizlabs/php_codesniffer": "^3.7"
     },
     "autoload": {
         "psr-4": {
@@ -16,12 +17,20 @@
         }
     },
     "scripts": {
-        "test:stan": ["vendor/bin/phpstan analyse Classes"],
-        "test": ["composer install", "composer  test:stan"]
+        "fix:style": "phpcbf --colors --standard=PSR12 Classes",
+        "test:style": "phpcs --colors -n --standard=PSR12 Classes",
+        "test:stan": "phpstan analyse Classes",
+        "cc": "phpstan clear cache",
+        "test": ["composer install", "composer test:style" , "composer test:stan"]
     },
     "extra": {
         "neos": {
             "package-key": "Sitegeist.LostInTranslation"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "neos/composer-plugin": true
         }
     }
 }
