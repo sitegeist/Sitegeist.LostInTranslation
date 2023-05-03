@@ -93,10 +93,12 @@ Sitegeist:
       languageDimensionName: 'language'
 ```
 
-To enable automated translations for a language preset, just set `options.translationStrategy` to  `once` or `sync`.
+To enable automated translations for a language preset, set `options.translationStrategy` to  `once`, `sync` or `none`.
+The default mode is `once`;
 
 * `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
 * `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
+* `none` will not translate variants for this dimension.
 
 If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
 be configured explicitly for this preset via `options.deeplLanguage`.
