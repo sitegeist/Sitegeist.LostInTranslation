@@ -19,12 +19,6 @@ use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
 class TranslationCommandController extends CommandController
 {
     /**
-     * @Flow\InjectConfiguration(package="Neos.Flow")
-     * @var array
-     */
-    protected $flowSettings;
-
-    /**
      * @Flow\InjectConfiguration(path="nodeTranslation.languageDimensionName")
      * @var string
      */
@@ -50,12 +44,6 @@ class TranslationCommandController extends CommandController
 
     /**
      * @Flow\Inject
-     * @var ContentContextFactory
-     */
-    protected $contentContextFactory;
-
-    /**
-     * @Flow\Inject
      * @var EntityManagerInterface
      */
     protected $entityManager;
@@ -70,13 +58,12 @@ class TranslationCommandController extends CommandController
      * @Flow\Internal
      *
      * @param  string  $siteNodeName
-     * @param  bool  $translate
      * @param  string|null  $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
      * @return void
      * @throws Exception
      * @throws StopCommandException
      */
-    public function syncCommand(string $siteNodeName, bool $translate = false, string $nodeTypeFilter = null): void
+    public function syncCommand(string $siteNodeName, string $nodeTypeFilter = null): void
     {
         /** @var Site|null $site */
         $site = $this->siteRepository->findOneByNodeName($siteNodeName);
@@ -106,7 +93,7 @@ class TranslationCommandController extends CommandController
         foreach ($documentNodes as $documentNode) {
             $documentNodePath = $documentNode->getPath();
             $rootNode = $this->getContentContext()->getNode($documentNodePath);
-            $this->processNode($rootNode, $translate);
+            $this->processNode($rootNode);
             $this->persistenceManager->persistAll();
             $this->output->progressAdvance();
         }
@@ -117,19 +104,18 @@ class TranslationCommandController extends CommandController
 
     /**
      * @param  NodeInterface  $node
-     * @param  bool  $translate
      * @return void
      */
-    protected function processNode(NodeInterface $node, bool $translate)
+    protected function processNode(NodeInterface $node): void
     {
-        $this->nodeTranslationService->syncNode($node, 'live', $translate);
+        $this->nodeTranslationService->syncNode($node);
 
         foreach ($node->getChildNodes() as $childNode) {
-            if ($childNode->getNodeType()->isOfType('Neos.Neos:Document')) {
+            if ($childNode->getNodeType()->isOfType('Neos.Neos:Document') || $childNode->getNodeType()->isOfType('Neos.Neos:Shortcut')) {
                 continue;
             }
 
-            $this->processNode($childNode, $translate);
+            $this->processNode($childNode);
         }
     }
 
@@ -138,6 +124,6 @@ class TranslationCommandController extends CommandController
      */
     protected function getContentContext(): Context
     {
-        return $this->nodeTranslationService->getContextForTargetLanguageDimensionAndSourceLanguageDimensionAndWorkspaceName($this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset']);
+        return $this->nodeTranslationService->getContextForLanguageDimensionAndWorkspaceName($this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset']);
     }
 }
