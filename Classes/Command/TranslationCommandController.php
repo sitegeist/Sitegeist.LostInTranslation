@@ -55,8 +55,6 @@ class TranslationCommandController extends CommandController
     protected $persistenceManager;
 
     /**
-     * @Flow\Internal
-     *
      * @param  string  $siteNodeName
      * @param  string|null  $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
      * @return void
