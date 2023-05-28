@@ -83,8 +83,8 @@ class NodeTranslationService
     protected $nodeDataRepository;
 
     /**
-     * @param  NodeInterface  $node
-     * @param  Context  $context
+     * @param NodeInterface $node
+     * @param Context $context
      * @param $recursive
      * @return void
      */
@@ -106,13 +106,13 @@ class NodeTranslationService
             return;
         }
 
-        $adoptedNode = $context->getNodeByIdentifier((string) $node->getNodeAggregateIdentifier());
+        $adoptedNode = $context->getNodeByIdentifier((string)$node->getNodeAggregateIdentifier());
         $this->translateNode($node, $adoptedNode, $context);
     }
 
     /**
-     * @param  NodeInterface  $node
-     * @param  Workspace  $workspace
+     * @param NodeInterface $node
+     * @param Workspace $workspace
      * @return void
      */
     public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
@@ -132,9 +132,9 @@ class NodeTranslationService
      * All translatable properties from the source node are collected and passed translated via deepl and
      * applied to the target node
      *
-     * @param  NodeInterface  $sourceNode
-     * @param  NodeInterface  $targetNode
-     * @param  Context  $context
+     * @param NodeInterface $sourceNode
+     * @param NodeInterface $targetNode
+     * @param Context $context
      * @return void
      */
     public function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
@@ -162,7 +162,7 @@ class NodeTranslationService
             return;
         }
 
-        $properties = (array) $sourceNode->getProperties(true);
+        $properties = (array)$sourceNode->getProperties(true);
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
             if (empty($propertyValue)) {
@@ -202,8 +202,8 @@ class NodeTranslationService
     }
 
     /**
-     * @param  string  $language
-     * @param  string  $workspaceName
+     * @param string $language
+     * @param string $workspaceName
      * @return Context
      */
     public function getContextForLanguageDimensionAndWorkspaceName(string $language, string $workspaceName = 'live'): Context
@@ -233,8 +233,8 @@ class NodeTranslationService
     /**
      * Checks the requirements if a node can be synchronised and executes the sync.
      *
-     * @param  NodeInterface  $sourceNode
-     * @param  string  $workspaceName
+     * @param NodeInterface $sourceNode
+     * @param string $workspaceName
      * @return void
      */
     public function syncNode(NodeInterface $sourceNode, string $workspaceName = 'live'): void
@@ -269,10 +269,9 @@ class NodeTranslationService
 
                 // Move node if targetNode has no parent or node parents are not matching
                 if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
-                    try {
-                        $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
+                    $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
+                    if ($referenceNode instanceof NodeInterface) {
                         $targetNode->moveInto($referenceNode);
-                    } catch (InvalidArgumentException $e) {
                     }
                 }
 
