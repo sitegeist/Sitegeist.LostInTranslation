@@ -7,6 +7,7 @@ namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Http\Client\Browser;
 use Neos\Flow\Http\Client\CurlEngine;
+use Neos\Flow\Http\Client\CurlEngineException;
 use Neos\Http\Factories\ServerRequestFactory;
 use Neos\Http\Factories\StreamFactory;
 use Psr\Http\Message\ResponseInterface;
@@ -85,10 +86,25 @@ class DeepLTranslationService implements TranslationServiceInterface
         $engine->setOption(CURLOPT_TIMEOUT, 0);
         $browser->setRequestEngine($engine);
 
-        /**
-         * @var ResponseInterface $apiResponse
-         */
-        $apiResponse = $browser->sendRequest($apiRequest);
+        $attempts = 0;
+        do {
+            $attempts++;
+
+            try {
+                /**
+                 * @var ResponseInterface $apiResponse
+                 */
+                $apiResponse = $browser->sendRequest($apiRequest);
+                break;
+            } catch (CurlEngineException $e) {
+                sleep(1);
+                continue;
+            } finally {
+                if ($attempts >= 3) {
+                    return $texts;
+                }
+            }
+        } while ($attempts <= 3);
 
         if ($apiResponse->getStatusCode() == 200) {
             $returnedData = json_decode($apiResponse->getBody()->getContents(), true);
