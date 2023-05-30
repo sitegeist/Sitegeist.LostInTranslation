@@ -86,25 +86,22 @@ class DeepLTranslationService implements TranslationServiceInterface
         $engine->setOption(CURLOPT_TIMEOUT, 0);
         $browser->setRequestEngine($engine);
 
-        $attempts = 0;
+        $attempt = 0;
+        $maximumAttempts = $this->settings['numberOfAttempts'];
         do {
-            $attempts++;
-
+            $attempt++;
             try {
-                /**
-                 * @var ResponseInterface $apiResponse
-                 */
                 $apiResponse = $browser->sendRequest($apiRequest);
                 break;
             } catch (CurlEngineException $e) {
-                sleep(1);
-                continue;
-            } finally {
-                if ($attempts >= 3) {
+                if ($attempt === $maximumAttempts) {
                     return $texts;
                 }
+
+                sleep(1);
+                continue;
             }
-        } while ($attempts <= 3);
+        } while ($attempt <= $maximumAttempts);
 
         if ($apiResponse->getStatusCode() == 200) {
             $returnedData = json_decode($apiResponse->getBody()->getContents(), true);
