@@ -25,6 +25,17 @@ Sitegeist:
       #
       ignoredTerms: []
 
+      #
+      # Here you can specify how a request to the DeepL API should
+      # be attempted. Any number higher than 1 means that there will be
+      # retries.
+      #
+      # 1 = one attempt
+      # 2 = two attempts
+      # and so on...
+      #
+      numberOfAttempts: 1
+
     nodeTranslation:
       #
       # Enable the automatic translations of nodes while they are adopted to another dimension
