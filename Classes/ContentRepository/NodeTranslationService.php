@@ -9,6 +9,7 @@ use Neos\ContentRepository\Exception\NodeException;
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Service\Context;
+use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -60,6 +61,12 @@ class NodeTranslationService
      * @var ContextFactory
      */
     protected $contextFactory;
+
+    /**
+     * @Flow\Inject
+     * @var NodeUriPathSegmentGenerator
+     */
+    protected  $nodeUriPathSegmentGenerator;
 
     /**
      * @param NodeInterface $node
@@ -219,6 +226,11 @@ class NodeTranslationService
                 if ($targetNode->getProperty($propertyName) != $translatedValue) {
                     $targetNode->setProperty($propertyName, $translatedValue);
                 }
+            }
+
+            // Make sure the uriPathSegment is valid
+            if ($targetNode->getProperty('uriPathSegment') && !preg_match('/^[a-z0-9\-]+$/i', $targetNode->getProperty('uriPathSegment'))) {
+                $targetNode->setProperty('uriPathSegment', $this->nodeUriPathSegmentGenerator->generateUriPathSegment($targetNode));
             }
         }
     }
