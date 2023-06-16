@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
@@ -6,6 +7,7 @@ namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Http\Client\Browser;
 use Neos\Flow\Http\Client\CurlEngine;
+use Neos\Flow\Http\Client\CurlEngineException;
 use Neos\Http\Factories\ServerRequestFactory;
 use Neos\Http\Factories\StreamFactory;
 use Psr\Http\Message\ResponseInterface;
@@ -17,7 +19,6 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  */
 class DeepLTranslationService implements TranslationServiceInterface
 {
-
     /**
      * @var array
      * @Flow\InjectConfiguration(path="DeepLApi")
@@ -64,7 +65,13 @@ class DeepLTranslationService implements TranslationServiceInterface
             $body .= '&source_lang=' . urlencode($sourceLanguage);
         }
         $body .= '&target_lang=' . urlencode($targetLanguage);
-        foreach($values as $part) {
+        foreach ($values as $part) {
+            // All ignored terms will be wrapped in a <ignored> tag
+            // which will be ignored by DeepL
+            if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
+                $part = preg_replace('/(' . implode('|', $this->settings['ignoredTerms']) . ')/i', '<ignore>$1</ignore>', $part);
+            }
+
             $body .= '&text=' . urlencode($part);
         }
 
@@ -79,10 +86,22 @@ class DeepLTranslationService implements TranslationServiceInterface
         $engine->setOption(CURLOPT_TIMEOUT, 0);
         $browser->setRequestEngine($engine);
 
-        /**
-         * @var ResponseInterface $apiResponse
-         */
-        $apiResponse = $browser->sendRequest($apiRequest);
+        $attempt = 0;
+        $maximumAttempts = $this->settings['numberOfAttempts'];
+        do {
+            $attempt++;
+            try {
+                $apiResponse = $browser->sendRequest($apiRequest);
+                break;
+            } catch (CurlEngineException $e) {
+                if ($attempt === $maximumAttempts) {
+                    return $texts;
+                }
+
+                sleep(1);
+                continue;
+            }
+        } while ($attempt <= $maximumAttempts);
 
         if ($apiResponse->getStatusCode() == 200) {
             $returnedData = json_decode($apiResponse->getBody()->getContents(), true);
@@ -90,8 +109,8 @@ class DeepLTranslationService implements TranslationServiceInterface
                 return $texts;
             }
             $translations = array_map(
-                function($part) {
-                    return $part['text'];
+                function ($part) {
+                    return preg_replace('/(<ignore>|<\/ignore>)/i', '', $part['text']);
                 },
                 $returnedData['translations']
             );

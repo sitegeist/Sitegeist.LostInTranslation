@@ -15,7 +15,26 @@ Sitegeist:
         tag_handling: 'xml'
         split_sentences: 'nonewlines'
         preserve_formatting: 1
-        formality: "default"
+        formality: 'default'
+        ignore_tags: 'ignore'
+
+      #
+      # Here you can define terms that will be wrapped with an <ignore> tag
+      # and hence ignored by the DeepL API.
+      # For example: brand names, city names, etc.
+      #
+      ignoredTerms: []
+
+      #
+      # Here you can specify how a request to the DeepL API should
+      # be attempted. Any number higher than 1 means that there will be
+      # retries.
+      #
+      # 1 = one attempt
+      # 2 = two attempts
+      # and so on...
+      #
+      numberOfAttempts: 1
 
     nodeTranslation:
       #
@@ -35,3 +54,9 @@ Sitegeist:
       # The name of the language dimension. Usually needs no modification
       #
       languageDimensionName: 'language'
+
+      #
+      # To be used if editor access to the translated languages is disabled by policy.
+      # If enabled, the automated node translation will disregard the policy while translating the nodes.
+      #
+      skipAuthorizationChecks: false

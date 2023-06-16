@@ -93,10 +93,12 @@ Sitegeist:
       languageDimensionName: 'language'
 ```
 
-To enable automated translations for a language preset, just set `options.translationStrategy` to  `once` or `sync`.
+To enable automated translations for a language preset, set `options.translationStrategy` to  `once`, `sync` or `none`.
+The default mode is `once`;
 
 * `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
 * `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
+* `none` will not translate variants for this dimension.
 
 If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
 be configured explicitly for this preset via `options.deeplLanguage`.
@@ -106,10 +108,10 @@ Neos:
   ContentRepository:
     contentDimensions:
       'language':
-        
+
         #
         # The `defaultPreset` marks the source of for all translations whith mode `sync`
-        #  
+        #
         label: 'Language'
         default: 'en'
         defaultPreset: 'en'
@@ -159,6 +161,48 @@ Neos:
             options:
               translationStrategy: 'none'
 ```
+
+### Ignoring Terms
+
+You can define terms that should be ignored by DeepL in the configuration.
+The terms will are evaluated case-insensitive when searching for them, however
+they will always be replaced with their actual occurrence.
+
+This is how an example configuration could look like:
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+      ignoredTerms:
+        - 'Sitegeist'
+        - 'Neos.io'
+        - 'Hamburg'
+```
+
+## Eel Helper
+
+The package also provides two Eel helper to translate texts in Fusion.
+
+**:warning: Every one of these Eel helpers make an individual request to DeepL.** Thus having many of them on one page can significantly slow down the performance for if the page is uncached.
+:bulb: It is recommended to enable the [translation cache](#translation-cache).
+
+To translate a single text you can use:
+
+```neosfusion
+# ${Sitegeist.LostInTranslation.translate(string textToBeTranslated, string targetLanguage, string|null sourceLanguage = null): string}
+${Sitegeist.LostInTranslation.translate('Hello world!', 'de', 'en')}
+# Output: Hallo Welt!
+```
+
+To translate an array of texts you can use:
+
+```neosfusion
+# ${Sitegeist.LostInTranslation.translate(array textsToBeTranslated, string targetLanguage, string|null sourceLanguage = null): array}
+${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de', 'en')}
+# Output: ['Hallo Welt!', 'Mein Name ist...']
+```
+
 ## Performance
 
 For every translated node a single request is made to the DeepL API. This can lead to significant delay when Documents with lots of nodes are translated. It is likely that future versions will improve this.
