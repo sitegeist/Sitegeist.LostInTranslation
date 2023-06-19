@@ -93,7 +93,7 @@ class NodeTranslationService
      * @Flow\Inject
      * @var NodeUriPathSegmentGenerator
      */
-    protected  $nodeUriPathSegmentGenerator;
+    protected $nodeUriPathSegmentGenerator;
 
     /**
      * @param NodeInterface $node
@@ -176,7 +176,6 @@ class NodeTranslationService
         if (array_key_exists('options', $targetLanguagePreset) && array_key_exists('deeplLanguage', $targetLanguagePreset['options'])) {
             $targetLanguage = $targetLanguagePreset['options']['deeplLanguage'];
         }
-
         if (empty($sourceLanguage) || empty($targetLanguage) || ($sourceLanguage == $targetLanguage)) {
             return;
         }
@@ -220,7 +219,7 @@ class NodeTranslationService
 
             // Make sure the uriPathSegment is valid
             if ($targetNode->getProperty('uriPathSegment') && !preg_match('/^[a-z0-9\-]+$/i', $targetNode->getProperty('uriPathSegment'))) {
-                $targetNode->setProperty('uriPathSegment', $this->nodeUriPathSegmentGenerator->generateUriPathSegment($targetNode));
+                $targetNode->setProperty('uriPathSegment', $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $targetNode->getProperty('uriPathSegment')));
             }
         }
     }
@@ -274,7 +273,6 @@ class NodeTranslationService
         if ($nodeSourceDimensionValue !== $defaultPreset) {
             return;
         }
-
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -284,7 +282,6 @@ class NodeTranslationService
             if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
                 continue;
             }
-
             if (!$sourceNode->isRemoved()) {
                 $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $context->getFirstLevelNodeCache()->flush();
