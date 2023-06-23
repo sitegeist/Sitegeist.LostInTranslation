@@ -232,6 +232,6 @@ class DeepLTranslationService implements TranslationServiceInterface
      */
     protected function getEntryIdentifier(string $text, string $targetLanguage, string $sourceLanguage = null): string
     {
-        return sha1($text.$targetLanguage.$sourceLanguage);
+        return sha1($text . $targetLanguage . $sourceLanguage);
     }
 }
