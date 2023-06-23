@@ -12,6 +12,7 @@ use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
+use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -87,6 +88,12 @@ class NodeTranslationService
      * @var NodeDataRepository
      */
     protected $nodeDataRepository;
+
+    /**
+     * @Flow\Inject
+     * @var NodeUriPathSegmentGenerator
+     */
+    protected $nodeUriPathSegmentGenerator;
 
     /**
      * @param NodeInterface $node
@@ -169,7 +176,6 @@ class NodeTranslationService
         if (array_key_exists('options', $targetLanguagePreset) && array_key_exists('deeplLanguage', $targetLanguagePreset['options'])) {
             $targetLanguage = $targetLanguagePreset['options']['deeplLanguage'];
         }
-
         if (empty($sourceLanguage) || empty($targetLanguage) || ($sourceLanguage == $targetLanguage)) {
             return;
         }
@@ -209,6 +215,11 @@ class NodeTranslationService
         foreach ($properties as $propertyName => $propertyValue) {
             if ($targetNode->getProperty($propertyName) != $propertyValue) {
                 $targetNode->setProperty($propertyName, $propertyValue);
+            }
+
+            // Make sure the uriPathSegment is valid
+            if ($targetNode->getProperty('uriPathSegment') && !preg_match('/^[a-z0-9\-]+$/i', $targetNode->getProperty('uriPathSegment'))) {
+                $targetNode->setProperty('uriPathSegment', $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $targetNode->getProperty('uriPathSegment')));
             }
         }
     }
@@ -262,7 +273,6 @@ class NodeTranslationService
         if ($nodeSourceDimensionValue !== $defaultPreset) {
             return;
         }
-
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -272,7 +282,6 @@ class NodeTranslationService
             if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
                 continue;
             }
-
             if (!$sourceNode->isRemoved()) {
                 $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $context->getFirstLevelNodeCache()->flush();
