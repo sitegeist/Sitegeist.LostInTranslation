@@ -13,4 +13,6 @@ interface TranslationServiceInterface
      * @return array
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array;
+
+    public function getStatus(): ApiStatus;
 }

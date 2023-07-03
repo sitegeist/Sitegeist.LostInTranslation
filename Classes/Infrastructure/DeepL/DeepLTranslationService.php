@@ -4,15 +4,22 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
+use DeepL\AppInfo;
+use DeepL\TextResult;
+use DeepL\Translator;
+use DeepL\TranslatorOptions;
+use DeepL\Usage;
+use Neos\Cache\Frontend\StringFrontend;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Http\Client\Browser;
 use Neos\Flow\Http\Client\CurlEngine;
 use Neos\Flow\Http\Client\CurlEngineException;
 use Neos\Http\Factories\ServerRequestFactory;
 use Neos\Http\Factories\StreamFactory;
-use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
+use Sitegeist\LostInTranslation\Domain\ApiStatus;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
+use Sitegeist\LostInTranslation\Package;
 
 /**
  * @Flow\Scope("singleton")
@@ -44,6 +51,12 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected $streamFactory;
 
     /**
+     * @Flow\Inject
+     * @var StringFrontend
+     */
+    protected $apiKeyCache;
+
+    /**
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
@@ -55,7 +68,7 @@ class DeepLTranslationService implements TranslationServiceInterface
         $keys = array_keys($texts);
         $values = array_values($texts);
 
-        $deeplAuthenticationKey = new DeepLAuthenticationKey($this->settings['authenticationKey']);
+        $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
         $baseUri = $deeplAuthenticationKey->isFree() ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
 
         // request body ... this has to be done manually because of the non php ish format
@@ -132,5 +145,46 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
             return $texts;
         }
+    }
+
+
+    public function getStatus(): ApiStatus
+    {
+        $hasSettingsKey =  $this->settings['authenticationKey'] ? true : false;
+        $hasCustomKey = $this->apiKeyCache->has(Package::API_KEY_CACHE_ID);
+
+        try {
+            $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
+            $baseUri = $deeplAuthenticationKey->isFree() ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
+
+            $apiRequest = $this->serverRequestFactory->createServerRequest('POST', $baseUri . 'usage')
+                ->withHeader('Accept', 'application/json')
+                ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->getAuthenticationKey()))
+                ->withHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+            $browser = new Browser();
+            $engine = new CurlEngine();
+            $engine->setOption(CURLOPT_TIMEOUT, 0);
+            $browser->setRequestEngine($engine);
+
+            $apiResponse = $browser->sendRequest($apiRequest);
+
+
+            if ($apiResponse->getStatusCode() == 200) {
+                $json = json_decode($apiResponse->getBody()->getContents(), true);
+                return new ApiStatus(true, $json['character_count'], $json['character_limit'], $hasSettingsKey, $hasCustomKey, $deeplAuthenticationKey->isFree());
+            } else {
+                return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, $deeplAuthenticationKey->isFree());
+            }
+        } catch (\Exception $exception) {
+            return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, false);
+        }
+    }
+
+    protected function getDeeplAuthenticationKey(): DeepLAuthenticationKey
+    {
+        $customKey = $this->apiKeyCache->get(Package::API_KEY_CACHE_ID) ?: null;
+        $settingsKey = $this->settings['authenticationKey'] ?? null;
+        return new DeepLAuthenticationKey($customKey ?? $settingsKey);
     }
 }

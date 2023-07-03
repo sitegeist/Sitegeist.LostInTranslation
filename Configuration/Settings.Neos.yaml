@@ -2,3 +2,13 @@ Neos:
   Fusion:
     defaultContext:
       'Sitegeist.LostInTranslation': 'Sitegeist\LostInTranslation\Eel\TranslationHelper'
+  Neos:
+    modules:
+      management:
+        submodules:
+          sitegeist_lostintranslation:
+            label: 'Lost In Translations'
+            description: 'DeepL based Translations for Neos'
+            icon: 'icon-language'
+            controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
+            privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
