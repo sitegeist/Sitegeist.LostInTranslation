@@ -2,3 +2,9 @@ Neos:
   Fusion:
     defaultContext:
       'Sitegeist.LostInTranslation': 'Sitegeist\LostInTranslation\Eel\TranslationHelper'
+  Neos:
+    userInterface:
+      translation:
+        autoInclude:
+          'Sitegeist.LostInTranslation':
+            - '*'

@@ -180,6 +180,11 @@ Sitegeist:
         - 'Hamburg'
 ```
 
+### Ignoring Nodes (when in sync-mode)
+Optionally you can use the `Sitegeist.LostInTranslation:Mixin.TranslationMeta` mixin in your node configuration to 
+enable the option to prevent the translation to be changed when sync mode is active, but you would like to exclude 
+a specific node (or container element). 
+
 ## Eel Helper
 
 The package also provides two Eel helper to translate texts in Fusion.

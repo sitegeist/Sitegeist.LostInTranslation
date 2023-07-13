@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
-use InvalidArgumentException;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
+use Neos\ContentRepository\Exception\NodeException;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
@@ -155,9 +155,17 @@ class NodeTranslationService
      * @param NodeInterface $targetNode
      * @param Context $context
      * @return void
+     * @throws NodeException
      */
     public function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
+        if (
+            $targetNode->hasProperty('preventTranslation') && $targetNode->getProperty('preventTranslation') === true ||
+            $targetNode->getParent() && $targetNode->getParent()->hasProperty('preventTranslation') && $targetNode->getParent()->getProperty('preventTranslation') === true
+        ) {
+            return;
+        }
+
         $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
 
         $sourceDimensionValue = $sourceNode->getContext()->getTargetDimensions()[$this->languageDimensionName];
@@ -285,6 +293,14 @@ class NodeTranslationService
             if (!$sourceNode->isRemoved()) {
                 $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $context->getFirstLevelNodeCache()->flush();
+
+                // If the parent element (i.e. a content collection) has preventTranslations on, make sure we do not sync changes - and translations
+                if ($sourceNode->getParent()) {
+                    $parentTargetNode = $context->adoptNode($sourceNode->getParent());
+                    if ($parentTargetNode && $parentTargetNode->hasProperty('preventTranslation') && $parentTargetNode->getProperty('preventTranslation') === true) {
+                        continue;
+                    }
+                }
 
                 $targetNode = $context->adoptNode($sourceNode);
 
