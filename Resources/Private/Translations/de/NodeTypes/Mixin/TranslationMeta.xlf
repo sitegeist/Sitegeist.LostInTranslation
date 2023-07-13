@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="en" target-language="de" datatype="plaintext">
+        <body>
+            <trans-unit id="properties.preventTranslation">
+                <source>Prevent automatic sync &amp; translation</source>
+                <target>Automatische Synchronisierung &amp; Übersetzung verhindern</target>
+            </trans-unit>
+            <trans-unit id="properties.preventTranslation.ui.help.message">
+                <source>When set, this node (and children) will not be automatically synced and translated even when sync is enabled.</source>
+                <target>Wenn diese Option gesetzt ist, wird diese Node (und die untergeordneten Nodes) nicht automatisch synchronisiert und übersetzt, selbst wenn die Synchronisierung aktiviert ist.</target>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>
