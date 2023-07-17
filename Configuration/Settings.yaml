@@ -36,6 +36,14 @@ Sitegeist:
       #
       numberOfAttempts: 1
 
+      #
+      # Here you can optionally disable the translation cache,
+      # see README for more information.
+      # BEWARE: disabling this cache while using the Eel Helper
+      # can significantly slow down your page or even
+      # lead to timeouts. Use with care!
+      #
+      enableCache: true
 
     nodeTranslation:
       #
