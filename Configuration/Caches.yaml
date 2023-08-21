@@ -1,0 +1,6 @@
+Sitegeist_LostInTranslation_ApiKeyCache:
+  frontend: Neos\Cache\Frontend\StringFrontend
+  backend: Neos\Cache\Backend\FileBackend
+  persistent: true
+  backendOptions:
+    defaultLifetime: 0

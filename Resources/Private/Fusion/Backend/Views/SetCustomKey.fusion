@@ -1,0 +1,24 @@
+
+prototype(Sitegeist.LostInTranslation:Views.SetCustomKey) < prototype(Neos.Fusion:Component) {
+    renderer = afx`
+        <legend>Store custom DeepL API-key</legend>
+
+        <Neos.Fusion.Form:Form
+            form.target.action="storeCustomKey"
+        >
+
+            <div class="neos-control-group">
+                <label class="neos-control-label" for="key">DeepL Api-key</label>
+                <div class="neos-controls neos-controls-row">
+                    <Neos.Fusion.Form:Input field.name="key" attributes.class="neos-span12" />
+                </div>
+            </div>
+
+            <div class="neos-footer">
+                <Neos.Fusion:Link.Action href.action="index" class="neos-button">Back</Neos.Fusion:Link.Action>
+                <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">Save Key</Neos.Fusion.Form:Button>
+            </div>
+
+        </Neos.Fusion.Form:Form>
+    `
+}

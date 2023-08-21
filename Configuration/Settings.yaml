@@ -36,6 +36,7 @@ Sitegeist:
       #
       numberOfAttempts: 1
 
+
     nodeTranslation:
       #
       # Enable the automatic translations of nodes while they are adopted to another dimension
@@ -55,8 +56,11 @@ Sitegeist:
       #
       languageDimensionName: 'language'
 
+
       #
       # To be used if editor access to the translated languages is disabled by policy.
       # If enabled, the automated node translation will disregard the policy while translating the nodes.
       #
       skipAuthorizationChecks: false
+
+

@@ -1,0 +1,57 @@
+prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Component) {
+    renderer = afx`
+        <legend>Lost in translations</legend>
+
+        <p @if={!status.connectionSuccessFull}>
+            <i class="fas fa-exclamation-triangle" style="color:red;" ></i> !!! NO DeepL API connection, please check you API-Key !!!
+
+        </p>
+        <Neos.Fusion:Fragment @if={status.connectionSuccessFull}>
+            <p><i class="fas fa-check-circle" style="color:green;" ></i> DeepL API connection successful {status.freeApi ? ' (Free API)' : ' (Payed API)'}</p>
+            <p @if={status.characterCount < status.characterLimit}><i class="fas fa-check-circle" style="color:green;" ></i> {status.characterCount} from {status.characterLimit} characters used</p>
+            <p @if={status.characterCount >= status.characterLimit}><i class="fas fa-exclamation-triangle" style="color:red;" ></i> Character limit of {status.characterLimit} reached. No further translations possible.</p>
+        </Neos.Fusion:Fragment>
+
+        <div class="neos-footer">
+
+            <Neos.Fusion:Fragment @if={!status.hasCustomKey}>
+                <Neos.Fusion:Link.Action href.action="setCustomKey" class="neos-button" >
+                    <i class="fas fa-plus"></i> Store custom API-Key
+                </Neos.Fusion:Link.Action>
+            </Neos.Fusion:Fragment>
+
+            <Neos.Fusion:Fragment @if={status.hasCustomKey}>
+                <Neos.Fusion:Link.Action href.action="setCustomKey" class="neos-button" >
+                    <i class="fas fa-pencil-alt"></i> Change custom API-Key
+                </Neos.Fusion:Link.Action>
+
+                <button class="neos-button neos-button-danger" title="delete custom ley" data-toggle="modal" href="#deleteCustomKey">
+                    <i class="fas fa-trash"></i> Remove custom API-Key
+                </button>
+
+                <div class="neos-hide" id="deleteCustomKey">
+                    <div class="neos-modal">
+                        <div class="neos-modal-header">
+                            <button type="button" class="neos-close neos-button" data-dismiss="modal"></button>
+                            <div class="neos-header">Remove custom API-key</div>
+                        </div>
+                        <div class="neos-modal-footer">
+                            <a href="#" class="neos-button" data-dismiss="modal">Cancel</a>
+                            <Neos.Fusion.Form:Form
+                                form.target.action="removeCustomKey"
+                                attributes.class="neos-inline"
+                            >
+                                <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-danger">Remove custom API-Key</Neos.Fusion.Form:Button>
+                            </Neos.Fusion.Form:Form>
+                        </div>
+                    </div>
+                    <div class="neos-modal-backdrop neos-in"></div>
+                </div>
+
+            </Neos.Fusion:Fragment>
+        </div>
+
+
+
+    `
+}
