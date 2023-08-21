@@ -57,6 +57,11 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected $apiKeyCache;
 
     /**
+     * @var StringFrontend
+     */
+    protected $translationCache;
+
+    /**
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
@@ -64,6 +69,24 @@ class DeepLTranslationService implements TranslationServiceInterface
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
+        $isCacheEnabled = $this->settings['enableCache'] ?? false;
+
+        $cachedEntries = [];
+
+        if ($isCacheEnabled) {
+            foreach ($texts as $i => $text) {
+                $entryIdentifier = $this->getEntryIdentifier($text, $targetLanguage, $sourceLanguage);
+                if ($this->translationCache->has($entryIdentifier)) {
+                    $cachedEntries[$i] = $this->translationCache->get($entryIdentifier);
+                    unset($texts[$i]);
+                }
+            }
+
+            if (empty($texts)) {
+                return $cachedEntries;
+            }
+        }
+
         // store keys and values seperately for later reunion
         $keys = array_keys($texts);
         $values = array_values($texts);
@@ -119,7 +142,7 @@ class DeepLTranslationService implements TranslationServiceInterface
         if ($apiResponse->getStatusCode() == 200) {
             $returnedData = json_decode($apiResponse->getBody()->getContents(), true);
             if (is_null($returnedData)) {
-                return $texts;
+                return array_replace($texts, $cachedEntries);
             }
             $translations = array_map(
                 function ($part) {
@@ -127,7 +150,20 @@ class DeepLTranslationService implements TranslationServiceInterface
                 },
                 $returnedData['translations']
             );
-            return array_combine($keys, $translations);
+
+            $translationWithOriginalIndex = array_combine($keys, $translations);
+
+            if ($isCacheEnabled) {
+                foreach ($translationWithOriginalIndex as $i => $translatedString) {
+                    $originalString = $texts[$i];
+                    $this->translationCache->set($this->getEntryIdentifier($originalString, $targetLanguage, $sourceLanguage), $translatedString);
+                }
+            }
+
+            $mergedTranslatedStrings = array_replace($translationWithOriginalIndex, $cachedEntries);
+            ksort($mergedTranslatedStrings);
+
+            return $mergedTranslatedStrings;
         } else {
             if ($apiResponse->getStatusCode() === 403) {
                 $this->logger->critical('Your DeepL API credentials are either wrong, or you don\'t have access to the requested API.');
@@ -143,10 +179,10 @@ class DeepLTranslationService implements TranslationServiceInterface
             } else {
                 $this->logger->warning('Unexpected status from Deepl API', ['status' => $apiResponse->getStatusCode()]);
             }
-            return $texts;
+
+            return array_replace($texts, $cachedEntries);
         }
     }
-
 
     public function getStatus(): ApiStatus
     {
@@ -186,5 +222,16 @@ class DeepLTranslationService implements TranslationServiceInterface
         $customKey = $this->apiKeyCache->get(Package::API_KEY_CACHE_ID) ?: null;
         $settingsKey = $this->settings['authenticationKey'] ?? null;
         return new DeepLAuthenticationKey($customKey ?? $settingsKey);
+    }
+
+    /**
+     * @param  string  $text
+     * @param  string  $targetLanguage
+     * @param  string|null  $sourceLanguage
+     * @return string
+     */
+    protected function getEntryIdentifier(string $text, string $targetLanguage, string $sourceLanguage = null): string
+    {
+        return sha1($text . $targetLanguage . $sourceLanguage);
     }
 }
