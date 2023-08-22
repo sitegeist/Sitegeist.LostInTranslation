@@ -182,10 +182,10 @@ Sitegeist:
 
 ## Eel Helper
 
-The package also provides two Eel helper to translate texts in Fusion.
+The package also provides two Eel Helper to translate texts in Fusion.
 
 **:warning: Every one of these Eel helpers make an individual request to DeepL.** Thus having many of them on one page can significantly slow down the performance for if the page is uncached.
-:bulb: It is recommended to enable the [translation cache](#translation-cache).
+:bulb: Only use while the [translation cache](#translation-cache) is enabled!
 
 To translate a single text you can use:
 
@@ -201,6 +201,19 @@ To translate an array of texts you can use:
 # ${Sitegeist.LostInTranslation.translate(array textsToBeTranslated, string targetLanguage, string|null sourceLanguage = null): array}
 ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de', 'en')}
 # Output: ['Hallo Welt!', 'Mein Name ist...']
+```
+
+### Translation Cache
+
+The plugin includes a translation cache for the DeepL API that stores the individual text parts
+and their translated result for up to one week.
+By default, the cache is enabled. To disable the cache, you need to set the following setting:
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+      enableCache: false
 ```
 
 ## Performance

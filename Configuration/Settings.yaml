@@ -36,6 +36,15 @@ Sitegeist:
       #
       numberOfAttempts: 1
 
+      #
+      # Here you can optionally disable the translation cache,
+      # see README for more information.
+      # BEWARE: disabling this cache while using the Eel Helper
+      # can significantly slow down your page or even
+      # lead to timeouts. Use with care!
+      #
+      enableCache: true
+
     nodeTranslation:
       #
       # Enable the automatic translations of nodes while they are adopted to another dimension
@@ -55,8 +64,11 @@ Sitegeist:
       #
       languageDimensionName: 'language'
 
+
       #
       # To be used if editor access to the translated languages is disabled by policy.
       # If enabled, the automated node translation will disregard the policy while translating the nodes.
       #
       skipAuthorizationChecks: false
+
+

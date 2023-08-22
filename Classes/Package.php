@@ -16,6 +16,8 @@ use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
  */
 class Package extends BasePackage
 {
+    const API_KEY_CACHE_ID = 'lostInTranslationApiKey';
+
     /**
      * @param Bootstrap $bootstrap The current bootstrap
      * @return void
