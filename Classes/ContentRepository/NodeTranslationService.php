@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
-use InvalidArgumentException;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
-use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\Flow\Annotations as Flow;
@@ -82,12 +80,6 @@ class NodeTranslationService
      * @var \Neos\Flow\Security\Context
      */
     protected $securityContext;
-
-    /**
-     * @Flow\Inject()
-     * @var NodeDataRepository
-     */
-    protected $nodeDataRepository;
 
     /**
      * @Flow\Inject
@@ -308,7 +300,6 @@ class NodeTranslationService
 
                 $context->getFirstLevelNodeCache()->flush();
                 $this->publishingService->publishNode($targetNode);
-                $this->nodeDataRepository->persistEntities();
             } else {
                 $removeContext = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $targetNode = $removeContext->getNodeByIdentifier($sourceNode->getIdentifier());
