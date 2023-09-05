@@ -4,16 +4,15 @@ namespace Sitegeist\LostInTranslation\Command;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
+use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\Eel\Exception;
 use Neos\Eel\FlowQuery\FlowQuery;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Cli\Exception\StopCommandException;
-use Neos\Flow\Persistence\PersistenceManagerInterface;
 use Neos\Neos\Domain\Model\Site;
 use Neos\Neos\Domain\Repository\SiteRepository;
-use Neos\Neos\Domain\Service\ContentContextFactory;
 use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
 
 class TranslationCommandController extends CommandController
@@ -50,18 +49,20 @@ class TranslationCommandController extends CommandController
 
     /**
      * @Flow\Inject
-     * @var PersistenceManagerInterface
+     * @var NodeDataRepository
      */
-    protected $persistenceManager;
+    protected $nodeDataRepository;
 
     /**
      * @param  string  $siteNodeName
-     * @param  string|null  $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
+     * @param  string|null  $from
+     * @param  string|null  $to
+     * @param  string  $nodeTypeFilter  Expects exactly one document node type to loop through, otherwise all documents will be looped
      * @return void
      * @throws Exception
      * @throws StopCommandException
      */
-    public function syncCommand(string $siteNodeName, string $nodeTypeFilter = null): void
+    public function syncCommand(string $siteNodeName, string $from = null, string $to = null, string $nodeTypeFilter = 'Neos.Neos:Document'): void
     {
         /** @var Site|null $site */
         $site = $this->siteRepository->findOneByNodeName($siteNodeName);
@@ -71,14 +72,9 @@ class TranslationCommandController extends CommandController
             $this->quit(1);
         }
 
-        $siteNode = $this->getContentContext()->getNode('/sites/' . $siteNodeName);
-
-        if (is_null($nodeTypeFilter)) {
-            $nodeTypeFilter = '[instanceof Neos.Neos:Document][!instanceof Neos.Neos:Shortcut]';
-        } else {
-            $nodeTypeFilter = sprintf('[instanceof %s]', $nodeTypeFilter);
-        }
-
+        $sourceContext = $this->getContentContext($from);
+        $siteNode = $sourceContext->getNode('/sites/' . $siteNodeName);
+        $nodeTypeFilter = sprintf('[instanceof %s]', $nodeTypeFilter);
         $documentNodeQuery = new FlowQuery([$siteNode]);
         $documentNodeQuery->pushOperation('find', [$nodeTypeFilter]);
         $documentNodes = $documentNodeQuery->get();
@@ -87,12 +83,14 @@ class TranslationCommandController extends CommandController
         $this->output->outputLine('Found %s document nodes', [sizeof($documentNodes)]);
         $this->output->progressStart(sizeof($documentNodes));
 
+//        $targetContext = $this->getContentContext($to);
         /** @var NodeInterface $documentNode */
         foreach ($documentNodes as $documentNode) {
+//            $targetContext->adoptNode($documentNode, true);
             $documentNodePath = $documentNode->getPath();
             $rootNode = $this->getContentContext()->getNode($documentNodePath);
-            $this->processNode($rootNode);
-            $this->persistenceManager->persistAll();
+            $this->processNode($rootNode, $to);
+            $this->nodeDataRepository->persistEntities();
             $this->output->progressAdvance();
         }
 
@@ -104,9 +102,9 @@ class TranslationCommandController extends CommandController
      * @param  NodeInterface  $node
      * @return void
      */
-    protected function processNode(NodeInterface $node): void
+    protected function processNode(NodeInterface $node, string $targetPresetIdentifier = null): void
     {
-        $this->nodeTranslationService->syncNode($node);
+        $this->nodeTranslationService->syncNode($node, 'live', $targetPresetIdentifier, true);
 
         foreach ($node->getChildNodes() as $childNode) {
             if ($childNode->getNodeType()->isOfType('Neos.Neos:Document') || $childNode->getNodeType()->isOfType('Neos.Neos:Shortcut')) {
@@ -120,8 +118,8 @@ class TranslationCommandController extends CommandController
     /**
      * @return Context
      */
-    protected function getContentContext(): Context
+    protected function getContentContext(string $languageDimension = null): Context
     {
-        return $this->nodeTranslationService->getContextForLanguageDimensionAndWorkspaceName($this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset']);
+        return $this->nodeTranslationService->getContextForLanguageDimensionAndWorkspaceName($languageDimension ?: $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset']);
     }
 }
