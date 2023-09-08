@@ -259,11 +259,13 @@ class NodeTranslationService
     /**
      * Checks the requirements if a node can be synchronised and executes the sync.
      *
-     * @param NodeInterface $sourceNode
-     * @param string $workspaceName
+     * @param  NodeInterface  $sourceNode
+     * @param  string  $workspaceName
+     * @param  string|null  $targetPresetIdentifier Restrict syncing to only one language preset
+     * @param  bool  $force Omits checking the translation strategy
      * @return void
      */
-    public function syncNode(NodeInterface $sourceNode, string $workspaceName = 'live'): void
+    public function syncNode(NodeInterface $sourceNode, string $workspaceName = 'live', string $targetPresetIdentifier = null, bool $force = false): void
     {
         $isAutomaticTranslationEnabledForNodeType = $sourceNode->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
         if (!$isAutomaticTranslationEnabledForNodeType) {
@@ -283,8 +285,12 @@ class NodeTranslationService
                 continue;
             }
 
+            if ($targetPresetIdentifier && $targetPresetIdentifier !== $presetIdentifier) {
+                continue;
+            }
+
             $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
-            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC) {
+            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC && !$force) {
                 continue;
             }
             if (!$sourceNode->isRemoved()) {
