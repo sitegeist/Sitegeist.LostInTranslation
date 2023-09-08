@@ -83,10 +83,8 @@ class TranslationCommandController extends CommandController
         $this->output->outputLine('Found %s document nodes', [sizeof($documentNodes)]);
         $this->output->progressStart(sizeof($documentNodes));
 
-//        $targetContext = $this->getContentContext($to);
         /** @var NodeInterface $documentNode */
         foreach ($documentNodes as $documentNode) {
-//            $targetContext->adoptNode($documentNode, true);
             $documentNodePath = $documentNode->getPath();
             $rootNode = $this->getContentContext()->getNode($documentNodePath);
             $this->processNode($rootNode, $to);
@@ -100,6 +98,7 @@ class TranslationCommandController extends CommandController
 
     /**
      * @param  NodeInterface  $node
+     * @param  string|null  $targetPresetIdentifier
      * @return void
      */
     protected function processNode(NodeInterface $node, string $targetPresetIdentifier = null): void
@@ -116,6 +115,7 @@ class TranslationCommandController extends CommandController
     }
 
     /**
+     * @param  string|null  $languageDimension
      * @return Context
      */
     protected function getContentContext(string $languageDimension = null): Context
