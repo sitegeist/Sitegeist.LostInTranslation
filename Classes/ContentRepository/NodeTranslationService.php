@@ -104,6 +104,15 @@ class NodeTranslationService
     protected $liveWorkspaceName = 'live';
 
     /**
+     * This property reveals whether LostInTranslation is currently translating a node.
+     * It can be used via the getter isActive() if you want to separate methods executed
+     * by this plugin from those executed by a user, for instance in an Aspect.
+     *
+     * @var bool
+     */
+    protected bool $active = false;
+
+    /**
      * @param NodeInterface $node
      * @param Context $context
      * @param bool $recursive
@@ -127,10 +136,12 @@ class NodeTranslationService
             return;
         }
 
+        $this->active = true;
         $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
         if ($adoptedNode instanceof NodeInterface) {
             $this->translateNode($node, $adoptedNode, $context);
         }
+        $this->active = false;
     }
 
     /**
@@ -273,6 +284,8 @@ class NodeTranslationService
         if ($nodeSourceDimensionValue !== $defaultPreset) {
             return;
         }
+
+        $this->active = true;
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -316,6 +329,16 @@ class NodeTranslationService
                 }
             }
         }
+
+        $this->active = false;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isActive(): bool
+    {
+        return $this->active;
     }
 
     public function resetContextCache(): void
