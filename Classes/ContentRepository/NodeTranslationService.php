@@ -10,6 +10,8 @@ use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Persistence\Doctrine\PersistenceManager;
+use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
@@ -104,6 +106,12 @@ class NodeTranslationService
     protected $liveWorkspaceName = 'live';
 
     /**
+     * @Flow\Inject
+     * @var PersistenceManager
+     */
+    protected $persistenceManager;
+
+    /**
      * This property reveals whether LostInTranslation is currently translating a node.
      * It can be used via the getter isActive() if you want to separate methods executed
      * by this plugin from those executed by a user, for instance in an Aspect.
@@ -111,6 +119,11 @@ class NodeTranslationService
      * @var bool
      */
     protected bool $active = false;
+
+    /**
+     * @var array
+     */
+    protected array $nodesToBeTranslated = [];
 
     /**
      * @param NodeInterface $node
@@ -145,11 +158,11 @@ class NodeTranslationService
     }
 
     /**
-     * @param NodeInterface $node
-     * @param Workspace $workspace
+     * @param  NodeInterface  $node
+     * @param  Workspace  $workspace
      * @return void
      */
-    public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
+    public function collectNodesToBeTranslated(NodeInterface $node, Workspace $workspace): void
     {
         if (!$this->enabled) {
             return;
@@ -159,13 +172,57 @@ class NodeTranslationService
             return;
         }
 
-        if ($this->skipAuthorizationChecks) {
-            $this->securityContext->withoutAuthorizationChecks(function () use ($node) {
-                $this->syncNode($node, $this->liveWorkspaceName);
-            });
-        } else {
-            $this->syncNode($node, $this->liveWorkspaceName);
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
         }
+
+        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
+
+        if ($nodeSourceDimensionValue !== $defaultPreset) {
+            return;
+        }
+
+        $this->nodesToBeTranslated[$workspace->getName()][$nodeSourceDimensionValue][$node->getIdentifier()] = $node->getIdentifier();
+    }
+
+    /**
+     * @return void
+     * @throws IllegalObjectTypeException|\Exception
+     */
+    public function translateNodes(): void
+    {
+        /**
+         * @var string $workspaceName
+         * @var array $nodesByWorkspace
+         */
+        foreach ($this->nodesToBeTranslated as $workspaceName => $nodesByWorkspace) {
+            /**
+             * @var string $languageDimensionValue
+             * @var array $nodesByLanguageDimensionValue
+             */
+            foreach ($nodesByWorkspace as $languageDimensionValue => $nodesByLanguageDimensionValue) {
+                $context = $this->getContextForLanguageDimensionAndWorkspaceName($languageDimensionValue, $workspaceName);
+                /**
+                 * @var string $nodeIdentifier
+                 * @var bool $translate
+                 */
+                foreach ($nodesByLanguageDimensionValue as $nodeIdentifier) {
+                    $node = $context->getNodeByIdentifier($nodeIdentifier);
+                    if ($this->skipAuthorizationChecks) {
+                        $this->securityContext->withoutAuthorizationChecks(function () use ($node, $workspaceName) {
+                            $this->syncNode($node, $workspaceName);
+                        });
+                    } else {
+                        $this->syncNode($node, $workspaceName);
+                    }
+                }
+            }
+        }
+
+        $this->nodesToBeTranslated = [];
+        $this->persistenceManager->persistAll();
     }
 
     /**
