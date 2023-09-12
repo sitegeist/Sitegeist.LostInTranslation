@@ -184,7 +184,7 @@ class NodeTranslationService
             return;
         }
 
-        $this->nodesToBeTranslated[$workspace->getName()][$nodeSourceDimensionValue][$node->getIdentifier()] = $node->getIdentifier();
+        $this->nodesToBeTranslated[$workspace->getName()][$nodeSourceDimensionValue][$node->getIdentifier()] = $node;
     }
 
     /**
@@ -208,8 +208,7 @@ class NodeTranslationService
                  * @var string $nodeIdentifier
                  * @var bool $translate
                  */
-                foreach ($nodesByLanguageDimensionValue as $nodeIdentifier) {
-                    $node = $context->getNodeByIdentifier($nodeIdentifier);
+                foreach ($nodesByLanguageDimensionValue as $nodeIdentifier => $node) {
                     if ($this->skipAuthorizationChecks) {
                         $this->securityContext->withoutAuthorizationChecks(function () use ($node, $workspaceName) {
                             $this->syncNode($node, $workspaceName);
