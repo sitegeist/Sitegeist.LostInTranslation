@@ -1,0 +1,10 @@
+-
+  name:  'LostInTranslation Node API'
+  uriPattern: 'lostintranslation/nodes/addmissing'
+  defaults:
+    '@package': 'Sitegeist.LostInTranslation'
+    '@subpackage': ''
+    '@controller': 'Node'
+    '@action': 'addMissingTranslations'
+    '@format': 'html'
+  httpMethods: ['GET','POST']

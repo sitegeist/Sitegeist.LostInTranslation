@@ -1,13 +1,20 @@
 <?php
+declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Eel;
 
+use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\Eel\ProtectedContextAwareInterface;
 use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Controller\CreateContentContextTrait;
+use Sitegeist\LostInTranslation\Domain\Comparison\Result;
+use Sitegeist\LostInTranslation\Infrastructure\Comparison\CollectionComparator;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class TranslationHelper implements ProtectedContextAwareInterface
 {
+    use CreateContentContextTrait;
+
     /**
      * @Flow\Inject
      * @var DeepLTranslationService
@@ -34,6 +41,21 @@ class TranslationHelper implements ProtectedContextAwareInterface
     public function translateMultiple(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
         return $this->translationService->translate($texts, $targetLanguage, $sourceLanguage);
+    }
+
+    /**
+     * @param NodeInterface $currentCollectionNode
+     * @param array $referenceDimensions
+     * @return array
+     */
+    public function compareCollectionWithDimension(NodeInterface $currentCollectionNode, array $referenceDimensions): Result
+    {
+        $contentContext = $this->createContentContext($currentCollectionNode->getContext()->getWorkspaceName(), $referenceDimensions);
+        $referenceCollectionNode = $contentContext->getNodeByIdentifier($currentCollectionNode->getIdentifier());
+        if ($referenceCollectionNode === null) {
+            return Result::createEmpty();
+        }
+        return CollectionComparator::compareCollectionNode($currentCollectionNode, $referenceCollectionNode);
     }
 
     /**

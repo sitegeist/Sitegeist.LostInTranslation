@@ -3,6 +3,9 @@ Neos:
     defaultContext:
       'Sitegeist.LostInTranslation': 'Sitegeist\LostInTranslation\Eel\TranslationHelper'
   Neos:
+    fusion:
+      autoInclude:
+        'Sitegeist.LostInTranslation': true
     modules:
       management:
         submodules:
@@ -12,3 +15,17 @@ Neos:
             icon: 'icon-language'
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
             privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
+  Flow:
+    mvc:
+      routes:
+        'Sitegeist.LostInTranslation':
+          position: 'start 1'
+    security:
+      authentication:
+        providers:
+          Neos.Neos:Backend:
+            requestPatterns:
+              'Sitegeist.LostInTranslation:Controllers':
+                pattern: ControllerObjectName
+                patternOptions:
+                  controllerObjectNamePattern: 'Sitegeist\LostInTranslation\Controller\NodeController'

@@ -1,0 +1,34 @@
+include: **/*.fusion
+
+prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fusion:Component) {
+    documentNode = ${documentNode}
+    collectionNode = ${node}
+    referenceDimensions = null
+
+    renderer = Neos.Fusion:Component {
+        status = ${Sitegeist.LostInTranslation.compareCollectionWithDimension(props.collectionNode, props.referenceDimensions)}
+        documentNode = ${props.documentNode}
+        collectionNode = ${props.collectionNode}
+        referenceDimensions = ${props.referenceDimensions}
+
+        renderer = afx`
+            <div @if={props.status.hasDifferences}>
+                <Neos.Fusion:Fragment @if={props.status.missing}>
+                    Missing Nodes: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
+                </Neos.Fusion:Fragment>
+                <Neos.Fusion:Fragment @if={props.status.outdated}>
+                    Outdated: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
+                </Neos.Fusion:Fragment>
+
+                <Neos.Fusion:Link.Action
+                    href.action="addMissingTranslations"
+                    href.package="Sitegeist.LostInTranslation"
+                    href.controller="Node"
+                    href.@process.addParameter={value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceDimensions=' + Json.stringify(props.referenceDimensions)}
+                >
+                    add  missing
+                </Neos.Fusion:Link.Action>
+            </div>
+        `
+    }
+}
