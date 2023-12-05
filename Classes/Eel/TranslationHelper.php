@@ -7,8 +7,8 @@ use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\Eel\ProtectedContextAwareInterface;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Controller\CreateContentContextTrait;
-use Sitegeist\LostInTranslation\Domain\Comparison\Result;
-use Sitegeist\LostInTranslation\Infrastructure\Comparison\CollectionComparator;
+use Sitegeist\LostInTranslation\Domain\CollectionComparison\Result;
+use Sitegeist\LostInTranslation\Domain\CollectionComparison\Comparator;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class TranslationHelper implements ProtectedContextAwareInterface
@@ -55,7 +55,7 @@ class TranslationHelper implements ProtectedContextAwareInterface
         if ($referenceCollectionNode === null) {
             return Result::createEmpty();
         }
-        return CollectionComparator::compareCollectionNode($currentCollectionNode, $referenceCollectionNode);
+        return Comparator::compareCollectionNode($currentCollectionNode, $referenceCollectionNode);
     }
 
     /**

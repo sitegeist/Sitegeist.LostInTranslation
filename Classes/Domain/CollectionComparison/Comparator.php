@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace Sitegeist\LostInTranslation\Infrastructure\Comparison;
+namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
 
 use Neos\ContentRepository\Domain\Model\NodeInterface;
-use Sitegeist\LostInTranslation\Domain\Comparison\NodeInformation;
-use Sitegeist\LostInTranslation\Domain\Comparison\Result;
+use Sitegeist\LostInTranslation\Domain\CollectionComparison\NodeReference;
+use Sitegeist\LostInTranslation\Domain\CollectionComparison\Result;
 
-class CollectionComparator
+class Comparator
 {
     public static function compareCollectionNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
     {
@@ -20,17 +20,17 @@ class CollectionComparator
          * @var NodeInterface[] $currentCollectionChildren
          */
         $currentCollectionChildren = array_reduce($currentNode->getChildNodes(), $reduceToArrayWithIdentifier, []);
-        $currentCollectionChildrenIdentifiers = array_values($currentCollectionChildren);
+        $currentCollectionChildrenIdentifiers = array_keys($currentCollectionChildren);
 
         /**
          * @var NodeInterface[] $referenceCollectionChildren
          */
         $referenceCollectionChildren = array_reduce($referenceNode->getChildNodes(), $reduceToArrayWithIdentifier, []);
-        $referenceCollectionChildrenIdentifiers =  array_values($referenceCollectionChildren);
+        $referenceCollectionChildrenIdentifiers =  array_keys($referenceCollectionChildren);
 
         $result = Result::createEmpty();
         /**
-         * @var NodeInformation[] $result
+         * @var NodeReference[] $result
          */
         $missing = [];
         foreach ($referenceCollectionChildren as $identifier => $referenceCollectionChild) {
@@ -38,9 +38,9 @@ class CollectionComparator
             if (!array_key_exists($identifier, $currentCollectionChildren)) {
                 $position = array_search($identifier, $referenceCollectionChildrenIdentifiers);
                 $previousIdentifier = ($position !== false && array_key_exists($position - 1, $referenceCollectionChildrenIdentifiers)) ? $referenceCollectionChildrenIdentifiers[$position - 1] : null;
-                $nextIdentifier =  ($position !== false && array_key_exists($position + 1, $referenceCollectionChildrenIdentifiers)) ? $referenceCollectionChildrenIdentifiers[$position + 1] : null;
+                $nextIdentifier = ($position !== false && array_key_exists($position + 1, $referenceCollectionChildrenIdentifiers)) ? $referenceCollectionChildrenIdentifiers[$position + 1] : null;
 
-                $missing[] = new NodeInformation(
+                $missing[] = new NodeReference(
                     $referenceCollectionChild,
                     $previousIdentifier,
                     $nextIdentifier
@@ -52,7 +52,7 @@ class CollectionComparator
         }
 
         /**
-         * @var NodeInformation[] $result
+         * @var NodeReference[] $result
          */
         $outdated = [];
         foreach ($currentCollectionChildren as $identifier => $currentCollectionCollectionChild) {
@@ -63,7 +63,7 @@ class CollectionComparator
                 $previousIdentifier = ($position !== false && array_key_exists($position - 1, $currentCollectionChildrenIdentifiers)) ? $currentCollectionChildrenIdentifiers[$position - 1] : null;
                 $nextIdentifier = ($position !== false && array_key_exists($position + 1, $currentCollectionChildrenIdentifiers)) ? $currentCollectionChildrenIdentifiers[$position + 1] : null;
 
-                $outdated[] = new NodeInformation(
+                $outdated[] = new NodeReference(
                     $currentCollectionCollectionChild,
                     $previousIdentifier,
                     $nextIdentifier

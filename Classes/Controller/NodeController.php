@@ -8,10 +8,7 @@ use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Mvc\Controller\ActionController;
 use Neos\Flow\Persistence\Doctrine\PersistenceManager;
 use Neos\Neos\Controller\CreateContentContextTrait;
-use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
-use Neos\Neos\Ui\Domain\Model\FeedbackCollection;
-use Sitegeist\LostInTranslation\Domain\Comparison\Result;
-use Sitegeist\LostInTranslation\Infrastructure\Comparison\CollectionComparator;
+use Sitegeist\LostInTranslation\Domain\CollectionComparison\Comparator;
 
 class NodeController extends ActionController
 {
@@ -37,9 +34,9 @@ class NodeController extends ActionController
             $this->redirect('preview', 'Frontend\Node', 'Neos.Neos', ['node' => $document]);
         }
 
-        $comparisonResult = CollectionComparator::compareCollectionNode($collection, $referenceCollectionNode);
+        $comparisonResult = Comparator::compareCollectionNode($collection, $referenceCollectionNode);
         foreach ($comparisonResult->getMissing() as $missingNodeDifference) {
-            $adoptedNode = $collection->getContext()->adoptNode($missingNodeDifference->getNode());
+            $adoptedNode = $collection->getContext()->adoptNode($missingNodeDifference->getNode(), true);
             if ($missingNodeDifference->getPreviousIdentifier()) {
                 $previousNode = $collection->getContext()->getNodeByIdentifier($missingNodeDifference->getPreviousIdentifier());
                 if ($previousNode && $previousNode->getParent() === $adoptedNode->getParent()) {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Sitegeist\LostInTranslation\Domain\Comparison;
+namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
 
 use Neos\ContentRepository\Domain\Model\Node;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
@@ -11,7 +11,7 @@ use Neos\Flow\Annotations as Flow;
 /**
  * @Flow\Proxy(false)
  */
-final class NodeInformation
+final class NodeReference
 {
     protected NodeInterface $node;
     protected ?string $previousIdentifier;

@@ -1,9 +1,24 @@
 include: **/*.fusion
 
-prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fusion:Component) {
-    documentNode = ${documentNode}
-    collectionNode = ${node}
+prototype(Sitegeist.LostInTranslation:CollectionComparisonProcessor) < prototype(Neos.Fusion:Component) {
     referenceDimensions = null
+    renderer = Neos.Fusion:Join {
+        info = Sitegeist.LostInTranslation:CollectionComparison {
+            referenceDimensions = null
+            documentNode = ${documentNode}
+            collectionNode = ${node}
+            referenceDimensions = ${props.referenceDimensions}
+        }
+        value = ${value}
+    }
+}
+
+prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fusion:Component) {
+    nodePath = null
+    referenceDimensions = null
+
+    documentNode = ${documentNode}
+    collectionNode = ${q(this.documentNode).children(this.nodePath).get(0)}
 
     renderer = Neos.Fusion:Component {
         status = ${Sitegeist.LostInTranslation.compareCollectionWithDimension(props.collectionNode, props.referenceDimensions)}

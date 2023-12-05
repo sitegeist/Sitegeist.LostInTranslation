@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sitegeist\LostInTranslation\Domain\Comparison;
+namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
 
 use Neos\Flow\Annotations as Flow;
 
@@ -11,12 +11,12 @@ use Neos\Flow\Annotations as Flow;
 final class Result
 {
     /**
-     * @var NodeInformation[]
+     * @var NodeReference[]
      */
     public array $missing;
 
     /**
-     * @var NodeInformation[]
+     * @var NodeReference[]
      */
     public array $outdated;
 
@@ -30,12 +30,12 @@ final class Result
         return new static([], []);
     }
 
-    public function withMissingNodes(NodeInformation ...$missingNodes): static
+    public function withMissingNodes(NodeReference ...$missingNodes): static
     {
         return new static($missingNodes, $this->outdated);
     }
 
-    public function withOutdatedNodes(NodeInformation ...$outdatedNodes): static
+    public function withOutdatedNodes(NodeReference ...$outdatedNodes): static
     {
         return new static($this->missing, $outdatedNodes);
     }
@@ -46,7 +46,7 @@ final class Result
     }
 
     /**
-     * @return NodeInformation[]
+     * @return NodeReference[]
      */
     public function getMissing(): array
     {
@@ -54,7 +54,7 @@ final class Result
     }
 
     /**
-     * @return NodeInformation[]
+     * @return NodeReference[]
      */
     public function getOutdated(): array
     {
