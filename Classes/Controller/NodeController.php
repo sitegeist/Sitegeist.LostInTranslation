@@ -20,6 +20,12 @@ class NodeController extends ActionController
      */
     protected $persistenceManager;
 
+    /**
+     * @Flow\Inject
+     * @var Comparator
+     */
+    protected $comparator;
+
     public function addMissingTranslationsAction(NodeInterface $document, NodeInterface $collection, string $referenceDimensions): void
     {
         $referenceDimensionsArray = json_decode($referenceDimensions, true);
@@ -34,7 +40,7 @@ class NodeController extends ActionController
             $this->redirect('preview', 'Frontend\Node', 'Neos.Neos', ['node' => $document]);
         }
 
-        $comparisonResult = Comparator::compareCollectionNode($collection, $referenceCollectionNode);
+        $comparisonResult = $this->comparator->compareCollectionNode($collection, $referenceCollectionNode);
         foreach ($comparisonResult->getMissing() as $missingNodeDifference) {
             $adoptedNode = $collection->getContext()->adoptNode($missingNodeDifference->getNode(), true);
             if ($missingNodeDifference->getPreviousIdentifier()) {

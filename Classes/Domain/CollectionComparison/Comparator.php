@@ -3,23 +3,40 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
 
+use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
-use Sitegeist\LostInTranslation\Domain\CollectionComparison\NodeReference;
-use Sitegeist\LostInTranslation\Domain\CollectionComparison\Result;
+use Neos\Neos\Domain\Service\ContentContextFactory;
 
 class Comparator
 {
-    public static function compareCollectionNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
+    /**
+     * @var ContentContextFactory
+     * @Flow\Inject
+     */
+    protected $contextFactory;
+
+    public function compareCollectionNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
     {
+        $result = Result::createEmpty();
+
         $reduceToArrayWithIdentifier = function (array $carry, NodeInterface $item) {
             $carry[$item->getIdentifier()] = $item;
             return $carry;
         };
 
+        // ensure deleted but not yet published nodes are found aswell so we will not try to translate those
+        $currentContextProperties = $currentNode->getContext()->getProperties();
+        $currentContextProperties['removedContentShown'] = true;
+        $currentContextIncludingRemovedItems = $this->contextFactory->create($currentContextProperties);
+        $currentNodeInContextShowingRemovedItems = $currentContextIncludingRemovedItems->getNodeByIdentifier($currentNode->getIdentifier());
+        if (is_null($currentNodeInContextShowingRemovedItems)) {
+            return $result;
+        }
+
         /**
          * @var NodeInterface[] $currentCollectionChildren
          */
-        $currentCollectionChildren = array_reduce($currentNode->getChildNodes(), $reduceToArrayWithIdentifier, []);
+        $currentCollectionChildren = array_reduce($currentNodeInContextShowingRemovedItems->getChildNodes(), $reduceToArrayWithIdentifier, []);
         $currentCollectionChildrenIdentifiers = array_keys($currentCollectionChildren);
 
         /**
@@ -28,7 +45,6 @@ class Comparator
         $referenceCollectionChildren = array_reduce($referenceNode->getChildNodes(), $reduceToArrayWithIdentifier, []);
         $referenceCollectionChildrenIdentifiers =  array_keys($referenceCollectionChildren);
 
-        $result = Result::createEmpty();
         /**
          * @var NodeReference[] $result
          */

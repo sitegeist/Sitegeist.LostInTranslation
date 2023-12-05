@@ -22,6 +22,12 @@ class TranslationHelper implements ProtectedContextAwareInterface
     protected $translationService;
 
     /**
+     * @Flow\Inject
+     * @var Comparator
+     */
+    protected $comparator;
+
+    /**
      * @param  string  $text  A string to be translated
      * @param  string  $targetLanguage  The target language that should be translated to
      * @param  string|null  $sourceLanguage  Optional: the source language of the texts
@@ -55,7 +61,7 @@ class TranslationHelper implements ProtectedContextAwareInterface
         if ($referenceCollectionNode === null) {
             return Result::createEmpty();
         }
-        return Comparator::compareCollectionNode($currentCollectionNode, $referenceCollectionNode);
+        return $this->comparator->compareCollectionNode($currentCollectionNode, $referenceCollectionNode);
     }
 
     /**

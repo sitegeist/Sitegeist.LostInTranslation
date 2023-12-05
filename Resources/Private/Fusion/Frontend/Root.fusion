@@ -2,6 +2,7 @@ include: **/*.fusion
 
 prototype(Sitegeist.LostInTranslation:CollectionComparisonProcessor) < prototype(Neos.Fusion:Component) {
     referenceDimensions = null
+
     renderer = Neos.Fusion:Join {
         info = Sitegeist.LostInTranslation:CollectionComparison {
             referenceDimensions = null
@@ -26,24 +27,44 @@ prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fus
         collectionNode = ${props.collectionNode}
         referenceDimensions = ${props.referenceDimensions}
 
-        renderer = afx`
-            <div @if={props.status.hasDifferences}>
-                <Neos.Fusion:Fragment @if={props.status.missing}>
-                    Missing Nodes: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
-                </Neos.Fusion:Fragment>
-                <Neos.Fusion:Fragment @if={props.status.outdated}>
-                    Outdated: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
-                </Neos.Fusion:Fragment>
+        scriptHref = Neos.Fusion:ResourceUri {
+            path = 'resource://Sitegeist.LostInTranslation/Public/Scripts/beinfo.js'
+        }
 
-                <Neos.Fusion:Link.Action
-                    href.action="addMissingTranslations"
-                    href.package="Sitegeist.LostInTranslation"
-                    href.controller="Node"
-                    href.@process.addParameter={value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceDimensions=' + Json.stringify(props.referenceDimensions)}
+        icon = ${File.readFile('resource://Sitegeist.LostInTranslation/Public/Icons/language.svg')}
+
+        addMissingHref = Neos.Fusion:UriBuilder {
+            action="addMissingTranslations"
+            package="Sitegeist.LostInTranslation"
+            controller="Node"
+            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceDimensions=' + Json.stringify(props.referenceDimensions)}
+        }
+
+        updateOutdatedHref = Neos.Fusion:UriBuilder {
+            action="updateOutdatedTranslations"
+            package="Sitegeist.LostInTranslation"
+            controller="Node"
+            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceDimensions=' + Json.stringify(props.referenceDimensions)}
+        }
+
+        renderer = afx`
+            <Neos.Fusion:Fragment @if={props.status.missing || props.status.outdated}>
+                <script src={props.scriptHref} ></script>
+                <lost-in-translation-info
+                    icon={props.icon}
+                    addMissingHref={props.status.missing ? props.addMissingHref : false}
+                    updateOutdatedHref={props.status.outdated ? props.updateOutdatedHref : false}
                 >
-                    add  missing
-                </Neos.Fusion:Link.Action>
-            </div>
+                    <Neos.Fusion:Fragment @path="attributes.text">
+                        <Neos.Fusion:Fragment @if={props.status.missing}>
+                            Missing Nodes: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
+                        </Neos.Fusion:Fragment>
+                        <Neos.Fusion:Fragment @if={props.status.outdated}>
+                            Outdated: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
+                        </Neos.Fusion:Fragment>
+                    </Neos.Fusion:Fragment>
+                </lost-in-translation-info>
+            </Neos.Fusion:Fragment>
         `
     }
 }
