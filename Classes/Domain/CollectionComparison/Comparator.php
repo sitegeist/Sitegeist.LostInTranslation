@@ -46,7 +46,7 @@ class Comparator
         $referenceCollectionChildrenIdentifiers =  array_keys($referenceCollectionChildren);
 
         /**
-         * @var NodeReference[] $result
+         * @var MissingNodeReference[] $result
          */
         $missing = [];
         foreach ($referenceCollectionChildren as $identifier => $referenceCollectionChild) {
@@ -56,7 +56,7 @@ class Comparator
                 $previousIdentifier = ($position !== false && array_key_exists($position - 1, $referenceCollectionChildrenIdentifiers)) ? $referenceCollectionChildrenIdentifiers[$position - 1] : null;
                 $nextIdentifier = ($position !== false && array_key_exists($position + 1, $referenceCollectionChildrenIdentifiers)) ? $referenceCollectionChildrenIdentifiers[$position + 1] : null;
 
-                $missing[] = new NodeReference(
+                $missing[] = new MissingNodeReference(
                     $referenceCollectionChild,
                     $previousIdentifier,
                     $nextIdentifier
@@ -68,21 +68,16 @@ class Comparator
         }
 
         /**
-         * @var NodeReference[] $result
+         * @var MissingNodeReference[] $result
          */
         $outdated = [];
         foreach ($currentCollectionChildren as $identifier => $currentCollectionCollectionChild) {
             if (array_key_exists($identifier, $referenceCollectionChildren)
                 && $referenceCollectionChildren[$identifier]->getNodeData()->getLastModificationDateTime() > $currentCollectionCollectionChild->getNodeData()->getLastModificationDateTime()
             ) {
-                $position = array_search($identifier, $currentCollectionChildrenIdentifiers);
-                $previousIdentifier = ($position !== false && array_key_exists($position - 1, $currentCollectionChildrenIdentifiers)) ? $currentCollectionChildrenIdentifiers[$position - 1] : null;
-                $nextIdentifier = ($position !== false && array_key_exists($position + 1, $currentCollectionChildrenIdentifiers)) ? $currentCollectionChildrenIdentifiers[$position + 1] : null;
-
-                $outdated[] = new NodeReference(
+                $outdated[] = new OutdatedNodeReference(
                     $currentCollectionCollectionChild,
-                    $previousIdentifier,
-                    $nextIdentifier
+                    $referenceCollectionChildren[$identifier]
                 );
             }
         }

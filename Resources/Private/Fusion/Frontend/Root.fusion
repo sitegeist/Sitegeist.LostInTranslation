@@ -1,14 +1,14 @@
 include: **/*.fusion
 
 prototype(Sitegeist.LostInTranslation:CollectionComparisonProcessor) < prototype(Neos.Fusion:Component) {
-    referenceDimensions = null
+    referenceLanguage = null
 
     renderer = Neos.Fusion:Join {
         info = Sitegeist.LostInTranslation:CollectionComparison {
             referenceDimensions = null
             documentNode = ${documentNode}
             collectionNode = ${node}
-            referenceDimensions = ${props.referenceDimensions}
+            referenceLanguage = ${props.referenceLanguage}
         }
         value = ${value}
     }
@@ -16,16 +16,16 @@ prototype(Sitegeist.LostInTranslation:CollectionComparisonProcessor) < prototype
 
 prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fusion:Component) {
     nodePath = null
-    referenceDimensions = null
+    referenceLanguage = null
 
     documentNode = ${documentNode}
     collectionNode = ${q(this.documentNode).children(this.nodePath).get(0)}
 
     renderer = Neos.Fusion:Component {
-        status = ${Sitegeist.LostInTranslation.compareCollectionWithDimension(props.collectionNode, props.referenceDimensions)}
+        status = ${Sitegeist.LostInTranslation.compareCollectionWithDimension(props.collectionNode, props.referenceLanguage)}
         documentNode = ${props.documentNode}
         collectionNode = ${props.collectionNode}
-        referenceDimensions = ${props.referenceDimensions}
+        referenceLanguage = ${props.referenceLanguage}
 
         scriptHref = Neos.Fusion:ResourceUri {
             path = 'resource://Sitegeist.LostInTranslation/Public/Scripts/beinfo.js'
@@ -37,14 +37,14 @@ prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fus
             action="addMissingTranslations"
             package="Sitegeist.LostInTranslation"
             controller="Node"
-            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceDimensions=' + Json.stringify(props.referenceDimensions)}
+            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceLanguage=' + String.rawUrlEncode(props.referenceLanguage)}
         }
 
         updateOutdatedHref = Neos.Fusion:UriBuilder {
             action="updateOutdatedTranslations"
             package="Sitegeist.LostInTranslation"
             controller="Node"
-            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceDimensions=' + Json.stringify(props.referenceDimensions)}
+            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceLanguage=' + String.rawUrlEncode(props.referenceLanguage)}
         }
 
         renderer = afx`
@@ -56,12 +56,12 @@ prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fus
                     updateOutdatedHref={props.status.outdated ? props.updateOutdatedHref : false}
                 >
                     <Neos.Fusion:Fragment @path="attributes.text">
-                        <Neos.Fusion:Fragment @if={props.status.missing}>
-                            Missing Nodes: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
-                        </Neos.Fusion:Fragment>
-                        <Neos.Fusion:Fragment @if={props.status.outdated}>
-                            Outdated: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
-                        </Neos.Fusion:Fragment>
+                        <p @if={props.status.missing}>
+                            Missing Contents: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
+                        </p>
+                        <p @if={props.status.outdated}>
+                            Outdated Contents: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
+                        </p>
                     </Neos.Fusion:Fragment>
                 </lost-in-translation-info>
             </Neos.Fusion:Fragment>

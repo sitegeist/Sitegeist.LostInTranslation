@@ -11,12 +11,12 @@ use Neos\Flow\Annotations as Flow;
 final class Result
 {
     /**
-     * @var NodeReference[]
+     * @var MissingNodeReference[]
      */
     public array $missing;
 
     /**
-     * @var NodeReference[]
+     * @var OutdatedNodeReference[]
      */
     public array $outdated;
 
@@ -30,12 +30,12 @@ final class Result
         return new static([], []);
     }
 
-    public function withMissingNodes(NodeReference ...$missingNodes): static
+    public function withMissingNodes(MissingNodeReference ...$missingNodes): static
     {
         return new static($missingNodes, $this->outdated);
     }
 
-    public function withOutdatedNodes(NodeReference ...$outdatedNodes): static
+    public function withOutdatedNodes(OutdatedNodeReference ...$outdatedNodes): static
     {
         return new static($this->missing, $outdatedNodes);
     }
@@ -46,7 +46,7 @@ final class Result
     }
 
     /**
-     * @return NodeReference[]
+     * @return MissingNodeReference[]
      */
     public function getMissing(): array
     {
@@ -54,7 +54,7 @@ final class Result
     }
 
     /**
-     * @return NodeReference[]
+     * @return OutdatedNodeReference[]
      */
     public function getOutdated(): array
     {

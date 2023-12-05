@@ -16,6 +16,12 @@ class TranslationHelper implements ProtectedContextAwareInterface
     use CreateContentContextTrait;
 
     /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.languageDimensionName")
+     * @var string
+     */
+     protected $languageDimensionName;
+
+     /**
      * @Flow\Inject
      * @var DeepLTranslationService
      */
@@ -51,12 +57,12 @@ class TranslationHelper implements ProtectedContextAwareInterface
 
     /**
      * @param NodeInterface $currentCollectionNode
-     * @param array $referenceDimensions
+     * @param string $referenceLanguage
      * @return array
      */
-    public function compareCollectionWithDimension(NodeInterface $currentCollectionNode, array $referenceDimensions): Result
+    public function compareCollectionWithDimension(NodeInterface $currentCollectionNode, string $referenceLanguage): Result
     {
-        $contentContext = $this->createContentContext($currentCollectionNode->getContext()->getWorkspaceName(), $referenceDimensions);
+        $contentContext = $this->createContentContext($currentCollectionNode->getContext()->getWorkspaceName(), [$this->languageDimensionName => [$referenceLanguage]]);
         $referenceCollectionNode = $contentContext->getNodeByIdentifier($currentCollectionNode->getIdentifier());
         if ($referenceCollectionNode === null) {
             return Result::createEmpty();

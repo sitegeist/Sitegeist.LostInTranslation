@@ -3,7 +3,7 @@ privilegeTargets:
     'Sitegeist.LostInTranslation:AccessBackendModule':
       matcher: 'method(Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController->(index)Action())'
     'Sitegeist.LostInTranslation:AccessNodeController':
-      matcher: 'method(Sitegeist\LostInTranslation\Controller\NodeController->(addMissingTranslations)Action())'
+      matcher: 'method(Sitegeist\LostInTranslation\Controller\NodeController->(addMissingTranslations|updateOutdatedTranslations)Action())'
   'Neos\Neos\Security\Authorization\Privilege\ModulePrivilege':
     'Sitegeist.LostInTranslation:AccessBackendModule':
       matcher: 'management/sitegeist_lostintranslation'

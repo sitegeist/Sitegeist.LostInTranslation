@@ -11,7 +11,7 @@ use Neos\Flow\Annotations as Flow;
 /**
  * @Flow\Proxy(false)
  */
-final class NodeReference
+final class MissingNodeReference
 {
     protected NodeInterface $node;
     protected ?string $previousIdentifier;

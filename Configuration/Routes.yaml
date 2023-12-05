@@ -8,3 +8,14 @@
     '@action': 'addMissingTranslations'
     '@format': 'html'
   httpMethods: ['GET','POST']
+
+-
+  name:  'LostInTranslation Node API'
+  uriPattern: 'lostintranslation/nodes/updateoutdated'
+  defaults:
+    '@package': 'Sitegeist.LostInTranslation'
+    '@subpackage': ''
+    '@controller': 'Node'
+    '@action': 'updateOutdatedTranslations'
+    '@format': 'html'
+  httpMethods: ['GET','POST']

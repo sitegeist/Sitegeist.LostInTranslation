@@ -14,14 +14,14 @@ class BeInfo extends HTMLElement {
 		// Insert icon
 		let imgUrl;
 		if (this.hasAttribute("icon")) {
-			const icon = document.createElement("span");
+			const icon = document.createElement("div");
 			icon.innerHTML = this.getAttribute("icon");
 			icon.setAttribute("class", "icon");
 			wrapper.appendChild(icon);
 		}
 
 		// Insert Text
-		const info = document.createElement("span");
+		const info = document.createElement("div");
 		info.setAttribute("class", "info");
 		if (this.hasAttribute("text")) {
 		 info.innerHTML = this.getAttribute("text");
@@ -73,12 +73,19 @@ class BeInfo extends HTMLElement {
 			.info {
 				padding-left: 80px;
 			}
+			.info > :first-child {
+				margin-top: 0;
+			}
+			.info > :last-child {
+				margin-bottom: 0;
+			}
 
 			.buttons {
 				text-align: right;
 			}
 
 			.button {
+				margin-left: 20px;
 				display: inline-block;
 				background: #00a338;
 				text-decoration: none;
