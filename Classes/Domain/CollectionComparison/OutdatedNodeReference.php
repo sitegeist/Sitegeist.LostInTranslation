@@ -16,7 +16,7 @@ final class OutdatedNodeReference
     protected NodeInterface $node;
     protected NodeInterface $referenceNode;
 
-    public function __construct (NodeInterface $node, NodeInterface $referenceNode)
+    public function __construct(NodeInterface $node, NodeInterface $referenceNode)
     {
         $this->node = $node;
         $this->referenceNode = $referenceNode;

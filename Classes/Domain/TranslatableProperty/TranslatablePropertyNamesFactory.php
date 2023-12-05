@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
@@ -14,6 +15,9 @@ class TranslatablePropertyNamesFactory
      */
     protected $translateInlineEditables;
 
+    /**
+     * @var array<string, TranslatablePropertyNames>
+     */
     protected $firstLevelCache = [];
 
     public function createForNodeType(NodeType $nodeType): TranslatablePropertyNames
@@ -40,5 +44,4 @@ class TranslatablePropertyNamesFactory
         $this->firstLevelCache[$nodeType->getName()] = new TranslatablePropertyNames(...$translateProperties);
         return $this->firstLevelCache[$nodeType->getName()];
     }
-
 }

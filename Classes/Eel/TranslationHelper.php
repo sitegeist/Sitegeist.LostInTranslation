@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Eel;
@@ -34,21 +35,21 @@ class TranslationHelper implements ProtectedContextAwareInterface
     protected $comparator;
 
     /**
-     * @param  string  $text  A string to be translated
-     * @param  string  $targetLanguage  The target language that should be translated to
-     * @param  string|null  $sourceLanguage  Optional: the source language of the texts
-     * @return string   The translated text
+     * @param string $text A string to be translated
+     * @param string $targetLanguage The target language that should be translated to
+     * @param string|null $sourceLanguage Optional: the source language of the texts
+     * @return string The translated text
      */
     public function translate(string $text, string $targetLanguage, ?string $sourceLanguage = null): string
     {
-        return $this->translationService->translate([$text], $targetLanguage, $sourceLanguage)[0];
+        return $this->translationService->translate(['text' => $text], $targetLanguage, $sourceLanguage)['text'];
     }
 
     /**
-     * @param  array  $texts  An array of strings to be translated
-     * @param  string  $targetLanguage  The target language that should be translated to
-     * @param  string|null  $sourceLanguage  Optional: the source language of the texts
-     * @return array    An array with the translated texts and with the same indices from the input array
+     * @param array<string, string> $texts An array of strings to be translated
+     * @param string $targetLanguage The target language that should be translated to
+     * @param string|null $sourceLanguage Optional: the source language of the texts
+     * @return array<string, string> An array with the translated texts and with the same indices from the input array
      */
     public function translateMultiple(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
@@ -58,7 +59,7 @@ class TranslationHelper implements ProtectedContextAwareInterface
     /**
      * @param NodeInterface $currentCollectionNode
      * @param string $referenceLanguage
-     * @return array
+     * @return Result
      */
     public function compareCollectionWithDimension(NodeInterface $currentCollectionNode, string $referenceLanguage): Result
     {

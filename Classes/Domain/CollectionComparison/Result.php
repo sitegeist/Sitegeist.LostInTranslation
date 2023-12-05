@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
@@ -20,7 +21,12 @@ final class Result
      */
     public array $outdated;
 
-    private function __construct(array $missing, array $outdated) {
+    /**
+     * @param array<int|string,MissingNodeReference> $missing
+     * @param array<int|string,OutdatedNodeReference> $outdated
+     */
+    private function __construct(array $missing, array $outdated)
+    {
         $this->missing = $missing;
         $this->outdated = $outdated;
     }

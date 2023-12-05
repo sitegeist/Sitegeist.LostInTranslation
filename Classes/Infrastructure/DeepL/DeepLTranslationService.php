@@ -27,7 +27,7 @@ use Sitegeist\LostInTranslation\Package;
 class DeepLTranslationService implements TranslationServiceInterface
 {
     /**
-     * @var array
+     * @var mixed[]
      * @Flow\InjectConfiguration(path="DeepLApi")
      */
     protected $settings;
@@ -65,7 +65,7 @@ class DeepLTranslationService implements TranslationServiceInterface
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
-     * @return array
+     * @return array<string,string>
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
@@ -105,6 +105,9 @@ class DeepLTranslationService implements TranslationServiceInterface
             // All ignored terms will be wrapped in a <ignored> tag
             // which will be ignored by DeepL
             if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
+                /**
+                 * @var string $part
+                 */
                 $part = preg_replace('/(' . implode('|', $this->settings['ignoredTerms']) . ')/i', '<ignore>$1</ignore>', $part);
             }
 
@@ -124,6 +127,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
         $attempt = 0;
         $maximumAttempts = $this->settings['numberOfAttempts'];
+        $apiResponse = null;
         do {
             $attempt++;
             try {
@@ -139,7 +143,9 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
         } while ($attempt <= $maximumAttempts);
 
-        if ($apiResponse->getStatusCode() == 200) {
+        if (is_null($apiResponse)) {
+            return $texts;
+        } elseif ($apiResponse->getStatusCode() == 200) {
             $returnedData = json_decode($apiResponse->getBody()->getContents(), true);
             if (is_null($returnedData)) {
                 return array_replace($texts, $cachedEntries);

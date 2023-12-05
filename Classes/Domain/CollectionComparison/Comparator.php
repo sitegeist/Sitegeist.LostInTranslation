@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
@@ -34,23 +35,21 @@ class Comparator
         }
 
         /**
-         * @var NodeInterface[] $currentCollectionChildren
+         * @var array<string,NodeInterface> $currentCollectionChildren
          */
         $currentCollectionChildren = array_reduce($currentNodeInContextShowingRemovedItems->getChildNodes(), $reduceToArrayWithIdentifier, []);
-        $currentCollectionChildrenIdentifiers = array_keys($currentCollectionChildren);
 
         /**
-         * @var NodeInterface[] $referenceCollectionChildren
+         * @var array<string,NodeInterface>  $referenceCollectionChildren
          */
         $referenceCollectionChildren = array_reduce($referenceNode->getChildNodes(), $reduceToArrayWithIdentifier, []);
         $referenceCollectionChildrenIdentifiers =  array_keys($referenceCollectionChildren);
 
         /**
-         * @var MissingNodeReference[] $result
+         * @var MissingNodeReference[] $missing
          */
         $missing = [];
         foreach ($referenceCollectionChildren as $identifier => $referenceCollectionChild) {
-
             if (!array_key_exists($identifier, $currentCollectionChildren)) {
                 $position = array_search($identifier, $referenceCollectionChildrenIdentifiers);
                 $previousIdentifier = ($position !== false && array_key_exists($position - 1, $referenceCollectionChildrenIdentifiers)) ? $referenceCollectionChildrenIdentifiers[$position - 1] : null;
@@ -68,11 +67,12 @@ class Comparator
         }
 
         /**
-         * @var MissingNodeReference[] $result
+         * @var OutdatedNodeReference[] $outdated
          */
         $outdated = [];
         foreach ($currentCollectionChildren as $identifier => $currentCollectionCollectionChild) {
-            if (array_key_exists($identifier, $referenceCollectionChildren)
+            if (
+                array_key_exists($identifier, $referenceCollectionChildren)
                 && $referenceCollectionChildren[$identifier]->getNodeData()->getLastModificationDateTime() > $currentCollectionCollectionChild->getNodeData()->getLastModificationDateTime()
             ) {
                 $outdated[] = new OutdatedNodeReference(

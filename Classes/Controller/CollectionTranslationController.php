@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Controller;
@@ -52,6 +53,7 @@ class CollectionTranslationController extends ActionController
         $comparisonResult = $this->getComparisonResult($collection, [$this->languageDimensionName => [$referenceLanguage]]);
         if (is_null($comparisonResult)) {
             $this->redirect('preview', 'Frontend\Node', 'Neos.Neos', ['node' => $document]);
+            return;
         }
 
         foreach ($comparisonResult->getMissing() as $missingNodeDifference) {
@@ -80,6 +82,7 @@ class CollectionTranslationController extends ActionController
         $comparisonResult = $this->getComparisonResult($collection, [$this->languageDimensionName => [$referenceLanguage]]);
         if (is_null($comparisonResult)) {
             $this->redirect('preview', 'Frontend\Node', 'Neos.Neos', ['node' => $document]);
+            return;
         }
 
         foreach ($comparisonResult->getOutdated() as $outdatedNodeDifference) {
@@ -96,11 +99,10 @@ class CollectionTranslationController extends ActionController
             }
             if (count($propertiesToTranslate) > 0) {
                 $translatedProperties = $this->translationService->translate($propertiesToTranslate, $node->getContext()->getTargetDimensions()[$this->languageDimensionName], $referenceNode->getContext()->getTargetDimensions()[$this->languageDimensionName]);
-            }
-
-            foreach ($translatedProperties as $propertyName => $propertyValue) {
-                if ($node->getProperty($propertyName) != $propertyValue) {
-                    $node->setProperty($propertyName, $propertyValue);
+                foreach ($translatedProperties as $propertyName => $propertyValue) {
+                    if ($node->getProperty($propertyName) != $propertyValue) {
+                        $node->setProperty($propertyName, $propertyValue);
+                    }
                 }
             }
         }
@@ -111,7 +113,7 @@ class CollectionTranslationController extends ActionController
 
     /**
      * @param NodeInterface $collection
-     * @param array $referenceDimensions
+     * @param array<string,array<int,string>> $referenceDimensions
      * @return Result
      * @throws \Neos\Flow\Mvc\Exception\StopActionException
      */

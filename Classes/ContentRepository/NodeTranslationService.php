@@ -63,7 +63,7 @@ class NodeTranslationService
 
     /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
-     * @var array
+     * @var array<string,array{'default': string, 'defaultPreset': string, 'presets': array<string,mixed> }>
      */
     protected $contentDimensionConfiguration;
 
@@ -105,10 +105,10 @@ class NodeTranslationService
     /**
      * @param NodeInterface $node
      * @param Context $context
-     * @param $recursive
+     * @param bool $recursive
      * @return void
      */
-    public function afterAdoptNode(NodeInterface $node, Context $context, $recursive): void
+    public function afterAdoptNode(NodeInterface $node, Context $context, bool $recursive): void
     {
         if (!$this->enabled) {
             return;
@@ -126,8 +126,10 @@ class NodeTranslationService
             return;
         }
 
-        $adoptedNode = $context->getNodeByIdentifier((string)$node->getNodeAggregateIdentifier());
-        $this->translateNode($node, $adoptedNode, $context);
+        $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
+        if ($adoptedNode instanceof NodeInterface) {
+            $this->translateNode($node, $adoptedNode, $context);
+        }
     }
 
     /**
@@ -187,7 +189,7 @@ class NodeTranslationService
             return;
         }
 
-        $properties = (array)$sourceNode->getProperties(true);
+        $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
             if (empty($propertyValue) || !is_string($propertyValue)) {

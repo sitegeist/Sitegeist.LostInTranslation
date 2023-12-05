@@ -17,7 +17,7 @@ final class MissingNodeReference
     protected ?string $previousIdentifier;
     protected ?string $nextIdentifier;
 
-    public function __construct (NodeInterface $node, ?string $previousIdentifier, ?string $nextIdentifier)
+    public function __construct(NodeInterface $node, ?string $previousIdentifier, ?string $nextIdentifier)
     {
         $this->node = $node;
         $this->previousIdentifier = $previousIdentifier;
