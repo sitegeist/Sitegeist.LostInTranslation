@@ -10,10 +10,10 @@ use Neos\Flow\Persistence\Doctrine\PersistenceManager;
 use Neos\Neos\Controller\CreateContentContextTrait;
 use Sitegeist\LostInTranslation\Domain\CollectionComparison\Comparator;
 use Sitegeist\LostInTranslation\Domain\CollectionComparison\Result;
-use Sitegeist\LostInTranslation\Domain\TranslatablePropertiesFactory;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
-class NodeController extends ActionController
+class CollectionTranslationController extends ActionController
 {
     use CreateContentContextTrait;
 
@@ -37,7 +37,7 @@ class NodeController extends ActionController
 
     /**
      * @Flow\Inject
-     * @var TranslatablePropertiesFactory
+     * @var TranslatablePropertyNamesFactory
      */
     protected $translatablePropertiesFactory;
 

@@ -1,8 +1,9 @@
 <?php
+declare(strict_types=1);
 
-namespace Sitegeist\LostInTranslation\Domain;
+namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
-class TranslatableProperty
+class TranslatablePropertyName
 {
     protected $name;
 

@@ -25,7 +25,7 @@ Neos:
         providers:
           Neos.Neos:Backend:
             requestPatterns:
-              'Sitegeist.LostInTranslation:Controllers':
+              'Sitegeist.LostInTranslation:Controllers.CollectionTranslation':
                 pattern: ControllerObjectName
                 patternOptions:
-                  controllerObjectNamePattern: 'Sitegeist\LostInTranslation\Controller\NodeController'
+                  controllerObjectNamePattern: 'Sitegeist\LostInTranslation\Controller\CollectionTranslationController'

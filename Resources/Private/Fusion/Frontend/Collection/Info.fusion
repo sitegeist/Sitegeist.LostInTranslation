@@ -1,0 +1,13 @@
+prototype(Sitegeist.LostInTranslation:Collection.Info) < prototype(Neos.Fusion:Component) {
+    @if.inBackend = ${node && node.context.inBackend}
+    referenceLanguage = null
+    renderer = Neos.Fusion:Join {
+        info = Sitegeist.LostInTranslation:Collection.InfoRenderer {
+            referenceDimensions = null
+            documentNode = ${documentNode}
+            collectionNode = ${node}
+            referenceLanguage = ${props.referenceLanguage}
+        }
+        value = ${value}
+    }
+}

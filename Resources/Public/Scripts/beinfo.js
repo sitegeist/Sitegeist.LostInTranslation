@@ -87,13 +87,17 @@ class BeInfo extends HTMLElement {
 			.button {
 				margin-left: 20px;
 				display: inline-block;
-				background: #00a338;
+				background: rgb(50, 50, 50);
 				text-decoration: none;
 				color: white;
 				line-height: 40px;
 				padding: 0 16px;
 				min-width: 40px;
 				height: 40px;
+			}
+
+			.button:hover {
+				background: rgb(0, 173, 238);
 			}
 		`;
 

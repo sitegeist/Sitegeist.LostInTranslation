@@ -1,21 +1,21 @@
 -
   name:  'LostInTranslation Node API'
-  uriPattern: 'lostintranslation/nodes/addmissing'
+  uriPattern: 'lostintranslation/collectiontranslation/addmissing'
   defaults:
     '@package': 'Sitegeist.LostInTranslation'
     '@subpackage': ''
-    '@controller': 'Node'
+    '@controller': 'CollectionTranslation'
     '@action': 'addMissingTranslations'
     '@format': 'html'
   httpMethods: ['GET','POST']
 
 -
   name:  'LostInTranslation Node API'
-  uriPattern: 'lostintranslation/nodes/updateoutdated'
+  uriPattern: 'lostintranslation/collectiontranslation/updateoutdated'
   defaults:
     '@package': 'Sitegeist.LostInTranslation'
     '@subpackage': ''
-    '@controller': 'Node'
+    '@controller': 'CollectionTranslation'
     '@action': 'updateOutdatedTranslations'
     '@format': 'html'
   httpMethods: ['GET','POST']

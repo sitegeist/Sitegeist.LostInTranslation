@@ -1,20 +1,4 @@
-include: **/*.fusion
-
-prototype(Sitegeist.LostInTranslation:CollectionComparisonProcessor) < prototype(Neos.Fusion:Component) {
-    referenceLanguage = null
-
-    renderer = Neos.Fusion:Join {
-        info = Sitegeist.LostInTranslation:CollectionComparison {
-            referenceDimensions = null
-            documentNode = ${documentNode}
-            collectionNode = ${node}
-            referenceLanguage = ${props.referenceLanguage}
-        }
-        value = ${value}
-    }
-}
-
-prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fusion:Component) {
+prototype(Sitegeist.LostInTranslation:Collection.InfoRenderer) < prototype(Neos.Fusion:Component) {
     nodePath = null
     referenceLanguage = null
 
@@ -36,14 +20,14 @@ prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fus
         addMissingHref = Neos.Fusion:UriBuilder {
             action="addMissingTranslations"
             package="Sitegeist.LostInTranslation"
-            controller="Node"
+            controller="CollectionTranslation"
             @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceLanguage=' + String.rawUrlEncode(props.referenceLanguage)}
         }
 
         updateOutdatedHref = Neos.Fusion:UriBuilder {
             action="updateOutdatedTranslations"
             package="Sitegeist.LostInTranslation"
-            controller="Node"
+            controller="CollectionTranslation"
             @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceLanguage=' + String.rawUrlEncode(props.referenceLanguage)}
         }
 
@@ -51,9 +35,9 @@ prototype(Sitegeist.LostInTranslation:CollectionComparison) < prototype(Neos.Fus
             <Neos.Fusion:Fragment @if={props.status.missing || props.status.outdated}>
                 <script src={props.scriptHref} ></script>
                 <lost-in-translation-info
-                    icon={props.icon}
-                    addMissingHref={props.status.missing ? props.addMissingHref : false}
-                    updateOutdatedHref={props.status.outdated ? props.updateOutdatedHref : false}
+                        icon={props.icon}
+                        addMissingHref={props.status.missing ? props.addMissingHref : false}
+                        updateOutdatedHref={props.status.outdated ? props.updateOutdatedHref : false}
                 >
                     <Neos.Fusion:Fragment @path="attributes.text">
                         <p @if={props.status.missing}>

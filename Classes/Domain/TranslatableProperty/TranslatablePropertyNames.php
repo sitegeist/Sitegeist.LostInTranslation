@@ -1,17 +1,18 @@
 <?php
 declare(strict_types=1);
-namespace Sitegeist\LostInTranslation\Domain;
+
+namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
 /**
- * @implements \IteratorAggregate<int, TranslatableProperty>
+ * @implements \IteratorAggregate<int, TranslatablePropertyName>
  */
-class TranslatableProperties implements \IteratorAggregate
+class TranslatablePropertyNames implements \IteratorAggregate
 {
     /**
-     * @var TranslatableProperty[]
+     * @var TranslatablePropertyName[]
      */
     protected $translatableProperties;
-    public function __construct(TranslatableProperty ... $translatableProperties)
+    public function __construct(TranslatablePropertyName ... $translatableProperties)
     {
         $this->translatableProperties = $translatableProperties;
     }
@@ -27,7 +28,7 @@ class TranslatableProperties implements \IteratorAggregate
     }
 
     /**
-     * @return \ArrayIterator<int, TranslatableProperty>
+     * @return \ArrayIterator<int, TranslatablePropertyName>
      */
     public function getIterator(): \Iterator
     {

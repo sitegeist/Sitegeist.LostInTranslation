@@ -1,11 +1,12 @@
 <?php
 declare(strict_types=1);
-namespace Sitegeist\LostInTranslation\Domain;
+
+namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeType;
 
-class TranslatablePropertiesFactory
+class TranslatablePropertyNamesFactory
 {
     /**
      * @var bool
@@ -15,7 +16,7 @@ class TranslatablePropertiesFactory
 
     protected $firstLevelCache = [];
 
-    public function createForNodeType(NodeType $nodeType): TranslatableProperties
+    public function createForNodeType(NodeType $nodeType): TranslatablePropertyNames
     {
         if (array_key_exists($nodeType->getName(), $this->firstLevelCache)) {
             return $this->firstLevelCache[$nodeType->getName()];
@@ -27,16 +28,16 @@ class TranslatablePropertiesFactory
                 continue;
             }
             if ($this->translateInlineEditables && ($propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false)) {
-                $translateProperties[] = new TranslatableProperty($propertyName);
+                $translateProperties[] = new TranslatablePropertyName($propertyName);
                 continue;
             }
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
             if ($propertyDefinition['options']['automaticTranslation'] ?? ($propertyDefinition['options']['translateOnAdoption'] ?? false)) {
-                $translateProperties[] = new TranslatableProperty($propertyName);
+                $translateProperties[] = new TranslatablePropertyName($propertyName);
                 continue;
             }
         }
-        $this->firstLevelCache[$nodeType->getName()] = new TranslatableProperties(...$translateProperties);
+        $this->firstLevelCache[$nodeType->getName()] = new TranslatablePropertyNames(...$translateProperties);
         return $this->firstLevelCache[$nodeType->getName()];
     }
 

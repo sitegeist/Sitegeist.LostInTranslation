@@ -13,7 +13,7 @@ use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
-use Sitegeist\LostInTranslation\Domain\TranslatablePropertiesFactory;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -98,7 +98,7 @@ class NodeTranslationService
 
     /**
      * @Flow\Inject
-     * @var TranslatablePropertiesFactory
+     * @var TranslatablePropertyNamesFactory
      */
     protected $translatablePropertiesFactory;
 
