@@ -28,7 +28,7 @@ class TranslatablePropertyNamesFactory
         $propertyDefinitions = $nodeType->getProperties();
         $translateProperties = [];
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
-            if ($propertyDefinition['type'] !== 'string') {
+            if (array_key_exists('type', $propertyDefinition) && $propertyDefinition['type'] !== 'string') {
                 continue;
             }
             if ($this->translateInlineEditables && ($propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false)) {
