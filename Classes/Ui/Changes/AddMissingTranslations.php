@@ -3,8 +3,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Ui\Changes;
 
-
-use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Info;
+use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Success;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
 
 class AddMissingTranslations extends AbstractCollectionTranslationChange
@@ -36,12 +35,10 @@ class AddMissingTranslations extends AbstractCollectionTranslationChange
 
         $this->persistenceManager->persistAll();
 
-//        $feedback = new ReloadDocument();
-//        $feedback->setNode();
-
-        $info = new Info();
+        $info = new Success();
         $info->setMessage('Missing Nodes were added');
-
         $this->feedbackCollection->add($info);
+        $reload = new ReloadDocument();
+        $this->feedbackCollection->add($reload);
     }
 }

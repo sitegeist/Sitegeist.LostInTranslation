@@ -17,27 +17,16 @@ prototype(Sitegeist.LostInTranslation:Collection.InfoRenderer) < prototype(Neos.
 
         icon = ${File.readFile('resource://Sitegeist.LostInTranslation/Public/Icons/language.svg')}
 
-        addMissingHref = Neos.Fusion:UriBuilder {
-            action="addMissingTranslations"
-            package="Sitegeist.LostInTranslation"
-            controller="CollectionTranslation"
-            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceLanguage=' + String.rawUrlEncode(props.referenceLanguage)}
-        }
-
-        updateOutdatedHref = Neos.Fusion:UriBuilder {
-            action="updateOutdatedTranslations"
-            package="Sitegeist.LostInTranslation"
-            controller="CollectionTranslation"
-            @process.addParameter = ${value + '?document=' + String.rawUrlEncode(props.documentNode.contextPath) + '&collection=' + String.rawUrlEncode(props.collectionNode.contextPath) + '&referenceLanguage=' + String.rawUrlEncode(props.referenceLanguage)}
-        }
-
         renderer = afx`
             <Neos.Fusion:Fragment @if={props.status.missing || props.status.outdated}>
                 <script src={props.scriptHref} ></script>
                 <lost-in-translation-info
+                        collectionNode={props.collectionNode.contextPath}
+                        documentNode={props.documentNode.contextPath}
+                        referenceLanguage={props.referenceLanguage}
+                        showAddMissingButton={props.status.missing ? true : false}
+                        showUpdateOutdatedButton={props.status.outdated ? true : false}
                         icon={props.icon}
-                        addMissingHref={props.status.missing ? props.addMissingHref : false}
-                        updateOutdatedHref={props.status.outdated ? props.updateOutdatedHref : false}
                 >
                     <Neos.Fusion:Fragment @path="attributes.text">
                         <p @if={props.status.missing}>

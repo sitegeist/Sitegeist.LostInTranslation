@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Ui\Changes;
 
+use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Controller\CreateContentContextTrait;
 use Neos\Neos\Ui\Domain\Model\AbstractChange;
@@ -32,11 +33,24 @@ abstract class AbstractCollectionTranslationChange extends AbstractChange
      */
     protected $feedbackCollection;
 
+    /**
+     * @var string
+     */
     protected $referenceLanguage;
+
+    /**
+     * @var NodeInterface
+     */
+    protected $documentNode;
 
     public function setReferenceLanguage(string $referenceLanguage): void
     {
         $this->referenceLanguage = $referenceLanguage;
+    }
+
+    public function setDocumentNode(NodeInterface $documentNode): void
+    {
+        $this->documentNode = $documentNode;
     }
 
     public function canApply()

@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Ui\Changes;
 
 use Neos\Flow\Annotations as Flow;
-use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Info;
+use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Success;
+use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
@@ -51,9 +52,10 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
             }
         }
 
-        $info = new Info();
+        $info = new Success();
         $info->setMessage('Translations were updated');
-
         $this->feedbackCollection->add($info);
+        $reload = new ReloadDocument();
+        $this->feedbackCollection->add($reload);
     }
 }
