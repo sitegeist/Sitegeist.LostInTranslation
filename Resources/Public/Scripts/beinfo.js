@@ -38,6 +38,12 @@ class BeInfo extends HTMLElement {
 			button.setAttribute("class", "button");
 			button.setAttribute("href", this.getAttribute("addMissingHref"));
 			buttons.appendChild(button);
+
+			const button = document.createElement("a");
+			button.textContent = "Translate missing contents NEW"
+			button.setAttribute("class", "button");
+			button.setAttribute("href", "javascript:window.neos.endpoints.change()" );
+			buttons.appendChild(button);
 		}
 		if (this.hasAttribute("updateOutdatedHref")) {
 			const button = document.createElement("a");
