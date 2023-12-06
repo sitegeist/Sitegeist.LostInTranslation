@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Ui\Changes;
@@ -58,12 +59,6 @@ abstract class AbstractCollectionTranslationChange extends AbstractChange
         return $this->subject->getNodeType()->isOfType('Neos.Neos:ContentCollection');
     }
 
-    /**
-     * @param NodeInterface $collection
-     * @param array<string,array<int,string>> $referenceDimensions
-     * @return Result
-     * @throws \Neos\Flow\Mvc\Exception\StopActionException
-     */
     protected function getComparisonResult(): ?Result
     {
         $referenceDimensionValues = [$this->languageDimensionName => [$this->referenceLanguage]];

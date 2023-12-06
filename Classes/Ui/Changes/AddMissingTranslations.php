@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Ui\Changes;
@@ -8,7 +9,6 @@ use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
 
 class AddMissingTranslations extends AbstractCollectionTranslationChange
 {
-
     public function apply()
     {
         $collection = $this->subject;
