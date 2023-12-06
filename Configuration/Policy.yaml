@@ -2,8 +2,6 @@ privilegeTargets:
   'Neos\Flow\Security\Authorization\Privilege\Method\MethodPrivilege':
     'Sitegeist.LostInTranslation:AccessBackendModule':
       matcher: 'method(Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController->(index)Action())'
-    'Sitegeist.LostInTranslation:AccessCollectionTranslationController':
-      matcher: 'method(Sitegeist\LostInTranslation\Controller\CollectionTranslationController->(addMissingTranslations|updateOutdatedTranslations)Action())'
   'Neos\Neos\Security\Authorization\Privilege\ModulePrivilege':
     'Sitegeist.LostInTranslation:AccessBackendModule':
       matcher: 'management/sitegeist_lostintranslation'
@@ -19,7 +17,4 @@ roles:
     privileges:
       -
         privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
-        permission: GRANT
-      -
-        privilegeTarget: 'Sitegeist.LostInTranslation:AccessCollectionTranslationController'
         permission: GRANT

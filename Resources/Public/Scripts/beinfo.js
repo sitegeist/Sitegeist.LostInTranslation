@@ -28,28 +28,49 @@ class BeInfo extends HTMLElement {
 		}
 		wrapper.appendChild(info);
 
+
 		// Insert Buttons
+	    const collectionNode = this.getAttribute("collectionNode");
+	    const documentNode = this.getAttribute("documentNode");
+	    const referenceLanguage = this.getAttribute("referenceLanguage");
+
 		const buttons = document.createElement("div");
 		buttons.setAttribute("class", "buttons");
-		info.setAttribute("class", "info");
-		if (this.hasAttribute("addMissingHref")) {
+		info.setAttribute("class", "#info");
+		if (this.hasAttribute("showAddMissingButton")) {
 			const button = document.createElement("a");
 			button.textContent = "Translate missing contents"
 			button.setAttribute("class", "button");
-			button.setAttribute("href", this.getAttribute("addMissingHref"));
 			buttons.appendChild(button);
-
-			const button = document.createElement("a");
-			button.textContent = "Translate missing contents NEW"
-			button.setAttribute("class", "button");
-			button.setAttribute("href", "javascript:window.neos.endpoints.change()" );
-			buttons.appendChild(button);
+			button.onclick = function(){
+				window.neos.endpoints.change([
+					{
+						type: 'Sitegeist.LostInTranslation:AddMissingTranslations',
+						subject: collectionNode,
+						payload: {
+							documentNode: documentNode,
+							referenceLanguage: referenceLanguage
+						}
+					}
+				]);
+			};
 		}
-		if (this.hasAttribute("updateOutdatedHref")) {
+		if (this.hasAttribute("showUpdateOutdatedButton")) {
 			const button = document.createElement("a");
 			button.textContent = "Update outdated contents"
-			 button.setAttribute("class", "button");
-			button.setAttribute("href", this.getAttribute("updateOutdatedHref"));
+			button.setAttribute("class", "button");
+			button.onclick = function(){
+				window.neos.endpoints.change([
+					{
+						type: 'Sitegeist.LostInTranslation:UpdateOutdatedTranslations',
+						subject: collectionNode,
+						payload: {
+							documentNode: documentNode,
+							referenceLanguage: referenceLanguage
+						}
+					}
+				]);
+			};
 			buttons.appendChild(button);
 		}
 		wrapper.appendChild(buttons);
