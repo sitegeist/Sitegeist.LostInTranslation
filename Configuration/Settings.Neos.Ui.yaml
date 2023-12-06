@@ -1,0 +1,7 @@
+Neos:
+  Neos:
+    Ui:
+      changes:
+        types:
+          'Sitegeist.LostInTranslation:AddMissingTranslations': Sitegeist\LostInTranslation\Ui\Changes\AddMissingTranslations
+          'Sitegeist.LostInTranslation:UpdateOutdatedTranslations': Sitegeist\LostInTranslation\Ui\Changes\UpdateOutdatedTranslations
