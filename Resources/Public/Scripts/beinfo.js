@@ -3,7 +3,7 @@ class BeInfo extends HTMLElement {
 		super();
 	}
 
-   connectedCallback() {
+	connectedCallback() {
 		// Create a shadow root
 		const shadow = this.attachShadow({ mode: "open" });
 
@@ -30,25 +30,23 @@ class BeInfo extends HTMLElement {
 
 
 		// Insert Buttons
-	    const collectionNode = this.getAttribute("collectionNode");
-	    const documentNode = this.getAttribute("documentNode");
-	    const referenceLanguage = this.getAttribute("referenceLanguage");
+		const collectionNode = this.getAttribute("collectionNode");
+		const referenceLanguage = this.getAttribute("referenceLanguage");
 
 		const buttons = document.createElement("div");
 		buttons.setAttribute("class", "buttons");
-		info.setAttribute("class", "#info");
+		info.setAttribute("class", "info");
 		if (this.hasAttribute("showAddMissingButton")) {
 			const button = document.createElement("a");
 			button.textContent = "Translate missing contents"
 			button.setAttribute("class", "button");
 			buttons.appendChild(button);
 			button.onclick = function(){
-				window.neos.endpoints.change([
+				window.parent.sitegeistLostInTranslationHostPlugin([
 					{
 						type: 'Sitegeist.LostInTranslation:AddMissingTranslations',
 						subject: collectionNode,
 						payload: {
-							documentNode: documentNode,
 							referenceLanguage: referenceLanguage
 						}
 					}
@@ -60,12 +58,11 @@ class BeInfo extends HTMLElement {
 			button.textContent = "Update outdated contents"
 			button.setAttribute("class", "button");
 			button.onclick = function(){
-				window.neos.endpoints.change([
+				window.parent.sitegeistLostInTranslationHostPlugin([
 					{
 						type: 'Sitegeist.LostInTranslation:UpdateOutdatedTranslations',
 						subject: collectionNode,
 						payload: {
-							documentNode: documentNode,
 							referenceLanguage: referenceLanguage
 						}
 					}
@@ -125,6 +122,7 @@ class BeInfo extends HTMLElement {
 
 			.button:hover {
 				background: rgb(0, 173, 238);
+				cursor: pointer;
 			}
 		`;
 

@@ -7,6 +7,7 @@ namespace Sitegeist\LostInTranslation\Ui\Changes;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Success;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
+use Neos\Neos\Ui\Domain\Model\Feedback\Operations\UpdateWorkspaceInfo;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
@@ -26,11 +27,13 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
 
     public function apply()
     {
+        $collection = $this->subject;
         $comparisonResult = $this->getComparisonResult();
         if (is_null($comparisonResult)) {
             return;
         }
 
+        $count = 0;
         foreach ($comparisonResult->getOutdated() as $outdatedNodeDifference) {
             $node = $outdatedNodeDifference->getNode();
             $referenceNode = $outdatedNodeDifference->getReferenceNode();
@@ -50,12 +53,20 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
                         $node->setProperty($propertyName, $propertyValue);
                     }
                 }
+                $count ++;
             }
         }
 
         $info = new Success();
-        $info->setMessage('Translations were updated');
+        $info->setMessage($count . ' outdated nodes were updated');
         $this->feedbackCollection->add($info);
+
+        $updateWorkspaceInfo = new UpdateWorkspaceInfo();
+        $updateWorkspaceInfo->setWorkspace(
+            $collection->getContext()->getWorkspace()
+        );
+        $this->feedbackCollection->add($updateWorkspaceInfo);
+
         $reload = new ReloadDocument();
         $this->feedbackCollection->add($reload);
     }

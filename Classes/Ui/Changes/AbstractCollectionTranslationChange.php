@@ -39,19 +39,9 @@ abstract class AbstractCollectionTranslationChange extends AbstractChange
      */
     protected $referenceLanguage;
 
-    /**
-     * @var NodeInterface
-     */
-    protected $documentNode;
-
     public function setReferenceLanguage(string $referenceLanguage): void
     {
         $this->referenceLanguage = $referenceLanguage;
-    }
-
-    public function setDocumentNode(NodeInterface $documentNode): void
-    {
-        $this->documentNode = $documentNode;
     }
 
     public function canApply()

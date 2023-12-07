@@ -6,6 +6,7 @@ namespace Sitegeist\LostInTranslation\Ui\Changes;
 
 use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Success;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
+use Neos\Neos\Ui\Domain\Model\Feedback\Operations\UpdateWorkspaceInfo;
 
 class AddMissingTranslations extends AbstractCollectionTranslationChange
 {
@@ -17,6 +18,7 @@ class AddMissingTranslations extends AbstractCollectionTranslationChange
             return;
         }
 
+        $count = 0;
         foreach ($comparisonResult->getMissing() as $missingNodeDifference) {
             $adoptedNode = $collection->getContext()->adoptNode($missingNodeDifference->getNode(), true);
             if ($missingNodeDifference->getPreviousIdentifier()) {
@@ -31,13 +33,19 @@ class AddMissingTranslations extends AbstractCollectionTranslationChange
                     $adoptedNode->moveBefore($nextNode);
                 }
             }
+            $count ++;
         }
 
-        $this->persistenceManager->persistAll();
-
         $info = new Success();
-        $info->setMessage('Missing Nodes were added');
+        $info->setMessage($count . ' missing nodes were added');
         $this->feedbackCollection->add($info);
+
+        $updateWorkspaceInfo = new UpdateWorkspaceInfo();
+        $updateWorkspaceInfo->setWorkspace(
+            $collection->getContext()->getWorkspace()
+        );
+        $this->feedbackCollection->add($updateWorkspaceInfo);
+
         $reload = new ReloadDocument();
         $this->feedbackCollection->add($reload);
     }
