@@ -53,7 +53,7 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
                         $node->setProperty($propertyName, $propertyValue);
                     }
                 }
-                $count ++;
+                $count++;
             }
         }
 

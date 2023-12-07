@@ -33,7 +33,7 @@ class AddMissingTranslations extends AbstractCollectionTranslationChange
                     $adoptedNode->moveBefore($nextNode);
                 }
             }
-            $count ++;
+            $count++;
         }
 
         $info = new Success();
