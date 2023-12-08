@@ -21,6 +21,7 @@ use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Package;
+use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
 
 /**
  * @Flow\Scope("singleton")
@@ -109,10 +110,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             // All ignored terms will be wrapped in a <ignored> tag
             // which will be ignored by DeepL
             if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
-                /**
-                 * @var string $part
-                 */
-                $part = preg_replace('/(' . implode('|', $this->settings['ignoredTerms']) . ')/i', '<ignore>$1</ignore>', $part);
+                $part = IgnoredTermsUtility::wrapIgnoredTerms($part, $this->settings['ignoredTerms']);
             }
 
             $body .= '&text=' . urlencode($part);
@@ -150,7 +148,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
             $translations = array_map(
                 function ($part) {
-                    return preg_replace('/(<ignore>|<\/ignore>)/i', '', $part['text']);
+                    return IgnoredTermsUtility::unwrapIgnoredTerms($part);
                 },
                 $returnedData['translations']
             );
