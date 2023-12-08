@@ -15,6 +15,16 @@ Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService:
           1:
             value: Sitegeist_LostInTranslation_TranslationCache
 
+Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKeyFactory:
+  properties:
+    apiKeyCache:
+      object:
+        factoryObjectName: Neos\Flow\Cache\CacheManager
+        factoryMethodName: getCache
+        arguments:
+          1:
+            value: Sitegeist_LostInTranslation_ApiKeyCache
+
 Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController:
   properties:
     apiKeyCache:

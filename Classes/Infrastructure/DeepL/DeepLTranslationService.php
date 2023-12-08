@@ -16,6 +16,7 @@ use Neos\Flow\Http\Client\CurlEngine;
 use Neos\Flow\Http\Client\CurlEngineException;
 use Neos\Http\Factories\ServerRequestFactory;
 use Neos\Http\Factories\StreamFactory;
+use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -62,6 +63,12 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected $translationCache;
 
     /**
+     * @Flow\Inject
+     * @var DeepLAuthenticationKeyFactory
+     */
+    protected $authenticationKeyFactory;
+
+    /**
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
@@ -75,7 +82,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
         if ($isCacheEnabled) {
             foreach ($texts as $i => $text) {
-                $entryIdentifier = $this->getEntryIdentifier($text, $targetLanguage, $sourceLanguage);
+                $entryIdentifier = self::getEntryIdentifier($text, $targetLanguage, $sourceLanguage);
                 if ($this->translationCache->has($entryIdentifier)) {
                     $cachedEntries[$i] = $this->translationCache->get($entryIdentifier);
                     unset($texts[$i]);
@@ -90,9 +97,6 @@ class DeepLTranslationService implements TranslationServiceInterface
         // store keys and values seperately for later reunion
         $keys = array_keys($texts);
         $values = array_values($texts);
-
-        $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
-        $baseUri = $deeplAuthenticationKey->isFree() ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
 
         // request body ... this has to be done manually because of the non php ish format
         // with multiple text arguments
@@ -114,16 +118,10 @@ class DeepLTranslationService implements TranslationServiceInterface
             $body .= '&text=' . urlencode($part);
         }
 
-        $apiRequest = $this->serverRequestFactory->createServerRequest('POST', $baseUri . 'translate')
-            ->withHeader('Accept', 'application/json')
-            ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->getAuthenticationKey()))
-            ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
-            ->withBody($this->streamFactory->createStream($body));
+        $apiRequest = $this->createRequest('translate', 'POST');
+        $apiRequest->withBody($this->streamFactory->createStream($body));
 
-        $browser = new Browser();
-        $engine = new CurlEngine();
-        $engine->setOption(CURLOPT_TIMEOUT, 0);
-        $browser->setRequestEngine($engine);
+        $browser = $this->getBrowser();
 
         $attempt = 0;
         $maximumAttempts = $this->settings['numberOfAttempts'];
@@ -162,7 +160,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             if ($isCacheEnabled) {
                 foreach ($translationWithOriginalIndex as $i => $translatedString) {
                     $originalString = $texts[$i];
-                    $this->translationCache->set($this->getEntryIdentifier($originalString, $targetLanguage, $sourceLanguage), $translatedString);
+                    $this->translationCache->set(self::getEntryIdentifier($originalString, $targetLanguage, $sourceLanguage), $translatedString);
                 }
             }
 
@@ -197,18 +195,9 @@ class DeepLTranslationService implements TranslationServiceInterface
 
         try {
             $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
-            $baseUri = $deeplAuthenticationKey->isFree() ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
 
-            $apiRequest = $this->serverRequestFactory->createServerRequest('POST', $baseUri . 'usage')
-                ->withHeader('Accept', 'application/json')
-                ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->getAuthenticationKey()))
-                ->withHeader('Content-Type', 'application/x-www-form-urlencoded');
-
-            $browser = new Browser();
-            $engine = new CurlEngine();
-            $engine->setOption(CURLOPT_TIMEOUT, 0);
-            $browser->setRequestEngine($engine);
-
+            $apiRequest = $this->createRequest('usage');
+            $browser = $this->getBrowser();
             $apiResponse = $browser->sendRequest($apiRequest);
 
 
@@ -225,19 +214,48 @@ class DeepLTranslationService implements TranslationServiceInterface
 
     protected function getDeeplAuthenticationKey(): DeepLAuthenticationKey
     {
-        $customKey = $this->apiKeyCache->get(Package::API_KEY_CACHE_ID) ?: null;
-        $settingsKey = $this->settings['authenticationKey'] ?? null;
-        return new DeepLAuthenticationKey($customKey ?? $settingsKey);
+        return $this->authenticationKeyFactory->create();
     }
 
     /**
-     * @param  string  $text
-     * @param  string  $targetLanguage
-     * @param  string|null  $sourceLanguage
+     * @param  string      $text
+     * @param  string      $targetLanguage
+     * @param  string|null $sourceLanguage
+     *
      * @return string
      */
-    protected function getEntryIdentifier(string $text, string $targetLanguage, string $sourceLanguage = null): string
+    public static function getEntryIdentifier(string $text, string $targetLanguage, string $sourceLanguage = null): string
     {
         return sha1($text . $targetLanguage . $sourceLanguage);
+    }
+
+    /**
+     * @return Browser
+     */
+    protected function getBrowser(): Browser
+    {
+        $browser = new Browser();
+        $engine = new CurlEngine();
+        $engine->setOption(CURLOPT_TIMEOUT, 0);
+        $browser->setRequestEngine($engine);
+        return $browser;
+    }
+
+    /**
+     * @param string $method
+     * @param string $endpoint
+     *
+     * @return ServerRequestInterface
+     */
+    protected function createRequest(
+        string $endpoint,
+        string $method = 'GET'
+    ): ServerRequestInterface {
+        $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
+        $baseUri = $deeplAuthenticationKey->isFree() ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
+        return $this->serverRequestFactory->createServerRequest($method, $baseUri . $endpoint)
+            ->withHeader('Accept', 'application/json')
+            ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->getAuthenticationKey()))
+            ->withHeader('Content-Type', 'application/x-www-form-urlencoded');
     }
 }
