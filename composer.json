@@ -9,10 +9,6 @@
         "neos/neos-ui": "^7.3 || ^8.0 || dev-master",
         "neos/http-factories": "^7.3 || ^8.0 || dev-master"
     },
-    "require-dev": {
-        "phpstan/phpstan": "~1.10.0",
-        "squizlabs/php_codesniffer": "^3.7"
-    },
     "autoload": {
         "psr-4": {
             "Sitegeist\\LostInTranslation\\": "Classes/"
@@ -28,7 +24,8 @@
         "squizlabs/php_codesniffer": "^3.7",
         "phpunit/phpunit": "^9",
         "mockery/mockery": "@stable",
-        "mikey179/vfsstream": "@stable"
+        "mikey179/vfsstream": "@stable",
+        "fakerphp/faker": "^1.23.0"
     },
     "scripts": {
         "fix:style": "phpcbf --colors --standard=PSR12 Classes",

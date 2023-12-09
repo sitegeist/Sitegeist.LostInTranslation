@@ -9,7 +9,7 @@
     convertWarningsToExceptions="true"
     timeoutForSmallTests="0">
   <testsuites>
-    <testsuite>
+    <testsuite name="Sitegeist.LostInTranslation Functional Tests">
       <directory>Functional</directory>
     </testsuite>
   </testsuites>

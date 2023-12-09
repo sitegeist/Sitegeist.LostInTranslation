@@ -1,0 +1,9 @@
+roles:
+  'Neos.Flow:Everybody':
+    privileges:
+      -
+        privilegeTarget: 'Neos.Neos:Backend.GeneralAccess'
+        permission: GRANT
+      -
+        privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
+        permission: GRANT

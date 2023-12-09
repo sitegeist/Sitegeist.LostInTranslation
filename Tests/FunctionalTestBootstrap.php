@@ -31,10 +31,6 @@ if (DIRECTORY_SEPARATOR === '/') {
 	shell_exec('cd ' . escapeshellarg($_SERVER['FLOW_ROOTPATH']) . ' && FLOW_CONTEXT=' . escapeshellarg($context) . ' ./flow neos.flow:cache:warmup');
 }
 
-shell_exec('cd ' . escapeshellarg($_SERVER['FLOW_ROOTPATH']) . ' && FLOW_CONTEXT=' . escapeshellarg($context) . ' ./flow doctrine:create');
-shell_exec('cd ' . escapeshellarg($_SERVER['FLOW_ROOTPATH']) . ' && FLOW_CONTEXT=' . escapeshellarg($context) . ' ./flow user:create --roles Administrator admin admin admin admin');
-// todo neos import
-
 require_once($_SERVER['FLOW_ROOTPATH'] . 'Packages/Framework/Neos.Flow/Classes/Core/Bootstrap.php');
 $bootstrap = new \Neos\Flow\Core\Bootstrap($context);
 $bootstrap->setPreselectedRequestHandlerClassName(\Neos\Flow\Tests\FunctionalTestRequestHandler::class);

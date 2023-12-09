@@ -7,14 +7,14 @@ use Neos\Flow\Cache\CacheManager;
 use Neos\Flow\Http\Client\InfiniteRedirectionException;
 use Neos\Flow\Security\Account;
 use Neos\Flow\Security\Context;
-use Neos\Flow\Tests\FunctionalTestCase;
 use Neos\Neos\Controller\Backend\ModuleController;
 use Neos\Party\Domain\Model\Person;
 use Neos\Party\Domain\Model\PersonName;
 use Neos\Party\Domain\Service\PartyService;
 use Sitegeist\LostInTranslation\Package;
+use Sitegeist\LostInTranslation\Tests\Functional\AbstractFunctionalTestCase;
 
-class LostInTranslationModuleControllerTest extends FunctionalTestCase
+class LostInTranslationModuleControllerTest extends AbstractFunctionalTestCase
 {
     protected StringFrontend $apiKeyCache;
 
@@ -51,7 +51,8 @@ class LostInTranslationModuleControllerTest extends FunctionalTestCase
         $this->browser->request('http://localhost/neos/management/sitegeist_lostintranslation?moduleArguments%5B%40package%5D=sitegeist.lostintranslation&moduleArguments%5B%40controller%5D=lostintranslationmodule&moduleArguments%5B%40action%5D=storecustomkey&moduleArguments%5B%40format%5D=html', 'POST', [
             "moduleArguments" => [
                 "key" => $fakeKey
-            ]
+            ],
+            '__csrfToken' => $this->securityContext->getCsrfProtectionToken()
         ]);
         $this->assertEquals($fakeKey, $this->apiKeyCache->get(Package::API_KEY_CACHE_ID));
     }
@@ -63,7 +64,9 @@ class LostInTranslationModuleControllerTest extends FunctionalTestCase
      */
     public function removeCustomKeyActionTest(): void
     {
-        $this->browser->request('http://localhost/neos/management/sitegeist_lostintranslation?moduleArguments%5B%40package%5D=sitegeist.lostintranslation&moduleArguments%5B%40controller%5D=lostintranslationmodule&moduleArguments%5B%40action%5D=removecustomkey&moduleArguments%5B%40format%5D=html&moduleArguments%5B%40subpackage%5D=', 'POST');
+        $this->browser->request('http://localhost/neos/management/sitegeist_lostintranslation?moduleArguments%5B%40package%5D=sitegeist.lostintranslation&moduleArguments%5B%40controller%5D=lostintranslationmodule&moduleArguments%5B%40action%5D=removecustomkey&moduleArguments%5B%40format%5D=html&moduleArguments%5B%40subpackage%5D=', 'POST', [
+            '__csrfToken' => $this->securityContext->getCsrfProtectionToken()
+        ]);
         $this->assertFalse($this->apiKeyCache->get(Package::API_KEY_CACHE_ID));
     }
 }
