@@ -3,19 +3,19 @@
  xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd"
     beStrictAboutChangesToGlobalState="true"
     beStrictAboutOutputDuringTests="true"
-    bootstrap="FunctionalTestBootstrap.php"
+    bootstrap="../../../Build/BuildEssentials/PhpUnit/FunctionalTestBootstrap.php"
     convertErrorsToExceptions="true"
     convertNoticesToExceptions="true"
     convertWarningsToExceptions="true"
     timeoutForSmallTests="0">
   <testsuites>
-    <testsuite name="Sitegeist.LostInTranslation Functional Tests">
+    <testsuite name="LostInTranslation">
       <directory>Functional</directory>
     </testsuite>
   </testsuites>
   <coverage includeUncoveredFiles="true">
     <include>
-      <directory>Data/Temporary/Testing/Cache/Code/Flow_Object_Classes/</directory>
+      <directory>../../../Data/Temporary/Testing/Cache/Code/Flow_Object_Classes/</directory>
     </include>
   </coverage>
   <logging>

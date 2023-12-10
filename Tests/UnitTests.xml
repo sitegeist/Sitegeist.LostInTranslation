@@ -3,19 +3,19 @@
 		 xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd"
 		 beStrictAboutChangesToGlobalState="true"
 		 beStrictAboutOutputDuringTests="true"
-		 bootstrap="UnitTestBootstrap.php"
+		 bootstrap="../../../Build/BuildEssentials/PhpUnit/UnitTestBootstrap.php"
 		 convertErrorsToExceptions="true"
 		 convertNoticesToExceptions="true"
 		 convertWarningsToExceptions="true"
 		 timeoutForSmallTests="0">
 	<testsuites>
-		<testsuite name="All tests">
+		<testsuite name="LostInTranslation">
 			<directory>Unit</directory>
 		</testsuite>
 	</testsuites>
 	<coverage includeUncoveredFiles="false">
 		<include>
-			<directory>../Classes</directory>
+			<directory>../../../Packages/*/*/Classes</directory>
 		</include>
 	</coverage>
 	<logging>
