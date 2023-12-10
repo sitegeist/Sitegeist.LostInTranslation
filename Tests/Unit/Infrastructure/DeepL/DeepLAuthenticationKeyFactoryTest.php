@@ -39,7 +39,10 @@ class DeepLAuthenticationKeyFactoryTest extends UnitTestCase
         $this->assertEquals('configuredKey', $authenticationKey->__toString());
     }
 
-    protected function getFactory(): MockObject|DeepLAuthenticationKeyFactory
+    /**
+     * @return MockObject|DeepLAuthenticationKeyFactory
+     */
+    protected function getFactory()
     {
         $factory = new DeepLAuthenticationKeyFactory();
         $this->inject($factory, 'apiKeyCache', $this->apiKeyCache);
