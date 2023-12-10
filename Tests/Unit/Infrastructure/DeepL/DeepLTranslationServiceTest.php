@@ -221,13 +221,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
         $this->assertEquals($expectedCharacterLimit, $apiStatus->getCharacterLimit(), 'characterLimit');
     }
 
-    /**
-     * @param array $overrideSettings
-     *
-     * @return MockObject|DeepLTranslationService
-     * @throws \Neos\Flow\ObjectManagement\Exception\UnresolvedDependenciesException
-     */
-    public function getService(array $overrideSettings = [])
+    public function getService(array $overrideSettings = []): MockObject|DeepLTranslationService
     {
         $service = $this->getAccessibleMock(DeepLTranslationService::class, ['getBrowser', 'createServerRequest', 'getDeeplAuthenticationKey'], [], '', false);
         $this->inject($service, 'serverRequestFactory', new ServerRequestFactory(new UriFactory()));
