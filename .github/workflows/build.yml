@@ -14,10 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         php-versions: ['8.1']
-        neos-versions: ['7.3']
+        neos-versions: ['7.3', '8.3']
         include:
-          - php-versions: '8.1'
-            neos-versions: '8.3'
           - php-versions: '8.2'
             neos-versions: '8.3'
     runs-on: ubuntu-latest
