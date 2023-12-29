@@ -78,7 +78,7 @@ class Comparator
             );
         }
 
-        foreach ($currentNode->getChildNodes() as $currentCollectionChild) {
+        foreach ($currentNode->getChildNodes('Neos.Neos:ContentCollection') as $currentCollectionChild) {
             $referenceCollectionChild = $referenceContentContext->getNodeByIdentifier($currentCollectionChild->getIdentifier());
             if ($referenceCollectionChild) {
                 $this->traverseContentCollectionForAlteredNodes(
