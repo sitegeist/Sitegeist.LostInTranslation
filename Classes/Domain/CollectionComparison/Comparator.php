@@ -156,7 +156,10 @@ class Comparator
                 );
             }
 
-            if ($currentCollectionCollectionChild->hasChildNodes() && array_key_exists($identifier, $referenceCollectionChildren)) {
+            if (
+                ($currentCollectionCollectionChild->hasChildNodes() || $currentCollectionCollectionChild->getNodeType()->isOfType('Neos.Neos:ContentCollection'))
+                && array_key_exists($identifier, $referenceCollectionChildren)
+            ) {
                 $this->traverseContentCollectionForAlteredNodes(
                     $currentCollectionCollectionChild,
                     $referenceCollectionChildren[$identifier],
