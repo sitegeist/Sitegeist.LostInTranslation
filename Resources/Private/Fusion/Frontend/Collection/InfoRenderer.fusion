@@ -20,11 +20,11 @@ prototype(Sitegeist.LostInTranslation:Collection.TranslationInformation) < proto
             <Neos.Fusion:Fragment @if={props.status.missing || props.status.outdated}>
                 <script src={props.scriptHref} ></script>
                 <lost-in-translation-info
-                        collectionNode={props.collectionNode.contextPath}
-                        referenceLanguage={props.referenceLanguage}
-                        showAddMissingButton={props.status.missing ? true : false}
-                        showUpdateOutdatedButton={props.status.outdated ? true : false}
-                        icon={props.icon}
+                    node={props.collectionNode.contextPath}
+                    referenceLanguage={props.referenceLanguage}
+                    showAddMissingButton={props.status.missing ? true : false}
+                    showUpdateOutdatedButton={props.status.outdated ? true : false}
+                    icon={props.icon}
                 >
                     <Neos.Fusion:Fragment @path="attributes.text">
                         <p @if={props.status.missing}>

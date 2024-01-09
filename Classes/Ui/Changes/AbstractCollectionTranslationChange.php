@@ -46,19 +46,24 @@ abstract class AbstractCollectionTranslationChange extends AbstractChange
 
     public function canApply()
     {
-        return $this->subject->getNodeType()->isOfType('Neos.Neos:ContentCollection');
+        return $this->subject->getNodeType()->isOfType('Neos.Neos:ContentCollection') || $this->subject->getNodeType()->isOfType('Neos.Neos:Document') ;
     }
 
-    protected function getComparisonResult(): ?Result
+    protected function getComparisonResult(NodeInterface $node): ?Result
     {
         $referenceDimensionValues = [$this->languageDimensionName => [$this->referenceLanguage]];
-        $currentCollection = $this->subject;
-        $referenceContentContext = $this->createContentContext($currentCollection->getContext()->getWorkspaceName(), $referenceDimensionValues);
-        $referenceCollectionNode = $referenceContentContext->getNodeByIdentifier($currentCollection->getIdentifier());
+
+        $referenceContentContext = $this->createContentContext($node->getContext()->getWorkspaceName(), $referenceDimensionValues);
+        $referenceCollectionNode = $referenceContentContext->getNodeByIdentifier($node->getIdentifier());
         if ($referenceCollectionNode === null) {
             return null;
         }
-        $comparisonResult = $this->comparator->compareCollectionNode($currentCollection, $referenceCollectionNode);
-        return $comparisonResult;
+        if ($node->getNodeType()->isOfType('Neos.Neos:Document')) {
+            return $this->comparator->compareDocumentNode($node, $referenceCollectionNode);
+        } elseif ($node->getNodeType()->isOfType('Neos.Neos:ContentCollection')) {
+            return $this->comparator->compareCollectionNode($node, $referenceCollectionNode);
+        } else {
+            return null;
+        }
     }
 }

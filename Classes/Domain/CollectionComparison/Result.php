@@ -22,8 +22,8 @@ final class Result
     public array $outdated;
 
     /**
-     * @param array<int|string,MissingNodeReference> $missing
-     * @param array<int|string,OutdatedNodeReference> $outdated
+     * @param array<int,MissingNodeReference> $missing
+     * @param array<int,OutdatedNodeReference> $outdated
      */
     private function __construct(array $missing, array $outdated)
     {
@@ -38,12 +38,12 @@ final class Result
 
     public function withMissingNodes(MissingNodeReference ...$missingNodes): static
     {
-        return new static($missingNodes, $this->outdated);
+        return new static([...$this->missing, ...$missingNodes], $this->outdated);
     }
 
     public function withOutdatedNodes(OutdatedNodeReference ...$outdatedNodes): static
     {
-        return new static($this->missing, $outdatedNodes);
+        return new static($this->missing, [...$this->outdated, ...$outdatedNodes]);
     }
 
     public function getHasDifferences(): bool
