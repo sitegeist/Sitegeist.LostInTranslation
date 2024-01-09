@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
+
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
@@ -102,6 +103,14 @@ class Comparator
         return $result;
     }
 
+    /**
+     * @param NodeInterface $currentNode
+     * @param NodeInterface $referenceNode
+     * @param Context $currentContextIncludingRemovedItems
+     * @param MissingNodeReference[] $missing
+     * @param OutdatedNodeReference[] $outdated
+     * @return void
+     */
     private function traverseContentCollectionForAlteredNodes(
         NodeInterface $currentNode,
         NodeInterface $referenceNode,
