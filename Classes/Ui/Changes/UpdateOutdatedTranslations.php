@@ -27,8 +27,11 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
 
     public function apply()
     {
+
         $collection = $this->subject;
-        $comparisonResult = $this->getComparisonResult();
+
+        $comparisonResult = $this->getComparisonResult($collection);
+
         if (is_null($comparisonResult)) {
             return;
         }

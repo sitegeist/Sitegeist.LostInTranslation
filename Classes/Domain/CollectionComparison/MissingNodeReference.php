@@ -14,12 +14,15 @@ use Neos\Flow\Annotations as Flow;
 final class MissingNodeReference
 {
     protected NodeInterface $node;
+
+    protected NodeInterface $referenceNode;
     protected ?string $previousIdentifier;
     protected ?string $nextIdentifier;
 
-    public function __construct(NodeInterface $node, ?string $previousIdentifier, ?string $nextIdentifier)
+    public function __construct(NodeInterface $node, NodeInterface $referenceNode, ?string $previousIdentifier, ?string $nextIdentifier)
     {
         $this->node = $node;
+        $this->referenceNode = $referenceNode;
         $this->previousIdentifier = $previousIdentifier;
         $this->nextIdentifier = $nextIdentifier;
     }
@@ -27,6 +30,11 @@ final class MissingNodeReference
     public function getNode(): NodeInterface
     {
         return $this->node;
+    }
+
+    public function getReferenceNode(): NodeInterface
+    {
+        return $this->referenceNode;
     }
 
     public function getPreviousIdentifier(): ?string

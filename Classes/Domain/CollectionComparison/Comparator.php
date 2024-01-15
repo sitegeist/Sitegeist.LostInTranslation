@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\CollectionComparison;
 
+use Neos\ContentRepository\Domain\Service\Context;
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\Neos\Domain\Service\ContentContextFactory;
@@ -18,17 +19,83 @@ class Comparator
 
     public function compareCollectionNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
     {
+        if ($currentNode->getNodeType()->isOfType('Neos.Neos:ContentCollection') === false) {
+            throw new \InvalidArgumentException($currentNode->getNodeType()->getName() . " is not of type Neos.Neos:ContentCollection");
+        }
+
         $result = Result::createEmpty();
+
+        // ensure deleted but not yet published nodes are found aswell so we will not try to translate those
+        $currentContextProperties = $currentNode->getContext()->getProperties();
+        $currentContextProperties['removedContentShown'] = true;
+        $currentContextIncludingRemovedItems = $this->contextFactory->create($currentContextProperties);
+
+        $result = $this->traverseContentCollectionForAlteredNodes(
+            $currentNode,
+            $referenceNode,
+            $currentContextIncludingRemovedItems,
+            $result
+        );
+
+        return $result;
+    }
+
+    public function compareDocumentNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
+    {
+        if ($currentNode->getNodeType()->isOfType('Neos.Neos:Document') === false) {
+            throw new \InvalidArgumentException($currentNode->getNodeType()->getName() . " is not of type Neos.Neos:Document");
+        }
+
+        $result = Result::createEmpty();
+
+        // ensure deleted but not yet published nodes are found as well, so we will not try to translate those
+        $currentContextProperties = $currentNode->getContext()->getProperties();
+        $currentContextProperties['removedContentShown'] = true;
+        $currentContextIncludingRemovedItems = $this->contextFactory->create($currentContextProperties);
+
+        $referenceContentContext = $referenceNode->getContext();
+
+        if ($referenceNode->getNodeData()->getLastModificationDateTime() > $currentNode->getNodeData()->getLastModificationDateTime()) {
+            $result = $result->withOutdatedNodes(new OutdatedNodeReference(
+                $currentNode,
+                $referenceNode
+            ));
+        }
+
+        foreach ($currentNode->getChildNodes('Neos.Neos:ContentCollection') as $currentCollectionChild) {
+            if ($currentCollectionChild->isAutoCreated() === false) {
+                // skip nodes that are not autocreated
+                continue;
+            }
+            $referenceCollectionChild = $referenceContentContext->getNodeByIdentifier($currentCollectionChild->getIdentifier());
+            if ($referenceCollectionChild) {
+                $result = $this->traverseContentCollectionForAlteredNodes(
+                    $currentCollectionChild,
+                    $referenceCollectionChild,
+                    $currentContextIncludingRemovedItems,
+                    $result
+                );
+            }
+        }
+
+        return $result;
+    }
+
+    private function traverseContentCollectionForAlteredNodes(
+        NodeInterface $currentNode,
+        NodeInterface $referenceNode,
+        Context $currentContextIncludingRemovedItems,
+        Result $result,
+    ): Result {
+
+        $missing = [];
+        $outdated = [];
 
         $reduceToArrayWithIdentifier = function (array $carry, NodeInterface $item) {
             $carry[$item->getIdentifier()] = $item;
             return $carry;
         };
 
-        // ensure deleted but not yet published nodes are found aswell so we will not try to translate those
-        $currentContextProperties = $currentNode->getContext()->getProperties();
-        $currentContextProperties['removedContentShown'] = true;
-        $currentContextIncludingRemovedItems = $this->contextFactory->create($currentContextProperties);
         $currentNodeInContextShowingRemovedItems = $currentContextIncludingRemovedItems->getNodeByIdentifier($currentNode->getIdentifier());
         if (is_null($currentNodeInContextShowingRemovedItems)) {
             return $result;
@@ -45,10 +112,6 @@ class Comparator
         $referenceCollectionChildren = array_reduce($referenceNode->getChildNodes(), $reduceToArrayWithIdentifier, []);
         $referenceCollectionChildrenIdentifiers =  array_keys($referenceCollectionChildren);
 
-        /**
-         * @var MissingNodeReference[] $missing
-         */
-        $missing = [];
         foreach ($referenceCollectionChildren as $identifier => $referenceCollectionChild) {
             if (!array_key_exists($identifier, $currentCollectionChildren)) {
                 $position = array_search($identifier, $referenceCollectionChildrenIdentifiers);
@@ -57,19 +120,13 @@ class Comparator
 
                 $missing[] = new MissingNodeReference(
                     $referenceCollectionChild,
+                    $currentNode,
                     $previousIdentifier,
                     $nextIdentifier
                 );
             }
         }
-        if (count($missing) > 0) {
-            $result = $result->withMissingNodes(...$missing);
-        }
 
-        /**
-         * @var OutdatedNodeReference[] $outdated
-         */
-        $outdated = [];
         foreach ($currentCollectionChildren as $identifier => $currentCollectionCollectionChild) {
             if (
                 array_key_exists($identifier, $referenceCollectionChildren)
@@ -80,8 +137,25 @@ class Comparator
                     $referenceCollectionChildren[$identifier]
                 );
             }
+
+            if (
+                ($currentCollectionCollectionChild->hasChildNodes() || $currentCollectionCollectionChild->getNodeType()->isOfType('Neos.Neos:ContentCollection'))
+                && array_key_exists($identifier, $referenceCollectionChildren)
+            ) {
+                $result = $this->traverseContentCollectionForAlteredNodes(
+                    $currentCollectionCollectionChild,
+                    $referenceCollectionChildren[$identifier],
+                    $currentContextIncludingRemovedItems,
+                    $result
+                );
+            }
         }
-        if (count($outdated) > 0) {
+
+        if ($missing) {
+            $result = $result->withMissingNodes(...$missing);
+        }
+
+        if ($outdated) {
             $result = $result->withOutdatedNodes(...$outdated);
         }
 

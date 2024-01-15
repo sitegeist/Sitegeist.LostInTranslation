@@ -72,6 +72,21 @@ class TranslationHelper implements ProtectedContextAwareInterface
     }
 
     /**
+     * @param NodeInterface $currentDocumentNode
+     * @param string $referenceLanguage
+     * @return Result
+     */
+    public function compareDocumentWithDimension(NodeInterface $currentDocumentNode, string $referenceLanguage): Result
+    {
+        $contentContext = $this->createContentContext($currentDocumentNode->getContext()->getWorkspaceName(), [$this->languageDimensionName => [$referenceLanguage]]);
+        $referenceDocumentNode = $contentContext->getNodeByIdentifier($currentDocumentNode->getIdentifier());
+        if ($referenceDocumentNode === null) {
+            return Result::createEmpty();
+        }
+        return $this->comparator->compareDocumentNode($currentDocumentNode, $referenceDocumentNode);
+    }
+
+    /**
      * @inheritDoc
      */
     public function allowsCallOfMethod($methodName)

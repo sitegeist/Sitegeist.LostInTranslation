@@ -203,6 +203,43 @@ ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de',
 # Output: ['Hallo Welt!', 'Mein Name ist...']
 ```
 
+### Compare and update translations
+
+The lost in translation package contains two prototypes that visualize differences between the current and the `default`
+translation.
+
+To show the information in the backend you can render the `Sitegeist.LostInTranslation:Collection.TranslationInformation` adjacent to a ContentCollection.
+
+```
+content = Neos.Fusion:Join {
+     info = Sitegeist.LostInTranslation:Collection.TranslationInformation {
+          nodePath = 'content'
+     }
+     content = Neos.Neos:ContentCollection {
+          nodePath = 'content'
+     }
+}
+```
+
+![DDEV__WebPage_test](https://github.com/sitegeist/Sitegeist.LostInTranslation/assets/1309380/7d268e18-5a2a-4292-8844-4800020b0ddb)
+
+### `Sitegeist.LostInTranslation:Document.TranslationInformation`
+
+Show informations about missing and outdated translations on document level. Allows to "translate missing" and "update outdated" nodes.
+The prototype is only showing in backend + edit mode.
+
+- `node`:  (Node, default `documentNode` from fusion context) The document node that shall be compared
+- `referenceLanguage`: (string, default language preset) The preset used to compare against
+
+### `Sitegeist.LostInTranslation:Collection.TranslationInformation`
+
+Show informations about missing and outdated translations on content collection level. Allows to "translate missing" and "update outdated" nodes.
+The prototype is only showing in backend + edit mode.
+
+- `nodePath`: (string, default null)
+- `node`:  (Node, default `node` from fusion context)
+- `referenceLanguage`: (string, default language preset) The preset used to compare against
+
 ### Translation Cache
 
 The plugin includes a translation cache for the DeepL API that stores the individual text parts

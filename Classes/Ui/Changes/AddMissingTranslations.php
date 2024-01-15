@@ -13,14 +13,15 @@ class AddMissingTranslations extends AbstractCollectionTranslationChange
     public function apply()
     {
         $collection = $this->subject;
-        $comparisonResult = $this->getComparisonResult();
+        $comparisonResult = $this->getComparisonResult($collection);
+
         if (is_null($comparisonResult)) {
             return;
         }
 
         $count = 0;
         foreach ($comparisonResult->getMissing() as $missingNodeDifference) {
-            $adoptedNode = $collection->getContext()->adoptNode($missingNodeDifference->getNode(), true);
+            $adoptedNode = ($missingNodeDifference->getReferenceNode())->getContext()->adoptNode($missingNodeDifference->getNode(), true);
             if ($missingNodeDifference->getPreviousIdentifier()) {
                 $previousNode = $collection->getContext()->getNodeByIdentifier($missingNodeDifference->getPreviousIdentifier());
                 if ($previousNode && $previousNode->getParent() === $adoptedNode->getParent()) {

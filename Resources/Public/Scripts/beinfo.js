@@ -30,7 +30,7 @@ class BeInfo extends HTMLElement {
 
 
 		// Insert Buttons
-		const collectionNode = this.getAttribute("collectionNode");
+		const node = this.getAttribute("node");
 		const referenceLanguage = this.getAttribute("referenceLanguage");
 
 		const buttons = document.createElement("div");
@@ -45,7 +45,7 @@ class BeInfo extends HTMLElement {
 				window.parent.sitegeistLostInTranslationHostPlugin([
 					{
 						type: 'Sitegeist.LostInTranslation:AddMissingTranslations',
-						subject: collectionNode,
+						subject: node,
 						payload: {
 							referenceLanguage: referenceLanguage
 						}
@@ -61,7 +61,7 @@ class BeInfo extends HTMLElement {
 				window.parent.sitegeistLostInTranslationHostPlugin([
 					{
 						type: 'Sitegeist.LostInTranslation:UpdateOutdatedTranslations',
-						subject: collectionNode,
+						subject: node,
 						payload: {
 							referenceLanguage: referenceLanguage
 						}
