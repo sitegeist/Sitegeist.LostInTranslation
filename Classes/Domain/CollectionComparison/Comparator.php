@@ -19,6 +19,10 @@ class Comparator
 
     public function compareCollectionNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
     {
+        if ($currentNode->getNodeType()->isOfType('Neos.Neos:ContentCollection') === false) {
+            throw new \InvalidArgumentException($currentNode->getNodeType()->getName() . " is not of type Neos.Neos:ContentCollection");
+        }
+
         $result = Result::createEmpty();
 
         // ensure deleted but not yet published nodes are found aswell so we will not try to translate those
@@ -38,6 +42,10 @@ class Comparator
 
     public function compareDocumentNode(NodeInterface $currentNode, NodeInterface $referenceNode): Result
     {
+        if ($currentNode->getNodeType()->isOfType('Neos.Neos:Document') === false) {
+            throw new \InvalidArgumentException($currentNode->getNodeType()->getName() . " is not of type Neos.Neos:Document");
+        }
+
         $result = Result::createEmpty();
 
         // ensure deleted but not yet published nodes are found as well, so we will not try to translate those
