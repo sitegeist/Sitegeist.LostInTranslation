@@ -31,23 +31,23 @@ class LostInTranslationModuleController extends AbstractModuleController
     protected $view;
 
 
-    public function indexAction()
+    public function indexAction(): void
     {
         $status = $this->translationService->getStatus();
         $this->view->assign('status', $status);
     }
 
-    public function setCustomKeyAction()
+    public function setCustomKeyAction(): void
     {
     }
 
-    public function storeCustomKeyAction(string $key)
+    public function storeCustomKeyAction(string $key): void
     {
         $this->apiKeyCache->set(Package::API_KEY_CACHE_ID, $key);
         $this->forward('index');
     }
 
-    public function removeCustomKeyAction()
+    public function removeCustomKeyAction(): void
     {
         $this->apiKeyCache->remove(Package::API_KEY_CACHE_ID);
         $this->forward('index');

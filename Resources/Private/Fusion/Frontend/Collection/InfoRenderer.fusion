@@ -1,0 +1,41 @@
+prototype(Sitegeist.LostInTranslation:Collection.TranslationInformation) < prototype(Neos.Fusion:Component) {
+    nodePath = null
+    node = ${this.nodePath ? Neos.Node.nearestContentCollection(node, this.nodePath) : node}
+    referenceLanguage = ${Configuration.setting('Neos.ContentRepository.contentDimensions.' + Configuration.setting('Sitegeist.LostInTranslation.nodeTranslation.languageDimensionName')+ '.defaultPreset')}
+
+    renderer = Neos.Fusion:Component {
+        @if.inBackend = ${node && node.context.inBackend && node.context.currentRenderingMode.edit}
+
+        status = ${Sitegeist.LostInTranslation.compareCollectionWithDimension(props.node, props.referenceLanguage)}
+        collectionNode = ${props.node}
+        referenceLanguage = ${props.referenceLanguage}
+
+        scriptHref = Neos.Fusion:ResourceUri {
+            path = 'resource://Sitegeist.LostInTranslation/Public/Scripts/beinfo.js'
+        }
+
+        icon = ${File.readFile('resource://Sitegeist.LostInTranslation/Public/Icons/language.svg')}
+
+        renderer = afx`
+            <Neos.Fusion:Fragment @if={props.status.missing || props.status.outdated}>
+                <script src={props.scriptHref} ></script>
+                <lost-in-translation-info
+                    node={props.collectionNode.contextPath}
+                    referenceLanguage={props.referenceLanguage}
+                    showAddMissingButton={props.status.missing ? true : false}
+                    showUpdateOutdatedButton={props.status.outdated ? true : false}
+                    icon={props.icon}
+                >
+                    <Neos.Fusion:Fragment @path="attributes.text">
+                        <p @if={props.status.missing}>
+                            Missing Contents: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
+                        </p>
+                        <p @if={props.status.outdated}>
+                            Outdated Contents: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
+                        </p>
+                    </Neos.Fusion:Fragment>
+                </lost-in-translation-info>
+            </Neos.Fusion:Fragment>
+        `
+    }
+}

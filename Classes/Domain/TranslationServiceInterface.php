@@ -10,7 +10,7 @@ interface TranslationServiceInterface
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
-     * @return array
+     * @return array<string,string>
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array;
 

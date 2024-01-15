@@ -3,6 +3,9 @@ Neos:
     defaultContext:
       'Sitegeist.LostInTranslation': 'Sitegeist\LostInTranslation\Eel\TranslationHelper'
   Neos:
+    fusion:
+      autoInclude:
+        'Sitegeist.LostInTranslation': true
     modules:
       management:
         submodules:

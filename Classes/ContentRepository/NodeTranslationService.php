@@ -11,6 +11,7 @@ use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -60,7 +61,7 @@ class NodeTranslationService
 
     /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
-     * @var array
+     * @var array<string,array{'default': string, 'defaultPreset': string, 'presets': array<string,mixed> }>
      */
     protected $contentDimensionConfiguration;
 
@@ -88,12 +89,18 @@ class NodeTranslationService
     protected $nodeUriPathSegmentGenerator;
 
     /**
+     * @Flow\Inject
+     * @var TranslatablePropertyNamesFactory
+     */
+    protected $translatablePropertiesFactory;
+
+    /**
      * @param NodeInterface $node
      * @param Context $context
-     * @param $recursive
+     * @param bool $recursive
      * @return void
      */
-    public function afterAdoptNode(NodeInterface $node, Context $context, $recursive): void
+    public function afterAdoptNode(NodeInterface $node, Context $context, bool $recursive): void
     {
         if (!$this->enabled) {
             return;
@@ -111,8 +118,10 @@ class NodeTranslationService
             return;
         }
 
-        $adoptedNode = $context->getNodeByIdentifier((string)$node->getNodeAggregateIdentifier());
-        $this->translateNode($node, $adoptedNode, $context);
+        $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
+        if ($adoptedNode instanceof NodeInterface) {
+            $this->translateNode($node, $adoptedNode, $context);
+        }
     }
 
     /**
@@ -150,7 +159,7 @@ class NodeTranslationService
      */
     public function translateNode(NodeInterface $sourceNode, NodeInterface $targetNode, Context $context): void
     {
-        $propertyDefinitions = $sourceNode->getNodeType()->getProperties();
+        $translatableProperties = $this->translatablePropertiesFactory->createForNodeType($sourceNode->getNodeType());
 
         $sourceDimensionValue = $sourceNode->getContext()->getTargetDimensions()[$this->languageDimensionName];
         $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
@@ -172,31 +181,20 @@ class NodeTranslationService
             return;
         }
 
-        $properties = (array)$sourceNode->getProperties(true);
+        $properties = (array)$sourceNode->getProperties();
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
-            if (empty($propertyValue)) {
+            if (empty($propertyValue) || !is_string($propertyValue)) {
                 continue;
             }
-            if (!array_key_exists($propertyName, $propertyDefinitions)) {
-                continue;
-            }
-            if (!isset($propertyDefinitions[$propertyName]['type']) || $propertyDefinitions[$propertyName]['type'] != 'string' || !is_string($propertyValue)) {
+            if (!$translatableProperties->isTranslatable($propertyName)) {
                 continue;
             }
             if ((trim(strip_tags($propertyValue))) == "") {
                 continue;
             }
-
-            $isInlineEditable = $propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false;
-            // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
-            $isTranslateEnabledForProperty = $propertyDefinitions[$propertyName]['options']['automaticTranslation'] ?? ($propertyDefinitions[$propertyName]['options']['translateOnAdoption'] ?? null);
-            $translateProperty = $isTranslateEnabledForProperty == true || (is_null($isTranslateEnabledForProperty) && $this->translateRichtextProperties && $isInlineEditable == true);
-
-            if ($translateProperty) {
-                $propertiesToTranslate[$propertyName] = $propertyValue;
-                unset($properties[$propertyName]);
-            }
+            $propertiesToTranslate[$propertyName] = $propertyValue;
+            unset($properties[$propertyName]);
         }
 
         if (count($propertiesToTranslate) > 0) {
