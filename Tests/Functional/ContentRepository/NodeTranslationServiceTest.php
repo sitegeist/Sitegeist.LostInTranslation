@@ -2,17 +2,21 @@
 
 namespace Sitegeist\LostInTranslation\Tests\Functional\ContentRepository;
 
+use Exception;
 use Faker\Factory;
 use Faker\Generator;
+use Neos\ContentRepository\Domain\Factory\NodeFactory;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
-use Neos\ContentRepository\Domain\Model\NodeTemplate;
 use Neos\ContentRepository\Domain\Model\NodeType;
 use Neos\ContentRepository\Domain\Model\Workspace;
+use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
 use Neos\ContentRepository\Domain\Repository\WorkspaceRepository;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\ContentRepository\Domain\Service\NodeTypeManager;
 use Neos\ContentRepository\Exception\NodeException;
+use Neos\ContentRepository\Exception\NodeTypeNotFoundException;
+use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Flow\Utility\Algorithms;
 use PHPUnit\Framework\MockObject\MockObject;
 use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
@@ -69,17 +73,15 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     /**
      * @var Generator
      */
-    protected $germanFaker;
+    protected $faker;
 
     /**
-     * @var Generator
+     * @var NodeDataRepository
      */
-    protected $englishFaker;
+    protected $nodeDataRepository;
 
-    /**
-     * @var Generator
-     */
-    protected $italianFaker;
+    protected string $liveWorkspaceName;
+    protected string $userWorkspaceName;
 
     /**
      * @return void
@@ -87,32 +89,18 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     public function setUp(): void
     {
         parent::setUp();
-        $workspaceRepository = $this->objectManager->get(WorkspaceRepository::class);
-        $this->liveWorkspace = new Workspace('live');
-        $workspaceRepository->add($this->liveWorkspace);
-        $this->userWorkspace = new Workspace('test', $this->liveWorkspace);
-        $workspaceRepository->add($this->userWorkspace);
-        $this->persistenceManager->persistAll();
-        $this->contextFactory = $this->objectManager->get(ContextFactoryInterface::class);
-        // The root live context, where our original content is live
-        $this->germanLiveContext = $this->contextFactory->create(['workspaceName' => 'live', 'dimensions' => ['language' => ['de']]]);
-        // The root user context, where the test user creates content, which is eventually published to live
-        $this->germanUserContext = $this->contextFactory->create(['workspaceName' => 'test', 'dimensions' => ['language' => ['de']]]);
-        // The English live context, where content from the German live context is synced automatically
-        $this->englishLiveContext = $this->contextFactory->create(['workspaceName' => 'live', 'dimensions' => ['language' => ['en']]]);
-        // The Italian live context, where content from the German live context is only copied once on node adoption
-        $this->italianLiveContext = $this->contextFactory->create(['workspaceName' => 'live', 'dimensions' => ['language' => ['it']]]);
-        $this->italianUserContext = $this->contextFactory->create(['workspaceName' => 'test', 'dimensions' => ['language' => ['it']]]);
+        $this->liveWorkspaceName = uniqid('live-', true);
+        $this->userWorkspaceName = uniqid('user-', true);
+        $this->setUpWorkspacesAndContexts();
 
         // Mock
         $this->deeplServiceMock = $this->getMockBuilder(DeepLTranslationService::class)->getMock();
         $nodeTranslationService = $this->objectManager->get(NodeTranslationService::class);
         $this->inject($nodeTranslationService, 'translationService', $this->deeplServiceMock);
+        $this->inject($nodeTranslationService, 'liveWorkspaceName', $this->liveWorkspaceName);
 
         // Fakers
-        $this->germanFaker = Factory::create('de_DE');
-        $this->englishFaker = Factory::create('en_GB');
-        $this->italianFaker = Factory::create('it_IT');
+        $this->faker = Factory::create();
     }
 
     /**
@@ -120,8 +108,8 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      */
     public function tearDown(): void
     {
+        $this->saveNodesAndTearDown();
         parent::tearDown();
-        $this->inject($this->contextFactory, 'contextInstances', []);
     }
 
     /**
@@ -131,17 +119,74 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      */
     public function newNodeInGermanIsAutomaticallyAndCorrectlySyncedToEnglish(): void
     {
-        $germanString = $this->germanFaker->text(100);
-        $englishString = $this->englishFaker->text(100);
+        $germanString = $this->faker->text(100);
+        $englishString = $this->faker->text(100);
         $this->deeplServiceMock->method('translate')->with(['inlineEditableStringProperty' => $germanString], 'en')->willReturn(['inlineEditableStringProperty' => $englishString]);
 
         $nodeInGerman = $this->createTestNode(['inlineEditableStringProperty' => $germanString, 'stringProperty' => $germanString]);
         $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
         $nodeInEnglish = $this->englishLiveContext->getNode('/new-node');
 
         $this->assertTrue(!is_null($nodeInEnglish), 'The node in German was automatically synced into English');
         $this->assertEquals($englishString, $nodeInEnglish->getProperty('inlineEditableStringProperty'), 'The inline editable property was translated into English');
         $this->assertEquals($germanString, $nodeInEnglish->getProperty('stringProperty'), 'The non-inline editable property was not translated into English');
+        $this->assertInternalProperties($nodeInGerman, $nodeInEnglish);
+    }
+
+    /**
+     * @test
+     * @return void
+     * @throws NodeException|IllegalObjectTypeException
+     */
+    public function updatedNodeInGermanIsCorrectlySyncedToEnglish(): void
+    {
+        $germanString = $this->faker->text(100);
+        $englishString = $this->faker->text(100);
+        $newGermanString = $this->faker->text(100);
+        $newEnglishString = $this->faker->text(100);
+        $this->deeplServiceMock->method('translate')
+            ->withConsecutive(
+                [['inlineEditableStringProperty' => $germanString], 'en'],
+                [['inlineEditableStringProperty' => $newGermanString], 'en'],
+            )
+            ->willReturnOnConsecutiveCalls(
+                ['inlineEditableStringProperty' => $englishString],
+                ['inlineEditableStringProperty' => $newEnglishString],
+            );
+
+        $nodeInGerman = $this->createTestNode(['inlineEditableStringProperty' => $germanString, 'stringProperty' => $germanString]);
+        $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInEnglish = $this->englishLiveContext->getNode('/new-node');
+
+        $this->assertTrue(!is_null($nodeInEnglish), 'The node in German was automatically synced into English');
+        $this->assertEquals($englishString, $nodeInEnglish->getProperty('inlineEditableStringProperty'), 'The inline editable property was translated into English');
+        $this->assertEquals($germanString, $nodeInEnglish->getProperty('stringProperty'), 'The non-inline editable property was not translated into English');
+        $this->assertInternalProperties($nodeInGerman, $nodeInEnglish);
+
+        // Step 2
+        $nodeInGerman2 = $this->germanUserContext->getNode('/new-node');
+        $nodeInGerman2->setWorkspace($this->userWorkspace);
+        $nodeInGerman2->setProperty('inlineEditableStringProperty', $newGermanString);
+        $nodeInGerman2->setProperty('stringProperty', $newGermanString);
+        $nodeInGerman2->setHidden(true);
+        $this->userWorkspace->publishNode($nodeInGerman2, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInEnglish2 = $this->englishLiveContext->getNode('/new-node');
+
+        $this->assertEquals($newEnglishString, $nodeInEnglish2->getProperty('inlineEditableStringProperty'), 'The inline editable property was translated into English');
+        $this->assertEquals($newGermanString, $nodeInEnglish2->getProperty('stringProperty'), 'The non-inline editable property was not translated into English');
+        $this->assertInternalProperties($nodeInGerman2, $nodeInEnglish2);
     }
 
     /**
@@ -158,6 +203,9 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $nodeInGerman = $this->createTestNode();
         $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
 
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
         $nodeInItalian = $this->italianLiveContext->getNode('/new-node');
         $this->assertTrue(is_null($nodeInItalian), 'The node in German was not automatically synced into Italian');
     }
@@ -169,23 +217,179 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      */
     public function newNodeInGermanIsOnAdoptionSyncedToItalian(): void
     {
+        $germanString = $this->faker->text(100);
+        $englishString = $this->faker->text(100);
+        $italianString = $this->faker->text(100);
         $this->deeplServiceMock->method('translate')
-            ->withConsecutive([['inlineEditableStringProperty' => 'Hallo Welt!'], 'en'], [['inlineEditableStringProperty' => 'Hallo Welt!'], 'it'])
-            ->willReturnOnConsecutiveCalls(['inlineEditableStringProperty' => 'Hello World!'], ['inlineEditableStringProperty' => 'Ciao mondo!']);
+            ->withConsecutive([['inlineEditableStringProperty' => $germanString], 'en'], [['inlineEditableStringProperty' => $germanString], 'it'])
+            ->willReturnOnConsecutiveCalls(['inlineEditableStringProperty' => $englishString], ['inlineEditableStringProperty' => $italianString]);
 
-        $nodeInGerman = $this->createTestNode(['inlineEditableStringProperty' => 'Hallo Welt!', 'stringProperty' => 'Hallo Welt!']);
+        $nodeInGerman = $this->createTestNode(['inlineEditableStringProperty' => $germanString, 'stringProperty' => $germanString]);
         $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
-        $nodeInItalian = $this->italianUserContext->adoptNode($nodeInGerman);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $this->italianUserContext->adoptNode($nodeInGerman);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInItalian = $this->italianUserContext->getNode('/new-node');
 
         $this->assertTrue(!is_null($nodeInItalian), 'The node in German was automatically synced into Italian');
-        $this->assertEquals('Ciao mondo!', $nodeInItalian->getProperty('inlineEditableStringProperty'), 'The inline editable property was translated into Italian');
-        $this->assertEquals('Hallo Welt!', $nodeInItalian->getProperty('stringProperty'), 'The non-inline editable property was not translated into Italian');
+        $this->assertEquals($italianString, $nodeInItalian->getProperty('inlineEditableStringProperty'), 'The inline editable property was translated into Italian');
+        $this->assertEquals($germanString, $nodeInItalian->getProperty('stringProperty'), 'The non-inline editable property was not translated into Italian');
+        $this->assertInternalProperties($nodeInGerman, $nodeInItalian);
     }
 
+    /**
+     * @test
+     * @return void
+     * @throws Exception
+     */
+    public function movedNodeInGermanIsAlsoMovedInEnglish(): void
+    {
+        // Step 1: create two nodes on the same level
+        $parentNodeInGerman = $this->createTestNode([], 'new-node-1');
+        $childNodeInGerman = $this->createTestNode([], 'new-node-2');
+        $this->userWorkspace->publishNodes([$parentNodeInGerman, $childNodeInGerman], $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $parentNodeInEnglish = $this->englishLiveContext->getNode('/new-node-1');
+        $childNodeInEnglish = $this->englishLiveContext->getNode('/new-node-2');
+
+        $this->assertTrue(!is_null($parentNodeInEnglish), 'The parent node in German was automatically synced into English');
+        $this->assertTrue(!is_null($childNodeInEnglish), 'The child node in German was automatically synced into English');
+
+        // Step 2: move the child node into the parent node
+        $childNodeInGerman2 = $this->germanUserContext->getNode('/new-node-2');
+        $childNodeInGerman2->setWorkspace($this->userWorkspace);
+        $childNodeInGerman2->moveInto($parentNodeInGerman);
+        $this->userWorkspace->publishNode($childNodeInGerman2, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $childNodeInEnglish2 = $this->englishLiveContext->getNode('/new-node-1/new-node-2');
+
+        $this->assertTrue(!is_null($childNodeInEnglish2), 'The child node in German was correctly moved into the parent node in English');
+        $this->assertInternalProperties($childNodeInGerman2, $childNodeInEnglish2);
+    }
+
+    /**
+     * TODO: this test is not working because of some dangling workspace object
+     * _test
+     *
+     * @return void
+     * @throws Exception
+     */
+    public function copyIntoNodeInGermanIsAlsoCopiedIntoInEnglish(): void
+    {
+        $nodeInGerman = $this->createTestNode();
+        $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInGerman2 = $this->germanUserContext->getNode('/new-node');
+        $nodeInGerman2->setWorkspace($this->userWorkspace);
+        $copiedNodeInGerman = $nodeInGerman2->copyInto($nodeInGerman2, 'copied-node');
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $this->userWorkspace->publishNode($copiedNodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+//        $this->assertEquals($nodeInGerman, $this->germanLiveContext->getNode('new-node'));
+        $this->assertEquals($copiedNodeInGerman, $this->germanLiveContext->getNode('/new-node/copied-node'));
+        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node')));
+        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node/copied-node')));
+    }
+
+    /**
+     * TODO: this test is not working because of some dangling workspace object
+     * _test
+     * @return void
+     * @throws Exception
+     */
+    public function copyAfterNodeInGermanIsAlsoCopiedAfterInEnglish(): void
+    {
+        $nodeInGerman = $this->createTestNode();
+        $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInGerman2 = $this->germanUserContext->getNode('/new-node');
+        $nodeInGerman2->copyAfter($nodeInGerman2, 'copied-node');
+
+        $copiedNodeInGerman2 = $this->germanUserContext->getNode('/copied-node');
+        $copiedNodeInGerman2->setWorkspace($this->userWorkspace);
+
+        echo 'Node Workspace before publish: ' .spl_object_id($copiedNodeInGerman2->getWorkspace()) . PHP_EOL;
+        echo 'User before publish: ' .spl_object_id($this->userWorkspace) . PHP_EOL;
+
+        $this->userWorkspace->publish($this->liveWorkspace);
+
+        echo 'Node Workspace after publish: '  .spl_object_id($copiedNodeInGerman2->getWorkspace()) . PHP_EOL;
+        echo 'Node Workspace Name after publish: ' . $copiedNodeInGerman2->getWorkspace()->getName() . PHP_EOL;
+        echo 'Live Workspace after publish: ' . spl_object_id($this->liveWorkspace) . PHP_EOL;
+        $this->persistenceManager->persistAll();
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+//        $this->assertEquals($nodeInGerman, $rootNodeInGermanUserContext->getNode('new-node'));
+//        $this->assertEquals($copiedNodeInGerman, $rootNodeInGermanUserContext->getNode('copied-node'));
+        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node')));
+        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/copied-node')));
+    }
+
+    /**
+     * TODO: this test is not working because of some dangling workspace object
+     * @test
+     * @return void
+     */
+    public function removedNodeInGermanIsAlsoRemovedInEnglish(): void
+    {
+        // Step 1: create a node in German
+        $nodeInGerman = $this->createTestNode();
+        $nodeInGerman->getWorkspace()->publishNode($nodeInGerman, $this->liveWorkspace);
+        $nodeInEnglish = $this->getContext($this->liveWorkspaceName, 'en')->getNode('/new-node');
+
+        $this->assertTrue(!is_null($nodeInEnglish), 'The parent node in German was automatically synced into English');
+
+        // Step 2: the node in German is deleted and is also expected to be deleted in English
+        $nodeInGerman = $this->getContext($this->userWorkspaceName, 'de')->getNode('/new-node');
+        $nodeInGerman->remove();
+        $nodeInGerman->getWorkspace()->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $nodeInGerman = $this->getContext($this->liveWorkspaceName, 'de')->getNode('/new-node');
+        $nodeInEnglish = $this->getContext($this->liveWorkspaceName, 'en')->getNode('/new-node');
+
+        $this->assertTrue(is_null($nodeInGerman), 'The node in German was removed');
+        $this->assertTrue(is_null($nodeInEnglish), 'The node in English was removed');
+    }
+
+    /**
+     * @param string $nodeType
+     *
+     * @return NodeType|null
+     */
     protected function getNodeType(string $nodeType): ?NodeType
     {
-        $nodeTypeManager = $this->objectManager->get(NodeTypeManager::class);
-        return $nodeTypeManager->getNodeType($nodeType);
+        try {
+            $nodeTypeManager = $this->objectManager->get(NodeTypeManager::class);
+            return $nodeTypeManager->getNodeType($nodeType);
+        } catch (NodeTypeNotFoundException) {
+            return null;
+        }
     }
 
     /**
@@ -193,21 +397,155 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      * @param string $name
      *
      * @return NodeInterface
-     * @throws \Exception
+     * @throws Exception
      */
     protected function createTestNode(array $properties = [], string $name = 'new-node'): NodeInterface
     {
-        $identifier = Algorithms::generateUUID();
-        $template = new NodeTemplate();
-        $template->setName($name);
-        $template->setIdentifier($identifier);
-        $template->setNodeType($this->getNodeType('Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation'));
+        $rootNodeInSourceContext = $this->germanUserContext->getRootNode();
+        $rootNodeInSourceContext->setWorkspace($this->userWorkspace);
+        $node = $rootNodeInSourceContext->createNode($name, $this->getNodeType('Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation'), Algorithms::generateUUID());
         foreach ($properties as $propertyName => $propertyValue) {
-            $template->setProperty($propertyName, $propertyValue);
+            $node->setProperty($propertyName, $propertyValue);
+        }
+        return $node;
+    }
+
+    /**
+     * @param NodeInterface $sourceNode
+     * @param NodeInterface $targetNode
+     *
+     * @return void
+     */
+    protected function assertInternalProperties(NodeInterface $sourceNode, NodeInterface $targetNode): void
+    {
+        $this->assertEquals($sourceNode->getHiddenBeforeDateTime(), $targetNode->getHiddenBeforeDateTime(), 'hiddenBeforeDateTime was correctly synced');
+        $this->assertEquals($sourceNode->getHiddenAfterDateTime(), $targetNode->getHiddenAfterDateTime(), 'hiddenAfterDateTime was correctly synced');
+        $this->assertEquals($sourceNode->getIndex(), $targetNode->getIndex(), 'index was correctly synced');
+        $this->assertEquals($sourceNode->isHidden(), $targetNode->isHidden(), 'isHidden was correctly synced');
+        $this->assertEquals($sourceNode->isHiddenInIndex(), $targetNode->isHiddenInIndex(), 'isHiddenInIndex was correctly synced');
+        $this->assertEquals($sourceNode->getNodeType(), $targetNode->getNodeType(), 'nodeType was correctly synced');
+    }
+
+    /**
+     * @param string $workspaceName
+     * @param string $targetLanguageDimension
+     *
+     * @return Context
+     */
+    protected function getContext(string $workspaceName, string $targetLanguageDimension): Context
+    {
+        return $this->contextFactory->create($this->getContextConfiguration($workspaceName, $targetLanguageDimension));
+    }
+
+    /**
+     * @param string $workspaceName
+     * @param string $targetLanguageDimension
+     *
+     * @return array
+     */
+    protected function getContextConfiguration(string $workspaceName, string $targetLanguageDimension): array
+    {
+        return [
+            'workspaceName' => $workspaceName,
+            'dimensions' => ['language' => [$targetLanguageDimension]],
+            'invisibleContentShown' => true,
+            'removedContentShown' => true,
+            'inaccessibleContentShown' => true
+        ];
+    }
+
+    /**
+     * @return void
+     * @throws IllegalObjectTypeException
+     */
+    protected function setUpWorkspacesAndContexts(): void
+    {
+        $this->persistenceManager->clearState();
+        $this->nodeDataRepository = new NodeDataRepository();
+        $workspaceRepository = $this->objectManager->get(WorkspaceRepository::class);
+
+        $this->liveWorkspace = $workspaceRepository->findByIdentifier($this->liveWorkspaceName);
+        if ($this->liveWorkspace === null) {
+            $this->liveWorkspace = new Workspace($this->liveWorkspaceName);
+            $workspaceRepository->add($this->liveWorkspace);
+            $this->persistenceManager->persistAll();
         }
 
-        $rootNodeInSourceContext = $this->germanUserContext->getRootNode();
+        $this->userWorkspace = $workspaceRepository->findByIdentifier($this->userWorkspaceName);
+        if ($this->userWorkspace === null) {
+            $this->userWorkspace = new Workspace($this->userWorkspaceName, $this->liveWorkspace);
+            $workspaceRepository->add($this->userWorkspace);
+            $this->persistenceManager->persistAll();
+        }
 
-        return $rootNodeInSourceContext->createNodeFromTemplate($template);
+        $this->contextFactory = $this->objectManager->get(ContextFactoryInterface::class);
+        // The root live context, where our original content is live
+        $this->germanLiveContext = $this->contextFactory->create([
+            'workspaceName' => $this->liveWorkspaceName,
+            'dimensions' => ['language' => ['de']],
+            'invisibleContentShown' => true,
+            'removedContentShown' => true
+        ]);
+        // The root user context, where the test user creates content, which is eventually published to live
+        $this->germanUserContext = $this->contextFactory->create([
+            'workspaceName' => $this->userWorkspaceName,
+            'dimensions' => ['language' => ['de']],
+            'targetDimensions' => ['language' => 'de'],
+            'invisibleContentShown' => true,
+            'removedContentShown' => true
+        ]);
+        // The English live context, where content from the German live context is synced automatically
+        $this->englishLiveContext = $this->contextFactory->create([
+            'workspaceName' => $this->liveWorkspaceName,
+            'dimensions' => ['language' => ['en']],
+            'targetDimensions' => ['language' => 'en'],
+            'invisibleContentShown' => true,
+            'removedContentShown' => true
+        ]);
+        // The Italian live context, where content from the German live context is only copied once on node adoption
+        $this->italianLiveContext = $this->contextFactory->create([
+            'workspaceName' => $this->liveWorkspaceName,
+            'dimensions' => ['language' => ['it']],
+            'targetDimensions' => ['language' => 'it'],
+            'invisibleContentShown' => true,
+            'removedContentShown' => true
+        ]);
+        $this->italianUserContext = $this->contextFactory->create([
+            'workspaceName' => $this->userWorkspaceName,
+            'dimensions' => ['language' => ['it']],
+            'targetDimensions' => ['language' => 'it'],
+            'invisibleContentShown' => true,
+            'removedContentShown' => true
+        ]);
+
+        $this->persistenceManager->persistAll();
+    }
+
+    /**
+     * @return void
+     */
+    protected function saveNodesAndTearDown(): void
+    {
+        if ($this->nodeDataRepository !== null) {
+            $this->nodeDataRepository->flushNodeRegistry();
+        }
+        /** @var NodeFactory $nodeFactory */
+        $nodeFactory = $this->objectManager->get(NodeFactory::class);
+        $nodeFactory->reset();
+        $this->contextFactory->reset();
+
+        $this->persistenceManager->persistAll();
+        $this->persistenceManager->clearState();
+        $this->nodeDataRepository = null;
+        $this->germanLiveContext->getFirstLevelNodeCache()->flush();
+        $this->germanLiveContext = null;
+        $this->germanUserContext->getFirstLevelNodeCache()->flush();
+        $this->germanUserContext = null;
+        $this->englishLiveContext->getFirstLevelNodeCache()->flush();
+        $this->englishLiveContext = null;
+        $this->italianUserContext->getFirstLevelNodeCache()->flush();
+        $this->italianLiveContext = null;
+        $this->italianUserContext->getFirstLevelNodeCache()->flush();
+        $this->italianUserContext = null;
     }
 }
