@@ -15,3 +15,5 @@ composer.lock
 /flow.bat
 /Tests/Reports
 *.example
+.phpunit.result.cache
+Configuration/README
