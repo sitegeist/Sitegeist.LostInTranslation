@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Controller;
 
-use Neos\Cache\Frontend\StringFrontend;
 use Neos\Fusion\View\FusionView;
 use Neos\Neos\Controller\Module\AbstractModuleController;
 use Neos\Flow\Annotations as Flow;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
-use Sitegeist\LostInTranslation\Package;
 
 class LostInTranslationModuleController extends AbstractModuleController
 {
@@ -20,10 +19,10 @@ class LostInTranslationModuleController extends AbstractModuleController
     protected $translationService;
 
     /**
-     * @var StringFrontend
      * @Flow\Inject
+     * @var DeepLCustomAuthenticationKeyService
      */
-    public $apiKeyCache;
+    protected $customAuthenticationKeyService;
 
     /**
      * @var FusionView
@@ -43,13 +42,13 @@ class LostInTranslationModuleController extends AbstractModuleController
 
     public function storeCustomKeyAction(string $key): void
     {
-        $this->apiKeyCache->set(Package::API_KEY_CACHE_ID, $key);
+        $this->customAuthenticationKeyService->set($key);
         $this->forward('index');
     }
 
     public function removeCustomKeyAction(): void
     {
-        $this->apiKeyCache->remove(Package::API_KEY_CACHE_ID);
+        $this->customAuthenticationKeyService->remove();
         $this->forward('index');
     }
 }

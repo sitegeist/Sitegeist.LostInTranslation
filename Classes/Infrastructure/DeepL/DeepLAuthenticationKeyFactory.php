@@ -2,9 +2,8 @@
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
-use Neos\Cache\Frontend\StringFrontend;
+use InvalidArgumentException;
 use Neos\Flow\Annotations as Flow;
-use Sitegeist\LostInTranslation\Package;
 
 /**
  * @Flow\Scope("singleton")
@@ -12,23 +11,27 @@ use Sitegeist\LostInTranslation\Package;
 class DeepLAuthenticationKeyFactory
 {
     /**
-     * @var array
+     * @var array{authenticationKey: string}
      * @Flow\InjectConfiguration(path="DeepLApi")
      */
-    protected $settings;
+    protected array $settings;
 
     /**
-     * @var StringFrontend
+     * @Flow\Inject
+     * @var DeepLCustomAuthenticationKeyService
      */
-    protected $apiKeyCache;
+    protected $customAuthenticationKeyService;
 
     /**
      * @return DeepLAuthenticationKey
      */
     public function create(): DeepLAuthenticationKey
     {
-        $customKey = $this->apiKeyCache->get(Package::API_KEY_CACHE_ID) ?: null;
+        $customKey = $this->customAuthenticationKeyService->get();
         $settingsKey = $this->settings['authenticationKey'] ?? null;
-        return new DeepLAuthenticationKey($customKey ?? $settingsKey);
+        if (!isset($settingsKey) && !isset($customKey)) {
+            throw new InvalidArgumentException('Empty strings are not allowed as authentication key');
+        }
+        return new DeepLAuthenticationKey($customKey ?? $settingsKey, !is_null($customKey));
     }
 }

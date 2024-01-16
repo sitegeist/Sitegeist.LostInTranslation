@@ -20,7 +20,6 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
-use Sitegeist\LostInTranslation\Package;
 use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
 
 /**
@@ -54,9 +53,9 @@ class DeepLTranslationService implements TranslationServiceInterface
 
     /**
      * @Flow\Inject
-     * @var StringFrontend
+     * @var DeepLCustomAuthenticationKeyService
      */
-    protected $apiKeyCache;
+    protected $customAuthenticationKeyService;
 
     /**
      * @var StringFrontend
@@ -189,7 +188,7 @@ class DeepLTranslationService implements TranslationServiceInterface
     public function getStatus(): ApiStatus
     {
         $hasSettingsKey =  $this->settings['authenticationKey'] ? true : false;
-        $hasCustomKey = $this->apiKeyCache->has(Package::API_KEY_CACHE_ID);
+        $hasCustomKey = !is_null($this->customAuthenticationKeyService->get());
 
         try {
             $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
@@ -201,9 +200,9 @@ class DeepLTranslationService implements TranslationServiceInterface
 
             if ($apiResponse->getStatusCode() == 200) {
                 $json = json_decode($apiResponse->getBody()->getContents(), true);
-                return new ApiStatus(true, $json['character_count'], $json['character_limit'], $hasSettingsKey, $hasCustomKey, $deeplAuthenticationKey->isFree());
+                return new ApiStatus(true, $json['character_count'], $json['character_limit'], $hasSettingsKey, $hasCustomKey, $deeplAuthenticationKey->isFree);
             } else {
-                return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, $deeplAuthenticationKey->isFree());
+                return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, $deeplAuthenticationKey->isFree);
             }
         } catch (\Exception $exception) {
             return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, false);
@@ -250,10 +249,10 @@ class DeepLTranslationService implements TranslationServiceInterface
         string $method = 'GET'
     ): ServerRequestInterface {
         $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
-        $baseUri = $deeplAuthenticationKey->isFree() ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
+        $baseUri = $deeplAuthenticationKey->isFree ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
         return $this->serverRequestFactory->createServerRequest($method, $baseUri . $endpoint)
             ->withHeader('Accept', 'application/json')
-            ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->getAuthenticationKey()))
+            ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->authenticationKey))
             ->withHeader('Content-Type', 'application/x-www-form-urlencoded');
     }
 }
