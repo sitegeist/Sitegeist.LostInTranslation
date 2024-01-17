@@ -38,7 +38,7 @@ class LostInTranslationModuleControllerTest extends AbstractFunctionalTestCase
     }
 
     /**
-     * _test
+     * @test
      * @return void
      * @throws InfiniteRedirectionException
      */
@@ -55,7 +55,7 @@ class LostInTranslationModuleControllerTest extends AbstractFunctionalTestCase
     }
 
     /**
-     * _test
+     * @test
      * @return void
      * @throws \Neos\Flow\Http\Client\InfiniteRedirectionException
      */
