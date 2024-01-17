@@ -36,21 +36,3 @@ Neos:
             uriSegment: 'it'
             options:
               translationStrategy: 'once'
-#Sitegeist:
-#  LostInTranslation:
-#    nodeTranslation:
-#      skipAuthorizationChecks: true
-#    DeepLApi:
-#      enableCache: true
-#      authenticationKey: '%env:DEEPL_AUTHENTICATION_KEY%'
-#      defaultOptions:
-#        splitting_tags: 'br'
-#      ignoredTerms:
-#        - 'Code Q'
-#        - 'Innsbruck Marketing GmbH'
-#        - 'Innsbruck Marketing'
-#        - 'Nordkette'
-#        - 'Mag.'
-#        - 'Dr.'
-#        - 'Dipl.Ing.'
-#        - 'Dipl.-Ing.'
