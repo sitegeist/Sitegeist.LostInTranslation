@@ -94,7 +94,7 @@ class NodeTranslationService
      */
     protected $translatablePropertiesFactory;
 
-    /*
+    /**
      * This is an internal property and should always be 'live'.
      * Its only purpose is to be overridden in functional testing.
      *
