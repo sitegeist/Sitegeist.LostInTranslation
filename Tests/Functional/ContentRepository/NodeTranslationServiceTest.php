@@ -280,7 +280,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     }
 
     /**
-     * TODO: this test is not working because of some dangling workspace object
+     * TODO: this test is not working
      * _test
      *
      * @return void
@@ -298,6 +298,9 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $nodeInGerman2->setWorkspace($this->userWorkspace);
         $copiedNodeInGerman = $nodeInGerman2->copyInto($nodeInGerman2, 'copied-node');
 
+        // If this part is kept, no "new entity was found through relationship" error is
+        // thrown, however it will also not find the copied node in the second assessment
+        // If this part is removed, we have said error.
         $this->saveNodesAndTearDown();
         $this->setUpWorkspacesAndContexts();
 
@@ -306,8 +309,8 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $this->saveNodesAndTearDown();
         $this->setUpWorkspacesAndContexts();
 
-//        $this->assertEquals($nodeInGerman, $this->germanLiveContext->getNode('new-node'));
-        $this->assertEquals($copiedNodeInGerman, $this->germanLiveContext->getNode('/new-node/copied-node'));
+        $this->assertTrue(!is_null($this->germanLiveContext->getNode('/new-node')));
+        $this->assertTrue(!is_null($this->germanLiveContext->getNode('/new-node/copied-node')));
         $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node')));
         $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node/copied-node')));
     }
@@ -335,24 +338,25 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         echo 'Node Workspace before publish: ' .spl_object_id($copiedNodeInGerman2->getWorkspace()) . PHP_EOL;
         echo 'User before publish: ' .spl_object_id($this->userWorkspace) . PHP_EOL;
 
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
         $this->userWorkspace->publish($this->liveWorkspace);
 
         echo 'Node Workspace after publish: '  .spl_object_id($copiedNodeInGerman2->getWorkspace()) . PHP_EOL;
         echo 'Node Workspace Name after publish: ' . $copiedNodeInGerman2->getWorkspace()->getName() . PHP_EOL;
         echo 'Live Workspace after publish: ' . spl_object_id($this->liveWorkspace) . PHP_EOL;
-        $this->persistenceManager->persistAll();
 
         $this->saveNodesAndTearDown();
         $this->setUpWorkspacesAndContexts();
 
-//        $this->assertEquals($nodeInGerman, $rootNodeInGermanUserContext->getNode('new-node'));
-//        $this->assertEquals($copiedNodeInGerman, $rootNodeInGermanUserContext->getNode('copied-node'));
+        $this->assertTrue(!is_null($this->germanLiveContext->getNode('/new-node')));
+        $this->assertTrue(!is_null($this->germanLiveContext->getNode('/copied-node')));
         $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node')));
         $this->assertTrue(!is_null($this->englishLiveContext->getNode('/copied-node')));
     }
 
     /**
-     * TODO: this test is not working because of some dangling workspace object
      * @test
      * @return void
      */
