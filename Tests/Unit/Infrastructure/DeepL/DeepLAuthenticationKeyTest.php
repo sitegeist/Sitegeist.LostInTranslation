@@ -7,16 +7,6 @@ use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKey;
 
 class DeepLAuthenticationKeyTest extends UnitTestCase
 {
-    /** @test */
-    public function emptyAuthenticationKeyThrowsInvalidArgumentException(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Empty strings are not allowed as authentication key');
-
-
-        new DeepLAuthenticationKey('');
-    }
-
     public static function constructorTestParameters(): array
     {
         return [
@@ -40,8 +30,8 @@ class DeepLAuthenticationKeyTest extends UnitTestCase
         $authenticationKeyObject = new DeepLAuthenticationKey($authenticationKey);
 
 
-        $this->assertEquals($expectedIsFree, $authenticationKeyObject->isFree());
-        $this->assertEquals($expectedAuthenticationKey, $authenticationKeyObject->getAuthenticationKey());
-        $this->assertEquals($authenticationKey, $authenticationKeyObject->__toString());
+        $this->assertEquals($expectedIsFree, $authenticationKeyObject->isFree);
+        $this->assertEquals($expectedAuthenticationKey, $authenticationKeyObject->authenticationKey);
+        $this->assertEquals($authenticationKey, (string)$authenticationKeyObject);
     }
 }

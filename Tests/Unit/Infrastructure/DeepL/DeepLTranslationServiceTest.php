@@ -17,12 +17,13 @@ use Neos\Http\Factories\UriFactory;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKey;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class DeepLTranslationServiceTest extends UnitTestCase
 {
     protected MockObject|VariableFrontend $translationCache;
-    protected MockObject|VariableFrontend $apiKeyCache;
+    protected MockObject|DeepLCustomAuthenticationKeyService $customKeyServiceMock;
     protected MockObject|LoggerInterface $loggerMock;
     protected MockObject|Browser $browserMock;
 
@@ -30,7 +31,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
     {
         $this->translationCache = new VariableFrontend('Sitegeist_LostInTranslation_TranslationCache', new TransientMemoryBackend());
         $this->translationCache->initializeObject();
-        $this->apiKeyCache = $this->getAccessibleMock(StringFrontend::class, ['get', 'has'], [], '', false);
+        $this->customKeyServiceMock = $this->getAccessibleMock(DeepLCustomAuthenticationKeyService::class, ['get'], [], '', false);
         $this->loggerMock = Mockery::mock(LoggerInterface::class);
         $this->browserMock = $this->getAccessibleMock(Browser::class, ['sendRequest'], [], '', false);
     }
@@ -173,12 +174,12 @@ class DeepLTranslationServiceTest extends UnitTestCase
     public static function getApiStatusWorksCorrectlyData(): array
     {
         return [
-            ['settingsKey', false, new Response(200, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 99, 999, true, false, false],
-            ['settingsKey:fx', false, new Response(200, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 99, 999, true, false, true],
+            ['settingsKey', null, new Response(200, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 99, 999, true, false, false],
+            ['settingsKey:fx', null, new Response(200, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 99, 999, true, false, true],
             ['settingsKey:fx', 'cachedKey', new Response(200, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 99, 999, true, true, false],
             ['settingsKey', 'cachedKey:fx', new Response(200, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 99, 999, true, true, true],
             ['settingsKey', 'cachedKey:fx', new Response(400, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 0, 0, true, true, true],
-            [null, false, new Response(400, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 0, 0, false, false, false],
+            [null, null, new Response(400, [], json_encode(['character_count' => 99, 'character_limit' => 999])), 0, 0, false, false, false],
         ];
     }
 
@@ -197,11 +198,10 @@ class DeepLTranslationServiceTest extends UnitTestCase
      *
      * @return void
      */
-    public function getApiStatusWorksCorrectly(string|null $settingsKey, string|bool $customKey, Response $usageResponse, int $expectedCharacterCount, int $expectedCharacterLimit, bool $expectedHasSettingsKey, bool $expectedHasCustomKey, bool $expectedIsFree): void
+    public function getApiStatusWorksCorrectly(string|null $settingsKey, string|null $customKey, Response $usageResponse, int $expectedCharacterCount, int $expectedCharacterLimit, bool $expectedHasSettingsKey, bool $expectedHasCustomKey, bool $expectedIsFree): void
     {
         $service = $this->getService(['authenticationKey' => $settingsKey]);
-        $this->apiKeyCache->method('has')->willReturn($customKey !== false);
-        $this->apiKeyCache->method('get')->willReturn($customKey);
+        $this->customKeyServiceMock->method('get')->willReturn($customKey);
         $this->browserMock->method('sendRequest')->willReturn($usageResponse);
         $validAuthenticationKey = ($customKey ?: null) ?? $settingsKey ?? null;
         if ($validAuthenticationKey) {
@@ -228,7 +228,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
         $this->inject($service, 'streamFactory', new StreamFactory());
         $this->inject($service, 'logger', $this->loggerMock);
         $this->inject($service, 'translationCache', $this->translationCache);
-        $this->inject($service, 'apiKeyCache', $this->apiKeyCache);
+        $this->inject($service, 'customAuthenticationKeyService', $this->customKeyServiceMock);
         $this->inject($service, 'settings', array_merge_recursive([
                 'baseUri' => 'https://api.deepl.com/v2/',
                 'baseUriFree' => 'https://api-free.deepl.com/v2/',

@@ -48,6 +48,7 @@
     },
     "config": {
         "bin-dir": "bin",
+        "vendor-dir": "Packages/Libraries",
         "allow-plugins": {
             "neos/composer-plugin": true
         }

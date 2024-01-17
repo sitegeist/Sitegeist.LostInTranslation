@@ -6,19 +6,20 @@ use Neos\Cache\Frontend\StringFrontend;
 use Neos\Flow\Tests\UnitTestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKeyFactory;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 
 class DeepLAuthenticationKeyFactoryTest extends UnitTestCase
 {
-    protected MockObject|StringFrontend $apiKeyCache;
+    protected MockObject|DeepLCustomAuthenticationKeyService $customKeyService;
     public function setUp(): void
     {
-        $this->apiKeyCache = $this->getAccessibleMock(StringFrontend::class, ['get'], [], '', false);
+        $this->customKeyService = $this->getAccessibleMock(DeepLCustomAuthenticationKeyService::class, ['get'], [], '', false);
     }
 
     /** @test */
     public function cachedCustomKeyOverridesConfiguredAuthenticationKey(): void
     {
-        $this->apiKeyCache->method('get')->willReturn('cachedKey');
+        $this->customKeyService->method('get')->willReturn('cachedKey');
 
 
         $authenticationKey = $this->getFactory()->create();
@@ -30,7 +31,7 @@ class DeepLAuthenticationKeyFactoryTest extends UnitTestCase
     /** @test */
     public function canBeCreatedWithConfiguredAuthenticationKey(): void
     {
-        $this->apiKeyCache->method('get')->willReturn(false);
+        $this->customKeyService->method('get')->willReturn(null);
 
 
         $authenticationKey = $this->getFactory()->create();
@@ -42,7 +43,7 @@ class DeepLAuthenticationKeyFactoryTest extends UnitTestCase
     protected function getFactory(): MockObject|DeepLAuthenticationKeyFactory
     {
         $factory = new DeepLAuthenticationKeyFactory();
-        $this->inject($factory, 'apiKeyCache', $this->apiKeyCache);
+        $this->inject($factory, 'customAuthenticationKeyService', $this->customKeyService);
         $this->inject($factory, 'settings', [
             'authenticationKey' => 'configuredKey'
         ]);

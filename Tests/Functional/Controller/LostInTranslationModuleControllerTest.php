@@ -2,8 +2,6 @@
 
 namespace Sitegeist\LostInTranslation\Tests\Functional\Controller;
 
-use Neos\Cache\Frontend\StringFrontend;
-use Neos\Flow\Cache\CacheManager;
 use Neos\Flow\Http\Client\InfiniteRedirectionException;
 use Neos\Flow\Security\Account;
 use Neos\Flow\Security\Context;
@@ -11,19 +9,18 @@ use Neos\Neos\Controller\Backend\ModuleController;
 use Neos\Party\Domain\Model\Person;
 use Neos\Party\Domain\Model\PersonName;
 use Neos\Party\Domain\Service\PartyService;
-use Sitegeist\LostInTranslation\Package;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 use Sitegeist\LostInTranslation\Tests\Functional\AbstractFunctionalTestCase;
 
 class LostInTranslationModuleControllerTest extends AbstractFunctionalTestCase
 {
-    protected StringFrontend $apiKeyCache;
+    protected DeepLCustomAuthenticationKeyService $customKeyService;
 
     public function setUp(): void
     {
         parent::setUp();
 
-        $cacheManager = $this->objectManager->get(CacheManager::class);
-        $this->apiKeyCache = $cacheManager->getCache('Sitegeist_LostInTranslation_ApiKeyCache');
+        $this->customKeyService = $this->objectManager->get(DeepLCustomAuthenticationKeyService::class);
 
         $moduleController = $this->objectManager->get(ModuleController::class);
 
@@ -54,7 +51,7 @@ class LostInTranslationModuleControllerTest extends AbstractFunctionalTestCase
             ],
             '__csrfToken' => $this->securityContext->getCsrfProtectionToken()
         ]);
-        $this->assertEquals($fakeKey, $this->apiKeyCache->get(Package::API_KEY_CACHE_ID));
+        $this->assertEquals($fakeKey, $this->customKeyService->get());
     }
 
     /**
@@ -67,6 +64,6 @@ class LostInTranslationModuleControllerTest extends AbstractFunctionalTestCase
         $this->browser->request('http://localhost/neos/management/sitegeist_lostintranslation?moduleArguments%5B%40package%5D=sitegeist.lostintranslation&moduleArguments%5B%40controller%5D=lostintranslationmodule&moduleArguments%5B%40action%5D=removecustomkey&moduleArguments%5B%40format%5D=html&moduleArguments%5B%40subpackage%5D=', 'POST', [
             '__csrfToken' => $this->securityContext->getCsrfProtectionToken()
         ]);
-        $this->assertFalse($this->apiKeyCache->get(Package::API_KEY_CACHE_ID));
+        $this->assertNull($this->customKeyService->get());
     }
 }
