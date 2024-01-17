@@ -94,6 +94,14 @@ class NodeTranslationService
      */
     protected $translatablePropertiesFactory;
 
+    /*
+     * This is an internal property and should always be 'live'.
+     * Its only purpose is to be overridden in functional testing.
+     *
+     * @var string
+     */
+    protected $liveWorkspaceName = 'live';
+
     /**
      * @param NodeInterface $node
      * @param Context $context
@@ -135,16 +143,16 @@ class NodeTranslationService
             return;
         }
 
-        if ($workspace->getName() !== 'live') {
+        if ($workspace->getName() !== $this->liveWorkspaceName) {
             return;
         }
 
         if ($this->skipAuthorizationChecks) {
             $this->securityContext->withoutAuthorizationChecks(function () use ($node) {
-                $this->syncNode($node);
+                $this->syncNode($node, $this->liveWorkspaceName);
             });
         } else {
-            $this->syncNode($node);
+            $this->syncNode($node, $this->liveWorkspaceName);
         }
     }
 
