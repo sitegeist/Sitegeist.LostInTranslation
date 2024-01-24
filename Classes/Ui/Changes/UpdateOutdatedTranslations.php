@@ -45,7 +45,10 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
             foreach ($translatableProperties as $translatableProperty) {
                 $name = $translatableProperty->getName();
                 $value = $referenceNode->getProperty($name);
-                if (!empty($value) && is_string($value) && strip_tags($value) !== '') {
+                if (
+                    is_string($value)
+                    && (!empty($value) || !empty($node->getProperty($name) ?: ''))
+                ) {
                     $propertiesToTranslate[$name] = $value;
                 }
             }

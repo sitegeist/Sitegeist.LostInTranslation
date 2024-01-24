@@ -31,7 +31,7 @@ prototype(Sitegeist.LostInTranslation:Collection.TranslationInformation) < proto
                             Missing Contents: <Neos.Fusion:Loop items={props.status.missing} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
                         </p>
                         <p @if={props.status.outdated}>
-                            Outdated Contents: <Neos.Fusion:Loop items={props.status.outdated}>{item.node.label}</Neos.Fusion:Loop>
+                            Outdated Contents: <Neos.Fusion:Loop items={props.status.outdated} @glue=", ">{item.node.label}</Neos.Fusion:Loop>
                         </p>
                     </Neos.Fusion:Fragment>
                 </lost-in-translation-info>
