@@ -537,6 +537,8 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $nodeFactory = $this->objectManager->get(NodeFactory::class);
         $nodeFactory->reset();
         $this->contextFactory->reset();
+        $nodeTranslationService = $this->objectManager->get(NodeTranslationService::class);
+        $nodeTranslationService->resetContextCache();
 
         $this->persistenceManager->persistAll();
         $this->persistenceManager->clearState();

@@ -8,6 +8,7 @@ use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
+use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
@@ -72,7 +73,7 @@ class NodeTranslationService
 
     /**
      * @Flow\Inject
-     * @var ContextFactory
+     * @var ContextFactoryInterface
      */
     protected $contextFactory;
 
@@ -314,5 +315,10 @@ class NodeTranslationService
                 }
             }
         }
+    }
+
+    public function resetContextCache(): void
+    {
+        $this->contextFirstLevelCache = [];
     }
 }
