@@ -248,7 +248,47 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      * @return void
      * @throws Exception
      */
-    public function movedNodeInGermanIsAlsoMovedInEnglish(): void
+    public function movedNodeBeforeInGermanIsAlsoMovedBeforeInEnglish(): void
+    {
+        // Step 1: create two nodes on the same level
+        $firstNodeInGerman = $this->createTestNode([], 'new-node-1');
+        $secondNodeInGerman = $this->createTestNode([], 'new-node-2');
+        $this->userWorkspace->publishNodes([$firstNodeInGerman, $secondNodeInGerman], $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $firstNodeInEnglish = $this->englishLiveContext->getNode('/new-node-1');
+        $secondNodeInEnglish = $this->englishLiveContext->getNode('/new-node-2');
+
+        $this->assertTrue(!is_null($firstNodeInEnglish), 'The parent node in German was automatically synced into English');
+        $this->assertTrue(!is_null($secondNodeInEnglish), 'The child node in German was automatically synced into English');
+
+        // Step 2: move the second node before the first node
+        $firstNodeInGerman2 = $this->germanUserContext->getNode('/new-node-1');
+        $secondNodeInGerman2 = $this->germanUserContext->getNode('/new-node-2');
+        $secondNodeInGerman2->setWorkspace($this->userWorkspace);
+        $secondNodeInGerman2->moveBefore($firstNodeInGerman2);
+        $this->userWorkspace->publishNode($secondNodeInGerman2, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $firstNodeInEnglish2 = $this->englishLiveContext->getNode('/new-node-1');
+        $secondNodeInEnglish2 = $this->englishLiveContext->getNode('/new-node-2');
+
+        $this->assertTrue(!is_null($secondNodeInEnglish2), 'The second node in German was correctly moved after the first node in English');
+        $this->assertGreaterThan($secondNodeInGerman2->getIndex(), $firstNodeInGerman2->getIndex());
+        $this->assertGreaterThan($secondNodeInEnglish2->getIndex(), $firstNodeInEnglish2->getIndex());
+        $this->assertInternalProperties($secondNodeInGerman2, $secondNodeInEnglish2);
+    }
+
+    /**
+     * @test
+     * @return void
+     * @throws Exception
+     */
+    public function movedNodeIntoInGermanIsAlsoMovedIntoInEnglish(): void
     {
         // Step 1: create two nodes on the same level
         $parentNodeInGerman = $this->createTestNode([], 'new-node-1');
@@ -277,6 +317,80 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
 
         $this->assertTrue(!is_null($childNodeInEnglish2), 'The child node in German was correctly moved into the parent node in English');
         $this->assertInternalProperties($childNodeInGerman2, $childNodeInEnglish2);
+    }
+
+    /**
+     * @test
+     * @return void
+     * @throws Exception
+     */
+    public function movedNodeAfterInGermanIsAlsoMovedAfterInEnglish(): void
+    {
+        // Step 1: create two nodes on the same level
+        $firstNodeInGerman = $this->createTestNode([], 'new-node-1');
+        $secondNodeInGerman = $this->createTestNode([], 'new-node-2');
+        $this->userWorkspace->publishNodes([$firstNodeInGerman, $secondNodeInGerman], $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $firstNodeInEnglish = $this->englishLiveContext->getNode('/new-node-1');
+        $secondNodeInEnglish = $this->englishLiveContext->getNode('/new-node-2');
+
+        $this->assertTrue(!is_null($firstNodeInEnglish), 'The parent node in German was automatically synced into English');
+        $this->assertTrue(!is_null($secondNodeInEnglish), 'The child node in German was automatically synced into English');
+
+        // Step 2: move the second node after the first node
+        $firstNodeInGerman2 = $this->germanUserContext->getNode('/new-node-1');
+        $secondNodeInGerman2 = $this->germanUserContext->getNode('/new-node-2');
+        $secondNodeInGerman2->setWorkspace($this->userWorkspace);
+        $secondNodeInGerman2->moveAfter($firstNodeInGerman2);
+        $this->userWorkspace->publishNode($secondNodeInGerman2, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $firstNodeInEnglish2 = $this->englishLiveContext->getNode('/new-node-1');
+        $secondNodeInEnglish2 = $this->englishLiveContext->getNode('/new-node-2');
+
+        $this->assertTrue(!is_null($secondNodeInEnglish2), 'The second node in German was correctly moved after the first node in English');
+        $this->assertLessThan($secondNodeInGerman2->getIndex(), $firstNodeInGerman2->getIndex());
+        $this->assertLessThan($secondNodeInEnglish2->getIndex(), $firstNodeInEnglish2->getIndex());
+        $this->assertInternalProperties($secondNodeInGerman2, $secondNodeInEnglish2);
+    }
+
+    /**
+     * @test
+     *
+     * @return void
+     * @throws Exception
+     */
+    public function copyBeforeNodeInGermanIsAlsoCopiedBeforeInEnglish(): void
+    {
+        $nodeInGerman = $this->createTestNode();
+        $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInGerman2 = $this->germanUserContext->getNode('/new-node');
+        $nodeInGerman2->setWorkspace($this->userWorkspace);
+        $copiedNodeInGerman = $nodeInGerman2->copyBefore($nodeInGerman2, 'copied-node');
+        $this->userWorkspace->publishNode($copiedNodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInGerman3 = $this->germanLiveContext->getNode('/new-node');
+        $copiedNodeInGerman2 = $this->germanLiveContext->getNode('/copied-node');
+        $nodeInEnglish = $this->englishLiveContext->getNode('/new-node');
+        $copiedNodeInEnglish = $this->englishLiveContext->getNode('/copied-node');
+
+        $this->assertTrue(!is_null($nodeInGerman3));
+        $this->assertTrue(!is_null($copiedNodeInGerman2));
+        $this->assertTrue(!is_null($nodeInEnglish));
+        $this->assertTrue(!is_null($copiedNodeInEnglish));
+        $this->assertGreaterThan($copiedNodeInEnglish->getIndex(), $nodeInEnglish->getIndex());
     }
 
     /**
@@ -323,17 +437,23 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $nodeInGerman2 = $this->germanUserContext->getNode('/new-node');
         $nodeInGerman2->copyAfter($nodeInGerman2, 'copied-node');
 
-        $copiedNodeInGerman2 = $this->germanUserContext->getNode('/copied-node');
-        $copiedNodeInGerman2->setWorkspace($this->userWorkspace);
+        $copiedNodeInGerman1 = $this->germanUserContext->getNode('/copied-node');
+        $copiedNodeInGerman1->setWorkspace($this->userWorkspace);
         $this->userWorkspace->publish($this->liveWorkspace);
 
         $this->saveNodesAndTearDown();
         $this->setUpWorkspacesAndContexts();
 
-        $this->assertTrue(!is_null($this->germanLiveContext->getNode('/new-node')));
-        $this->assertTrue(!is_null($this->germanLiveContext->getNode('/copied-node')));
-        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node')));
-        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/copied-node')));
+        $nodeInGerman3 = $this->germanLiveContext->getNode('/new-node');
+        $copiedNodeInGerman2 = $this->germanLiveContext->getNode('/copied-node');
+        $nodeInEnglish = $this->englishLiveContext->getNode('/new-node');
+        $copiedNodeInEnglish = $this->englishLiveContext->getNode('/copied-node');
+
+        $this->assertTrue(!is_null($nodeInGerman3));
+        $this->assertTrue(!is_null($copiedNodeInGerman2));
+        $this->assertTrue(!is_null($nodeInEnglish));
+        $this->assertTrue(!is_null($copiedNodeInEnglish));
+        $this->assertLessThan($copiedNodeInEnglish->getIndex(), $nodeInEnglish->getIndex());
     }
 
     /**
