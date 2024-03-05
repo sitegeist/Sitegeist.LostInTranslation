@@ -280,8 +280,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     }
 
     /**
-     * TODO: this test is not working
-     * _test
+     * @test
      *
      * @return void
      * @throws Exception
@@ -297,13 +296,6 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $nodeInGerman2 = $this->germanUserContext->getNode('/new-node');
         $nodeInGerman2->setWorkspace($this->userWorkspace);
         $copiedNodeInGerman = $nodeInGerman2->copyInto($nodeInGerman2, 'copied-node');
-
-        // If this part is kept, no "new entity was found through relationship" error is
-        // thrown, however it will also not find the copied node in the second assessment
-        // If this part is removed, we have said error.
-        $this->saveNodesAndTearDown();
-        $this->setUpWorkspacesAndContexts();
-
         $this->userWorkspace->publishNode($copiedNodeInGerman, $this->liveWorkspace);
 
         $this->saveNodesAndTearDown();
@@ -316,8 +308,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     }
 
     /**
-     * TODO: this test is not working because of some dangling workspace object
-     * _test
+     * @test
      * @return void
      * @throws Exception
      */
@@ -334,18 +325,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
 
         $copiedNodeInGerman2 = $this->germanUserContext->getNode('/copied-node');
         $copiedNodeInGerman2->setWorkspace($this->userWorkspace);
-
-        echo 'Node Workspace before publish: ' .spl_object_id($copiedNodeInGerman2->getWorkspace()) . PHP_EOL;
-        echo 'User before publish: ' .spl_object_id($this->userWorkspace) . PHP_EOL;
-
-        $this->saveNodesAndTearDown();
-        $this->setUpWorkspacesAndContexts();
-
         $this->userWorkspace->publish($this->liveWorkspace);
-
-        echo 'Node Workspace after publish: '  .spl_object_id($copiedNodeInGerman2->getWorkspace()) . PHP_EOL;
-        echo 'Node Workspace Name after publish: ' . $copiedNodeInGerman2->getWorkspace()->getName() . PHP_EOL;
-        echo 'Live Workspace after publish: ' . spl_object_id($this->liveWorkspace) . PHP_EOL;
 
         $this->saveNodesAndTearDown();
         $this->setUpWorkspacesAndContexts();
