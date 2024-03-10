@@ -114,7 +114,7 @@ class NodeTranslationService
         $targetDimensionValue = $context->getTargetDimensions()[$this->languageDimensionName];
         $languagePreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'][$targetDimensionValue];
         $translationStrategy = $languagePreset['options']['translationStrategy'] ?? self::TRANSLATION_STRATEGY_ONCE;
-        if ($translationStrategy !== self::TRANSLATION_STRATEGY_ONCE) {
+        if (!in_array($translationStrategy, [self::TRANSLATION_STRATEGY_ONCE, self::TRANSLATION_STRATEGY_SYNC])) {
             return;
         }
 
