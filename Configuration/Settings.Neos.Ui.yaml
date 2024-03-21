@@ -8,5 +8,5 @@ Neos:
 
       resources:
         javascript:
-          'Sitegeist.Taxonomy:TaxonomyEditor':
+          'Sitegeist.LostInTranslation:HostFramePlugin':
             resource: 'resource://Sitegeist.LostInTranslation/Public/Scripts/HostFrame/Plugin.js'
