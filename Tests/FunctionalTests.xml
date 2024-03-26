@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd"
+    beStrictAboutChangesToGlobalState="true"
+    beStrictAboutOutputDuringTests="true"
+    bootstrap="../../../Build/BuildEssentials/PhpUnit/FunctionalTestBootstrap.php"
+    convertErrorsToExceptions="true"
+    convertNoticesToExceptions="true"
+    convertWarningsToExceptions="true"
+    timeoutForSmallTests="0">
+  <testsuites>
+    <testsuite name="LostInTranslation">
+      <directory>Functional</directory>
+    </testsuite>
+  </testsuites>
+  <coverage includeUncoveredFiles="true">
+    <include>
+      <directory>../../../Data/Temporary/Testing/Cache/Code/Flow_Object_Classes/</directory>
+    </include>
+  </coverage>
+  <logging>
+    <junit outputFile="Reports/FunctionalTests.xml"/>
+    <testdoxText outputFile="Reports/FunctionalTestDox.txt"/>
+  </logging>
+  <php>
+    <ini name="date.timezone" value="Africa/Tunis"/>
+    <env name="FLOW_REWRITEURLS" value="1"/>
+  </php>
+</phpunit>

@@ -2,39 +2,92 @@ name: build
 
 on:
   push:
-      branches:
-        - 'main'
+    branches:
+      - 'main'
   pull_request: ~
 
 jobs:
-    test:
-        name: "Test (PHP ${{ matrix.php-versions }}, Neos ${{ matrix.neos-versions }})"
+  test:
+    name: "Test (PHP ${{ matrix.php-versions }}, Neos ${{ matrix.neos-versions }})"
 
-        strategy:
-            fail-fast: false
-            matrix:
-                php-versions: ['8.0']
-                neos-versions: ['7.3']
-                include:
-                  - php-versions: '8.1'
-                    neos-versions: '8.3'
-        runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: ['8.1']
+        neos-versions: ['7.3', '8.3']
+        include:
+          - php-versions: '8.2'
+            neos-versions: '8.3'
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v2
-              with:
-                  path: ${{ env.FLOW_FOLDER }}
+    env:
+      FLOW_CONTEXT: Testing
+      NEOS_FOLDER: neos/
+      DIST_FOLDER: DistributionPackages/Sitegeist.LostInTranslation
 
-            - name: Setup PHP
-              uses: shivammathur/setup-php@v2
-              with:
-                  php-version: ${{ matrix.php-versions }}
-                  extensions: mbstring, xml, json, zlib, iconv, intl, pdo_sqlite
-                  ini-values: date.timezone="Africa/Tunis", opcache.fast_shutdown=0, apc.enable_cli=on
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: mbstring, xml, json, zlib, iconv, intl, pdo_sqlite, mysql, pgsql, redis, memcached, memcache, apcu
+          ini-values: date.timezone="Africa/Tunis", opcache.fast_shutdown=0, apc.enable_cli=on
 
-            - name: Set Neos Version
-              run: composer require neos/neos ^${{ matrix.neos-versions }} --no-progress --no-interaction
+      - name: Install Neos Project and other dependencies
+        run: |
+          composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
+          cd "${{ env.NEOS_FOLDER }}"
+          composer require fakerphp/faker "^1.23.0" --no-install --dev
+          composer require phpstan/phpstan "^1.10.0" --no-install --dev
+          composer require squizlabs/php_codesniffer "^3.7" --no-install --dev
+          composer require mockery/mockery "@stable" --no-install --dev
+          composer config --no-plugins allow-plugins.neos/composer-plugin true
 
-            - name: Run Tests
-              run: composer test
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: ${{ env.NEOS_FOLDER }}${{ env.DIST_FOLDER }}
+
+      - name: Finish composer setup
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          composer config repositories.lostintranslation '{ "type": "path", "url": "./${{ env.DIST_FOLDER }}", "options": { "symlink": false } }'
+          composer require sitegeist/lostintranslation "@dev" --no-install
+
+      - name: Cache Composer packages
+        id: composer-cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/composer
+            ~/${{ env.NEOS_FOLDER }}Packages
+          key: php-${{ matrix.php-versions }}-${{ matrix.dependencies }}${{ hashFiles('**/composer.json') }}
+          restore-keys: php-${{ matrix.php-versions }}-${{ matrix.dependencies }}
+
+      - name: Install dependencies
+        run: |
+          cd ${{ env.NEOS_FOLDER }}
+          composer ${{ matrix.dependencies == 'locked' && 'install' || 'update' }} --no-progress --no-interaction ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }} ${{ matrix.composer-arguments }}
+
+      - name: Set Flow Context
+        run: echo "FLOW_CONTEXT=${{ env.FLOW_CONTEXT }}" >> $GITHUB_ENV
+
+      - name: Run style tests
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          bin/phpcs --colors -n --standard=PSR12 ${{ env.DIST_FOLDER }}/Classes
+
+      - name: Run stan tests
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          bin/phpstan analyse ${{ env.DIST_FOLDER }}/Classes
+
+      - name: Run unit tests
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          bin/phpunit --colors --stop-on-failure -c ${{ env.DIST_FOLDER }}/Tests/UnitTests.xml --testsuite "LostInTranslation" --verbose
+
+      - name: Run functional tests
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          bin/phpunit --colors --stop-on-failure -c ${{ env.DIST_FOLDER }}/Tests/FunctionalTests.xml --testsuite "LostInTranslation" --verbose

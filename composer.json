@@ -4,26 +4,42 @@
     "name": "sitegeist/lostintranslation",
     "license": "GPL-3.0-or-later",
     "require": {
-        "php":">=8.0.0",
+        "php": ">=8.1.0",
         "neos/neos": "^7.3 || ^8.0 || dev-master",
         "neos/neos-ui": "^7.3 || ^8.0 || dev-master",
         "neos/http-factories": "^7.3 || ^8.0 || dev-master"
-    },
-    "require-dev": {
-        "phpstan/phpstan": "~1.10.0",
-        "squizlabs/php_codesniffer": "^3.7"
     },
     "autoload": {
         "psr-4": {
             "Sitegeist\\LostInTranslation\\": "Classes/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Sitegeist\\LostInTranslation\\Tests\\": "Tests/"
+        }
+    },
+    "require-dev": {
+        "phpstan/phpstan": "1.10.37",
+        "squizlabs/php_codesniffer": "^3.7",
+        "phpunit/phpunit": "^9",
+        "mockery/mockery": "@stable",
+        "mikey179/vfsstream": "@stable",
+        "fakerphp/faker": "^1.23.0"
+    },
     "scripts": {
         "fix:style": "phpcbf --colors --standard=PSR12 Classes",
         "test:style": "phpcs --colors -n --standard=PSR12 Classes",
         "test:stan": "phpstan analyse Classes",
+        "test:unit": "bin/phpunit --bootstrap Tests/UnitTestBootstrap.php --configuration Tests/UnitTests.xml",
+        "test:functional": "bin/phpunit --bootstrap Tests/FunctionalTestBootstrap.php --configuration Tests/FunctionalTests.xml",
         "cc": "phpstan clear cache",
-        "test": ["composer install", "composer test:style" , "composer test:stan"]
+        "test": [
+            "composer install",
+            "composer test:style" ,
+            "composer test:stan",
+            "composer test:unit"
+        ]
     },
     "extra": {
         "neos": {
@@ -31,8 +47,18 @@
         }
     },
     "config": {
+        "bin-dir": "bin",
+        "vendor-dir": "Packages/Libraries",
         "allow-plugins": {
             "neos/composer-plugin": true
         }
+    },
+    "archive": {
+        "exclude": [
+            ".editorconfig",
+            ".gitattributes",
+            ".github",
+            ".gitignore"
+        ]
     }
 }
