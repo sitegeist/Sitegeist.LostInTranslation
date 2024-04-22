@@ -203,7 +203,7 @@ class NodeTranslationService
         }
 
         foreach ($properties as $propertyName => $propertyValue) {
-            if ($targetNode->getProperty($propertyName) != $propertyValue) {
+            if ($targetNode->getProperty($propertyName) !== $propertyValue) {
                 $targetNode->setProperty($propertyName, $propertyValue);
             }
 
