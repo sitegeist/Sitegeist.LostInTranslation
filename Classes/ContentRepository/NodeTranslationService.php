@@ -8,6 +8,7 @@ use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
 use Neos\ContentRepository\Domain\Service\ContextFactory;
+use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
@@ -72,7 +73,7 @@ class NodeTranslationService
 
     /**
      * @Flow\Inject
-     * @var ContextFactory
+     * @var ContextFactoryInterface
      */
     protected $contextFactory;
 
@@ -93,6 +94,14 @@ class NodeTranslationService
      * @var TranslatablePropertyNamesFactory
      */
     protected $translatablePropertiesFactory;
+
+    /**
+     * This is an internal property and should always be 'live'.
+     * Its only purpose is to be overridden in functional testing.
+     *
+     * @var string
+     */
+    protected $liveWorkspaceName = 'live';
 
     /**
      * @param NodeInterface $node
@@ -135,16 +144,16 @@ class NodeTranslationService
             return;
         }
 
-        if ($workspace->getName() !== 'live') {
+        if ($workspace->getName() !== $this->liveWorkspaceName) {
             return;
         }
 
         if ($this->skipAuthorizationChecks) {
             $this->securityContext->withoutAuthorizationChecks(function () use ($node) {
-                $this->syncNode($node);
+                $this->syncNode($node, $this->liveWorkspaceName);
             });
         } else {
-            $this->syncNode($node);
+            $this->syncNode($node, $this->liveWorkspaceName);
         }
     }
 
@@ -306,5 +315,10 @@ class NodeTranslationService
                 }
             }
         }
+    }
+
+    public function resetContextCache(): void
+    {
+        $this->contextFirstLevelCache = [];
     }
 }

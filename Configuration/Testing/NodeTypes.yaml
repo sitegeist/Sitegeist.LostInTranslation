@@ -1,0 +1,10 @@
+'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
+  superTypes:
+    'Neos.Neos:Node': true
+  properties:
+    inlineEditableStringProperty:
+      type: string
+      ui:
+        inlineEditable: true
+    stringProperty:
+      type: string
