@@ -115,8 +115,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             $body .= '&text=' . urlencode($part);
         }
 
-        $apiRequest = $this->createRequest('translate', 'POST');
-        $apiRequest->withBody($this->streamFactory->createStream($body));
+        $apiRequest = $this->createRequest('translate', 'POST', $body);
 
         $browser = $this->getBrowser();
 
@@ -239,20 +238,29 @@ class DeepLTranslationService implements TranslationServiceInterface
     }
 
     /**
-     * @param string $method
-     * @param string $endpoint
+     * @param string      $endpoint
+     *
+     * @param string      $method
+     * @param string|null $body
      *
      * @return ServerRequestInterface
      */
     protected function createRequest(
         string $endpoint,
-        string $method = 'GET'
+        string $method = 'GET',
+        string $body = null
     ): ServerRequestInterface {
         $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
         $baseUri = $deeplAuthenticationKey->isFree ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
-        return $this->serverRequestFactory->createServerRequest($method, $baseUri . $endpoint)
+        $request = $this->serverRequestFactory->createServerRequest($method, $baseUri . $endpoint)
             ->withHeader('Accept', 'application/json')
             ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->authenticationKey))
             ->withHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+        if ($body) {
+            $request = $request->withBody($this->streamFactory->createStream($body));
+        }
+
+        return $request;
     }
 }
