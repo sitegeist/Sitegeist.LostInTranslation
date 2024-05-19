@@ -44,7 +44,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
                 'de',
                 null,
                 ['de_foo', 'de_bar', 'de_baz'],
-                new Response(200, [], json_encode(['translations' => ['de_foo', 'de_bar', 'de_baz']]))
+                new Response(200, [], json_encode(['translations' => [['text' => 'de_foo'], ['text' => 'de_bar'], ['text' => 'de_baz']]]))
             ],
             [
                 ['foo', 'bar', 'baz'],
@@ -66,7 +66,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
                 'de',
                 null,
                 ['de_foo', 'cached_de_bar', 'de_baz'],
-                new Response(200, [], json_encode(['translations' => [0 => 'de_foo', 2 => 'de_baz']])),
+                new Response(200, [], json_encode(['translations' => [0 => ['text' => 'de_foo'], 2 => ['text' => 'de_baz']]])),
                 [DeepLTranslationService::getEntryIdentifier('bar', 'de') => 'cached_de_bar']
             ],
             [
