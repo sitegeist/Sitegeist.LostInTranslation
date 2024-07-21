@@ -1,0 +1,12 @@
+Sitegeist.LostInTranslation.GlossaryController {
+    index = afx`
+        <Sitegeist.LostInTranslation:GlossaryController.Index
+            glossaryJson={glossaryJson}
+            languages={languages}
+            requiredLanguages={requiredLanguages}
+            glossaryStatus={glossaryStatus}
+            csrfToken={csrfToken}
+        />
+        <Sitegeist.LostInTranslation:Component.FlashMessages flashMessages={flashMessages}/>
+    `
+}

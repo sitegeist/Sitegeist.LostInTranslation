@@ -15,3 +15,18 @@ Neos:
             icon: 'icon-language'
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
             privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
+          sitegeistLostInTranslationGlossaries:
+            controller: \Sitegeist\LostInTranslation\Controller\GlossaryController
+            action: 'index'
+            label: 'Sitegeist.LostInTranslation:GlossaryModule:module.label'
+            description: 'Sitegeist.LostInTranslation:GlossaryModule:module.description'
+            icon: 'icon-book'
+            additionalResources:
+              styleSheets:
+                - 'resource://Sitegeist.LostInTranslation/Public/Assets/main.bundle.css'
+              javaScripts:
+                - 'resource://Sitegeist.LostInTranslation/Public/Assets/main.bundle.js'
+    userInterface:
+      translation:
+        autoInclude:
+          'Sitegeist.LostInTranslation': [ '*' ]

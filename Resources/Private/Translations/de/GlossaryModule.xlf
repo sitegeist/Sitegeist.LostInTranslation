@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="de" datatype="plaintext">
+        <body>
+
+            <trans-unit id="module.label">
+                <source>DeepL Glossary</source>
+                <target>DeepL Glossar</target>
+            </trans-unit>
+            <trans-unit id="module.description">
+                <source>This module enables the maintenance of a glossary for translation with DeepL.</source>
+                <target>Dieses Modul ermöglicht die Pflege eines Glossars für die Übersetzung mit DeepL.</target>
+            </trans-unit>
+
+            <trans-unit id="list.loading">
+                <source>Loading…</source>
+                <target>Lädt…</target>
+            </trans-unit>
+            <trans-unit id="header.manageGlossary">
+                <source>Manage glossary</source>
+                <target>Glossar verwalten</target>
+            </trans-unit>
+            <trans-unit id="actions">
+                <source>Actions</source>
+                <target>Aktionen</target>
+            </trans-unit>
+            <trans-unit id="header.editAggregate">
+                <source>Edit entry</source>
+                <target>Eintrag bearbeiten</target>
+            </trans-unit>
+            <trans-unit id="list.empty">
+                <source>No entries found.</source>
+                <target>Keine Einträge gefunden.</target>
+            </trans-unit>
+            <trans-unit id="list.action.edit">
+                <source>Edit</source>
+                <target>Bearbeiten</target>
+            </trans-unit>
+            <trans-unit id="list.action.delete">
+                <source>Delete</source>
+                <target>Löschen</target>
+            </trans-unit>
+            <trans-unit id="filter.search">
+                <source>Search</source>
+                <target>Suche</target>
+            </trans-unit>
+            <trans-unit id="filter.search.placeholder">
+                <source>Search for entries</source>
+                <target>Nach Einträgen suchen</target>
+            </trans-unit>
+            <trans-unit id="pagination.position">
+                <source>Showing {0}-{1} of {2}</source>
+                <target>Zeige {0}-{1} von {2}</target>
+            </trans-unit>
+            <trans-unit id="pagination.noResults">
+                <source>No entries match your search.</source>
+                <target>Keine Einträge für die aktuelle Suche gefunden.</target>
+            </trans-unit>
+            <trans-unit id="action.cancel">
+                <source>Cancel</source>
+                <target>Abbrechen</target>
+            </trans-unit>
+            <trans-unit id="action.create">
+                <source>Add new entry</source>
+                <target>Neuen Eintrag hinzufügen</target>
+            </trans-unit>
+            <trans-unit id="action.create.short">
+                <source>Add</source>
+                <target>Hinzufügen</target>
+            </trans-unit>
+            <trans-unit id="action.update">
+                <source>Save</source>
+                <target>Speichern</target>
+            </trans-unit>
+            <trans-unit id="list.action.confirmDelete">
+                <source>Delete entry "{0}" ({1})?</source>
+                <target>Eintrag "{0}" ({1}) löschen?</target>
+            </trans-unit>
+
+            <trans-unit id="status.headline">
+                <source>Glossary status</source>
+                <target>Glossar Status</target>
+            </trans-unit>
+            <trans-unit id="status.glossary">
+                <source>Glossary</source>
+                <target>Glossar</target>
+            </trans-unit>
+            <trans-unit id="status.lastUpdate">
+                <source>Last update</source>
+                <target>Letztes Update</target>
+            </trans-unit>
+            <trans-unit id="status.usable">
+                <source>Usable?</source>
+                <target>Nutzbar?</target>
+            </trans-unit>
+            <trans-unit id="status.usable.yes">
+                <source>yes</source>
+                <target>ja</target>
+            </trans-unit>
+            <trans-unit id="status.usable.no">
+                <source>no</source>
+                <target>nein</target>
+            </trans-unit>
+            <trans-unit id="status.legend">
+                <source>Legend</source>
+                <target>Legende</target>
+            </trans-unit>
+            <trans-unit id="status.legend.isUpToDate">
+                <source>DeepL glossary is up to date</source>
+                <target>DeepL-Glossar ist aktuell</target>
+            </trans-unit>
+            <trans-unit id="status.legend.isOutdated">
+                <source>DeepL glossary is not yet up to date</source>
+                <target>DeepL-Glossar wurde noch nicht aktualisiert</target>
+            </trans-unit>
+
+        </body>
+    </file>
+</xliff>

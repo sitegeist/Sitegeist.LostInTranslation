@@ -1,0 +1,15 @@
+.glossary-status-table {
+    width: 25%;
+    th,td {
+        width:33%;
+    }
+    .canBeUsed, .isUpToDate {
+        color: seagreen;
+    }
+    .canNotBeUsed {
+        color: red;
+    }
+    .isOutdated {
+        color: darkorange;
+    }
+}

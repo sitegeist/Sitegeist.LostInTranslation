@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="en" datatype="plaintext">
+        <body>
+
+            <trans-unit id="module.label">
+                <source>DeepL Glossary</source>
+            </trans-unit>
+            <trans-unit id="module.description">
+                <source>This module enables the maintenance of a glossary for translation with DeepL.</source>
+            </trans-unit>
+
+            <trans-unit id="list.loading">
+                <source>Loading…</source>
+            </trans-unit>
+            <trans-unit id="action.create">
+                <source>Add new entry</source>
+            </trans-unit>
+            <trans-unit id="header.manageGlossary">
+                <source>Manage glossary</source>
+            </trans-unit>
+            <trans-unit id="actions">
+                <source>Actions</source>
+            </trans-unit>
+            <trans-unit id="header.editAggregate">
+                <source>Edit entry</source>
+            </trans-unit>
+            <trans-unit id="list.empty">
+                <source>No entries found.</source>
+            </trans-unit>
+            <trans-unit id="list.action.edit">
+                <source>Edit</source>
+            </trans-unit>
+            <trans-unit id="list.action.delete">
+                <source>Delete</source>
+            </trans-unit>
+            <trans-unit id="filter.search">
+                <source>Search</source>
+            </trans-unit>
+            <trans-unit id="filter.search.placeholder">
+                <source>Search for entries</source>
+            </trans-unit>
+            <trans-unit id="pagination.position">
+                <source>Showing {0}-{1} of {2}</source>
+            </trans-unit>
+            <trans-unit id="pagination.noResults">
+                <source>No entries match your search.</source>
+            </trans-unit>
+            <trans-unit id="action.cancel">
+                <source>Cancel</source>
+            </trans-unit>
+            <trans-unit id="action.create">
+                <source>Add new entry</source>
+            </trans-unit>
+            <trans-unit id="action.create.short">
+                <source>Add</source>
+            </trans-unit>
+            <trans-unit id="action.update">
+                <source>Save</source>
+            </trans-unit>
+            <trans-unit id="list.action.confirmDelete">
+                <source>Delete entry "{0}" ({1})?</source>
+            </trans-unit>
+
+            <trans-unit id="status.headline">
+                <source>Glossary status</source>
+            </trans-unit>
+            <trans-unit id="status.glossary">
+                <source>Glossary</source>
+            </trans-unit>
+            <trans-unit id="status.lastUpdate">
+                <source>Last update</source>
+            </trans-unit>
+            <trans-unit id="status.usable">
+                <source>Usable?</source>
+            </trans-unit>
+            <trans-unit id="status.usable.yes">
+                <source>yes</source>
+            </trans-unit>
+            <trans-unit id="status.usable.no">
+                <source>no</source>
+            </trans-unit>
+            <trans-unit id="status.legend">
+                <source>Legend</source>
+            </trans-unit>
+            <trans-unit id="status.legend.isUpToDate">
+                <source>DeepL glossary is up to date</source>
+            </trans-unit>
+            <trans-unit id="status.legend.isOutdated">
+                <source>DeepL glossary is not yet up to date</source>
+            </trans-unit>
+
+        </body>
+    </file>
+</xliff>

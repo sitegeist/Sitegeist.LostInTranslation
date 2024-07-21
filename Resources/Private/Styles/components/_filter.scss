@@ -1,0 +1,113 @@
+.entries-filter {
+    margin-top: .8rem;
+
+    .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        margin: 0 -#{$fieldSpacing};
+    }
+
+    .neos-control-group {
+        flex: 0 1 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding-left: #{$fieldSpacing};
+        padding-right: #{$fieldSpacing};
+
+        &--large {
+            flex-basis: 300px;
+        }
+
+        &--fill {
+            flex: 1;
+        }
+
+        &--right {
+            align-items: flex-end;
+        }
+
+        &--auto {
+            flex-basis: auto;
+            align-self: flex-end;
+        }
+
+        input {
+            width: 100%;
+        }
+
+        label {
+            white-space: nowrap;
+        }
+    }
+
+    &-switch {
+        $width: 80px;
+        $size: 40px;
+        $padding: 6px;
+        margin-bottom: 0;
+
+        input[type="checkbox"] {
+            display: none;
+
+            &:checked + * {
+                background-color: #{$primaryColor};
+
+                &::before {
+                    transform: translateX(#{$width - $size});
+                }
+            }
+
+            input:focus + * {
+                box-shadow: 0 0 1px #{$primaryColor};
+            }
+        }
+
+        &__slider {
+            position: relative;
+            cursor: pointer;
+            margin-top: 5px;
+            width: #{$width};
+            height: #{$size};
+            background-color: #{$alternatingBackgroundColor};
+            transition: .2s;
+
+            &::before {
+                position: absolute;
+                content: "";
+                height: #{$size - 2 * $padding};
+                width: #{$size - 2 * $padding};
+                left: #{$padding};
+                bottom: #{$padding};
+                background-color: rgba(255, 255, 255, .9);
+                transition: .2s;
+            }
+        }
+    }
+
+    &__pagination {
+        user-select: none;
+        display: flex;
+        align-items: center;
+
+        & > span {
+            margin: 0 .8rem;
+            white-space: nowrap;
+        }
+
+        i {
+            cursor: pointer;
+            transition: color .1s ease-in;
+
+            &:not(.disabled):hover {
+                color: #{$primaryColor};
+            }
+
+            &.disabled {
+                cursor: initial;
+                color: #{$inactiveColor};
+            }
+        }
+    }
+}
