@@ -17,3 +17,7 @@ composer.lock
 *.example
 .phpunit.result.cache
 Configuration/README
+.sass-cache
+node_modules/
+/.cache
+/.parcel-cache

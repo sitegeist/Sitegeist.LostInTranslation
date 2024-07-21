@@ -5,6 +5,8 @@ privilegeTargets:
   'Neos\Neos\Security\Authorization\Privilege\ModulePrivilege':
     'Sitegeist.LostInTranslation:AccessBackendModule':
       matcher: 'management/sitegeist_lostintranslation'
+    'Sitegeist.LostInTranslation:BackendModule.Glossary':
+      matcher: 'management/sitegeistLostInTranslationGlossaries'
 
 roles:
   'Neos.Neos:Administrator':
@@ -12,9 +14,20 @@ roles:
       -
         privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
         permission: GRANT
+      -
+        privilegeTarget: 'Sitegeist.LostInTranslation:BackendModule.Glossary'
+        permission: GRANT
 
   'Neos.Neos:AbstractEditor':
     privileges:
       -
         privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
+        permission: GRANT
+
+  'Sitegeist.LostInTranslation:GlossaryEditor':
+    label: Editor of DeepL glossaries
+    description: Grants access to the DeepL glossary backend module.
+    privileges:
+      -
+        privilegeTarget: 'Sitegeist.LostInTranslation:BackendModule.Glossary'
         permission: GRANT

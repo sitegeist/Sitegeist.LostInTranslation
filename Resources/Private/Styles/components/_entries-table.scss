@@ -1,0 +1,144 @@
+.entries-table {
+    margin-top: 1rem;
+
+    &-wrap {
+        overflow-x: auto;
+    }
+
+    &.detail-view {
+        tbody td {
+            font-size: 80%;
+        }
+    }
+
+    thead {
+        th {
+            padding: 0 4px 4px 0;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            transition: color .1s ease-in;
+
+            &.entry-table__heading-actions {
+                text-align: center;
+            }
+
+            &:hover {
+                color: #{$primaryColor};
+            }
+        }
+    }
+
+    tbody {
+        td {
+            padding: 0 4px 0 0;
+            height: auto;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+
+            .entries-table__single-column-row & {
+                padding: 1rem;
+                border-top: 0;
+            }
+
+            .entries-table__row--inactive & {
+                color: #{$inactiveColor};
+            }
+
+            .entries-table__row.odd & {
+                background-color: #{$alternatingBackgroundColor};
+
+                .neos-button {
+                    &:not(:hover) {
+                        background-color: #{$alternatingBackgroundColor} !important;
+                    }
+                }
+            }
+
+            .neos-label {
+                user-select: none;
+                font-weight: bold !important;
+
+                &-info {
+                    background-color: #{$primaryColor} !important;
+                }
+
+                &-warning {
+                    background-color: #{$deletedColor} !important;
+                }
+
+                &-important {
+                    background-color: #{$warningColor} !important;
+                }
+            }
+        }
+
+        .neos-action {
+            width: #{2 * 46px};
+
+            form {
+                display: inline-block;
+            }
+        }
+    }
+
+    &__row {
+        mark {
+            background-color: transparent;
+            font-weight: bold;
+            color: white;
+            text-decoration: underline;
+        }
+
+        &__column-status-code,
+        &__column-hit-count {
+            width: 80px;
+        }
+
+        &__column-status-code {
+            border-left: 3px solid #{$newColor};
+
+            .entries-table__row--inactive & {
+                border-left: 3px solid #{$inactiveColor};
+            }
+        }
+
+        &__column-comment {
+            max-width: 200px;
+        }
+
+        &__column-source-uri-path,
+        &__column-target-uri-path {
+            min-width: 200px;
+            max-width: 450px;
+
+            .copy-path {
+                opacity: 0;
+                visibility: hidden;
+                cursor: pointer;
+                margin-left: .5rem;
+                transition: color .1s ease-in, opacity .1s ease-in;
+
+                &:hover {
+                    color: #{$primaryColor};
+                }
+            }
+
+            &:hover {
+                .copy-path {
+                    opacity: 1;
+                    visibility: visible;
+                }
+            }
+        }
+
+        &__column-creation-date-time {
+            width: 90px;
+        }
+
+        .entry__type {
+            color: #{$inactiveColor};
+        }
+    }
+}

@@ -11,3 +11,8 @@ Sitegeist_LostInTranslation_TranslationCache:
   backendOptions:
     # one week
     defaultLifetime: 302400
+
+Sitegeist_LostInTranslation_GlossaryCommand:
+  frontend: Neos\Cache\Frontend\VariableFrontend
+  backend: Neos\Cache\Backend\SimpleFileBackend
+  persistent: true

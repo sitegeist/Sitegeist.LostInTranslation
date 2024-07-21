@@ -1,0 +1,38 @@
+prototype(Sitegeist.LostInTranslation:Component.Glossary.App) < prototype(Neos.Fusion:Component) {
+    glossaryJson = '[]'
+    languages = ${languages}
+    requiredLanguages = ${requiredLanguages}
+    glossaryStatus = ${glossaryStatus}
+    csrfToken = null
+
+    actions = Neos.Fusion:DataStructure {
+        delete = Neos.Fusion:UriBuilder {
+            action = 'delete'
+            format = 'json'
+        }
+        update = Neos.Fusion:UriBuilder {
+            action = 'update'
+            format = 'json'
+        }
+        create = Neos.Fusion:UriBuilder {
+            action = 'create'
+            format = 'json'
+        }
+    }
+
+    renderer = afx`
+        <div id="glossary-app"
+             data-languages={Json.stringify(props.languages)}
+             data-required-languages={Json.stringify(props.requiredLanguages)}
+             data-glossary-status={Json.stringify(props.glossaryStatus)}
+             data-actions={Json.stringify(props.actions)}
+             data-csrf-token={props.csrfToken}
+        >
+            <p>{I18n.translate('Sitegeist.LostInTranslation:GlossaryModule:list.loading')}</p>
+
+            <script type="application/json" id="glossary-data">
+                {props.glossaryJson}
+            </script>
+        </div>
+    `
+}
