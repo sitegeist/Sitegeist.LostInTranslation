@@ -146,7 +146,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
             $translations = array_map(
                 function ($part) {
-                    return IgnoredTermsUtility::unwrapIgnoredTerms($part);
+                    return IgnoredTermsUtility::unwrapIgnoredTerms($part['text']);
                 },
                 $returnedData['translations']
             );
