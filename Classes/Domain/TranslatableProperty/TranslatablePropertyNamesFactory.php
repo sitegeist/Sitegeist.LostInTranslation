@@ -31,6 +31,9 @@ class TranslatablePropertyNamesFactory
             if (array_key_exists('type', $propertyDefinition) && $propertyDefinition['type'] !== 'string') {
                 continue;
             }
+            if (isset($propertyDefinition['options']['automaticTranslation']) && !$propertyDefinition['options']['automaticTranslation']) {
+                continue;  // do not translate (inline-editable) properties explicitly set to: 'automaticTranslation: false'
+            }
             if ($this->translateInlineEditables && ($propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false)) {
                 $translateProperties[] = new TranslatablePropertyName($propertyName);
                 continue;
