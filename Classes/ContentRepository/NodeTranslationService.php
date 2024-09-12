@@ -212,13 +212,13 @@ class NodeTranslationService
         }
 
         foreach ($properties as $propertyName => $propertyValue) {
-            if ($targetNode->getProperty($propertyName) != $propertyValue) {
-                $targetNode->setProperty($propertyName, $propertyValue);
+            // Make sure the uriPathSegment is valid
+            if ($propertyName === 'uriPathSegment' && !preg_match('/^[a-z0-9\-]+$/i', $propertyValue)) {
+                $propertyValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $propertyValue);
             }
 
-            // Make sure the uriPathSegment is valid
-            if ($targetNode->getProperty('uriPathSegment') && !preg_match('/^[a-z0-9\-]+$/i', $targetNode->getProperty('uriPathSegment'))) {
-                $targetNode->setProperty('uriPathSegment', $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $targetNode->getProperty('uriPathSegment')));
+            if ($targetNode->getProperty($propertyName) != $propertyValue) {
+                $targetNode->setProperty($propertyName, $propertyValue);
             }
         }
     }
