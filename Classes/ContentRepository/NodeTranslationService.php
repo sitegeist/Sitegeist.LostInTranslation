@@ -190,7 +190,8 @@ class NodeTranslationService
             return;
         }
 
-        $properties = (array)$sourceNode->getProperties();
+        // The "true" here is necessary to receive referenced nodes just as identifiers and not as objects!
+        $properties = (array)$sourceNode->getProperties(true);
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
             if (empty($propertyValue) || !is_string($propertyValue)) {
