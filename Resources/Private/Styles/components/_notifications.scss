@@ -1,0 +1,22 @@
+.neos-notification-content {
+    &.expandable {
+        .neos-expand-content {
+            display: none !important;
+        }
+
+        &.expanded {
+            .neos-expand-content {
+                display: block !important;
+
+                ul {
+                    padding-left: 1rem;
+                    line-height: 1.3;
+                }
+
+                li {
+                    list-style: disc;
+                }
+            }
+        }
+    }
+}

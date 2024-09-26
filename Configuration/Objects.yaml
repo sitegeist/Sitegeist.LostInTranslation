@@ -17,3 +17,30 @@ Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeySer
         arguments:
           1:
             value: Sitegeist_LostInTranslation_ApiKeyCache
+
+Sitegeist\LostInTranslation\Command\GlossaryCommandController:
+  properties:
+    logger:
+      object:
+        factoryObjectName: Neos\Flow\Log\PsrLoggerFactoryInterface
+        factoryMethodName: get
+        arguments:
+          1:
+            value: glossaryCommandLogger
+    storage:
+      object:
+        factoryObjectName: Neos\Flow\Cache\CacheManager
+        factoryMethodName: getCache
+        arguments:
+          1:
+            value: Sitegeist_LostInTranslation_GlossaryCommand
+
+Sitegeist\LostInTranslation\Controller\GlossaryController:
+  properties:
+    syncCommandStorage:
+      object:
+        factoryObjectName: Neos\Flow\Cache\CacheManager
+        factoryMethodName: getCache
+        arguments:
+          1:
+            value: Sitegeist_LostInTranslation_GlossaryCommand
