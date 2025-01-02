@@ -6,7 +6,6 @@ use GuzzleHttp\Psr7\Response;
 use Mockery;
 use Neos\Cache\Backend\TransientMemoryBackend;
 use Neos\Cache\Exception;
-use Neos\Cache\Frontend\StringFrontend;
 use Neos\Cache\Frontend\VariableFrontend;
 use Neos\Flow\Http\Client\Browser;
 use Neos\Flow\Http\Client\CurlEngineException;
@@ -240,6 +239,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
                     'ignore_tags' => 'ignore',
                 ],
                 'ignoredTerms' => [],
+                'replaceTerms' => [],
                 'numberOfAttempts' => 2,
                 'enableCache' => true,
             ], $overrideSettings)

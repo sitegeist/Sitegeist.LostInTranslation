@@ -180,6 +180,33 @@ Sitegeist:
         - 'Hamburg'
 ```
 
+### Replacing Terms
+
+You can define terms that should be ignored by DeepL in the configuration and
+provide a static replacement for every target language.
+This is especially useful when you have own names that
+have a very specific translation, of which DeepL is not aware.
+
+If a term has no replacement for a specific language,
+the term will be passed on to DeepL for translation.
+
+The terms will be evaluated case-insensitive when searching for them,
+however they will always be replaced with the provided replacement.
+
+This is how an example configuration could look like:
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+      replacedTerms:
+        - term: 'ECB'
+          translations:
+            de: 'EZB'
+            en: 'ECB'
+            fr: 'BEC'
+```
+
 ## Eel Helper
 
 The package also provides two Eel Helper to translate texts in Fusion.

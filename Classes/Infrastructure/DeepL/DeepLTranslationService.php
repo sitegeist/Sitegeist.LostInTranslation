@@ -20,7 +20,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
-use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
+use Sitegeist\LostInTranslation\Utility\ReplaceTermsUtility;
 
 /**
  * @Flow\Scope("singleton")
@@ -69,6 +69,11 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected $authenticationKeyFactory;
 
     /**
+     * @var array
+     */
+    protected $replaceTermsByLanguage = [];
+
+    /**
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
@@ -106,10 +111,11 @@ class DeepLTranslationService implements TranslationServiceInterface
         }
         $body .= '&target_lang=' . urlencode($targetLanguage);
         foreach ($values as $part) {
-            // All ignored terms will be wrapped in a <ignored> tag
-            // which will be ignored by DeepL
-            if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
-                $part = IgnoredTermsUtility::wrapIgnoredTerms($part, $this->settings['ignoredTerms']);
+            // All replace terms will be replaced with their configured correspondent
+            // and wrapped in a <ignored> tag which will be ignored by DeepL.
+            $replaceTerms = $this->getReplaceTermsForLanguage($targetLanguage);
+            if (count($replaceTerms) > 0) {
+                $part = ReplaceTermsUtility::replaceTermsAndWrapInIgnoreTagInString($part, $replaceTerms);
             }
 
             $body .= '&text=' . urlencode($part);
@@ -146,7 +152,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
             $translations = array_map(
                 function ($part) {
-                    return IgnoredTermsUtility::unwrapIgnoredTerms($part['text']);
+                    return ReplaceTermsUtility::unwrapFromIgnoreTagInString($part['text']);
                 },
                 $returnedData['translations']
             );
@@ -262,5 +268,14 @@ class DeepLTranslationService implements TranslationServiceInterface
         }
 
         return $request;
+    }
+
+    protected function getReplaceTermsForLanguage(string $language): array
+    {
+        if (!isset($this->replaceTermsByLanguage[$language])) {
+            $this->replaceTermsByLanguage[$language] = ReplaceTermsUtility::getTermsToReplace($this->settings['ignoredTerms'], $this->settings['replaceTerms'], $language);
+        }
+
+        return $this->replaceTermsByLanguage[$language];
     }
 }
