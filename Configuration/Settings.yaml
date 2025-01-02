@@ -27,6 +27,10 @@ Sitegeist:
         split_sentences: 'nonewlines'
         preserve_formatting: 1
         formality: 'default'
+        # Here you can define tags where DeepL should not translate the content, but just preserve it as it is.
+        # For example: "ignore,code,pre"
+        # IMPORTANT: The tag "ignore" must be preserved in this setting,
+        # otherwise the ignoredTerms and replaceTerms settings (see below) will not work.
         ignore_tags: 'ignore'
 
       #
@@ -35,6 +39,22 @@ Sitegeist:
       # For example: brand names, city names, etc.
       #
       ignoredTerms: []
+
+      #
+      # Here you can define terms that will be replaced with their defined
+      # correspondent value depending on the target language.
+      # If a term does not have a configured correspondent value for a target language,
+      # it will be translated by the DeepL API.
+      #
+      # For example:
+      # replaceTerms:
+      #   - term: 'ECB'
+      #     translations:
+      #       de: 'EZB'
+      #       en: 'ECB'
+      #       fr: 'BCE'
+      #
+      replaceTerms: []
 
       #
       # Here you can specify how a request to the DeepL API should
