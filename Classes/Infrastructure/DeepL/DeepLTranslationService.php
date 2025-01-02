@@ -10,7 +10,7 @@ use DeepL\TextResult;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
-use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
+use Sitegeist\LostInTranslation\Utility\ReplaceTermsUtility;
 
 /**
  * @Flow\Scope("singleton")
@@ -48,6 +48,11 @@ class DeepLTranslationService implements TranslationServiceInterface
     {
         $this->settings = $settings['DeepLApi'];
     }
+
+    /**
+     * @var array
+     */
+    protected $replaceTermsByLanguage = [];
 
     /**
      * @param array<string,string> $texts
@@ -95,10 +100,11 @@ class DeepLTranslationService implements TranslationServiceInterface
         $keys = array_keys($texts);
         $values = array_values($texts);
 
-        // wrap ignoredTerms
+        // wrap replaceTerms
+        $replaceTerms = $this->getReplaceTermsForLanguage($targetLanguage);
         if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
             $valuesWithMaskedTerms = array_map(
-                fn(string $text) => IgnoredTermsUtility::wrapIgnoredTerms($text, $this->settings['ignoredTerms']),
+                fn(string $text) => ReplaceTermsUtility::replaceTermsAndWrapInIgnoreTagInString($text, $replaceTerms),
                 $values
             );
         } else {
@@ -121,7 +127,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
 
             $translations = array_map(
-                fn (TextResult $textResult) => IgnoredTermsUtility::unwrapIgnoredTerms($textResult->text),
+                fn (TextResult $textResult) => ReplaceTermsUtility::unwrapFromIgnoreTagInString($textResult->text),
                 $results
             );
 
@@ -158,5 +164,14 @@ class DeepLTranslationService implements TranslationServiceInterface
         } catch (DeepLException) {
             return new ApiStatus(false, 0, 0, $key->isSettingKey, $key->isCustomKey, $key->isFree);
         }
+    }
+
+    protected function getReplaceTermsForLanguage(string $language): array
+    {
+        if (!isset($this->replaceTermsByLanguage[$language])) {
+            $this->replaceTermsByLanguage[$language] = ReplaceTermsUtility::getTermsToReplace($this->settings['ignoredTerms'], $this->settings['replaceTerms'], $language);
+        }
+
+        return $this->replaceTermsByLanguage[$language];
     }
 }
