@@ -164,7 +164,8 @@ Neos:
 
 ### Ignoring Terms
 
-You can define terms that should be ignored by DeepL in the configuration.
+You can define terms that should be ignored in the translation
+process in the configuration.
 The terms will are evaluated case-insensitive when searching for them, however
 they will always be replaced with their actual occurrence.
 
@@ -182,7 +183,8 @@ Sitegeist:
 
 ### Replacing Terms
 
-You can define terms that should be ignored by DeepL in the configuration and
+You can define terms that should be ignored in the translation
+process in the configuration and
 provide a static replacement for every target language.
 This is especially useful when you have own names that
 have a very specific translation, of which DeepL is not aware.

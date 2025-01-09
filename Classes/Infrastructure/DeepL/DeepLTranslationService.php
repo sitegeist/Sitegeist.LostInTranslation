@@ -151,8 +151,8 @@ class DeepLTranslationService implements TranslationServiceInterface
                 return array_replace($texts, $cachedEntries);
             }
             $translations = array_map(
-                function ($part) {
-                    return ReplaceTermsUtility::unwrapFromIgnoreTagInString($part['text']);
+                function ($part) use ($replaceTerms) {
+                    return ReplaceTermsUtility::unwrapFromIgnoreTagInString($part['text'], $replaceTerms);
                 },
                 $returnedData['translations']
             );
