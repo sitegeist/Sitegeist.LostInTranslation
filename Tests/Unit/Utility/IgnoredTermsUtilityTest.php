@@ -17,9 +17,23 @@ class IgnoredTermsUtilityTest extends UnitTestCase
                     'de' => 'EZB',
                     'fr' => 'BCE'
                 ]
+            ],
+            [
+                'term' => 'Kaiser Maximilian Prize',
+                'translations' => [
+                    'de' => 'Kaiser Maximilian Preis',
+                    'fr' => 'Prix Kaiser Maximilian'
+                ]
+            ],
+            [
+                'term' => 'Kaiser Maximilian Prizes',
+                'translations' => [
+                    'de' => 'Kaiser Maximilian Preise',
+                    'fr' => 'Prix Kaiser Maximilian'
+                ]
             ]
         ];
-        $ignoreTermsConfiguration = ['Sitegeist', 'Neos.io', 'Code Q'];
+        $ignoreTermsConfiguration = ['Neos.io', 'Code Q', 'Sitegeist', 'Kaiser Maximilian Prize'];
 
         return [
             [
@@ -27,9 +41,10 @@ class IgnoredTermsUtilityTest extends UnitTestCase
                 $replaceTermsConfiguration,
                 'en',
                 [
-                    new ReplaceTerm('Sitegeist', 'Sitegeist'),
-                    new ReplaceTerm('Neos.io', 'Neos.io'),
-                    new ReplaceTerm('Code Q', 'Code Q')
+                    '0' => new ReplaceTerm('Kaiser Maximilian Prize', 'Kaiser Maximilian Prize'),
+                    '1' => new ReplaceTerm('Sitegeist', 'Sitegeist'),
+                    '2' => new ReplaceTerm('Neos.io', 'Neos.io'),
+                    '3' => new ReplaceTerm('Code Q', 'Code Q')
                 ]
             ],
             [
@@ -37,10 +52,12 @@ class IgnoredTermsUtilityTest extends UnitTestCase
                 $replaceTermsConfiguration,
                 'de',
                 [
-                    new ReplaceTerm('Sitegeist', 'Sitegeist'),
-                    new ReplaceTerm('Neos.io', 'Neos.io'),
-                    new ReplaceTerm('Code Q', 'Code Q'),
-                    new ReplaceTerm('ECB', 'EZB')
+                    '0' => new ReplaceTerm('Kaiser Maximilian Prizes', 'Kaiser Maximilian Preise'),
+                    '1' => new ReplaceTerm('Kaiser Maximilian Prize', 'Kaiser Maximilian Preis'),
+                    '2' => new ReplaceTerm('ECB', 'EZB'),
+                    '3' => new ReplaceTerm('Sitegeist', 'Sitegeist'),
+                    '4' => new ReplaceTerm('Neos.io', 'Neos.io'),
+                    '5' => new ReplaceTerm('Code Q', 'Code Q'),
                 ]
             ],
             [
@@ -48,10 +65,12 @@ class IgnoredTermsUtilityTest extends UnitTestCase
                 $replaceTermsConfiguration,
                 'fr',
                 [
-                    new ReplaceTerm('Sitegeist', 'Sitegeist'),
-                    new ReplaceTerm('Neos.io', 'Neos.io'),
-                    new ReplaceTerm('Code Q', 'Code Q'),
-                    new ReplaceTerm('ECB', 'BCE')
+                    '0' => new ReplaceTerm('Kaiser Maximilian Prizes', 'Prix Kaiser Maximilian'),
+                    '1' => new ReplaceTerm('Kaiser Maximilian Prize', 'Prix Kaiser Maximilian'),
+                    '2' => new ReplaceTerm('ECB', 'BCE'),
+                    '3' => new ReplaceTerm('Sitegeist', 'Sitegeist'),
+                    '4' => new ReplaceTerm('Neos.io', 'Neos.io'),
+                    '5' => new ReplaceTerm('Code Q', 'Code Q'),
                 ]
             ],
         ];
@@ -63,7 +82,9 @@ class IgnoredTermsUtilityTest extends UnitTestCase
      */
     public function evaluateReplaceTermsArrayCreatesCorrectArray(array $ignoredTerms, array $replaceTerms, string $targetLanguage, array $expectedArray): void
     {
-        $this->assertEquals($expectedArray, ReplaceTermsUtility::getTermsToReplace($ignoredTerms, $replaceTerms, $targetLanguage));
+        $termsToReplace = ReplaceTermsUtility::getTermsToReplace($ignoredTerms, $replaceTerms, $targetLanguage);
+        $this->assertEquals($expectedArray, $termsToReplace);
+        $this->assertEquals(array_values($expectedArray), array_values($termsToReplace));
     }
 
     public static function wrapIgnoredTermsWrapsIgnoredTermsCorrectlyData(): array
@@ -76,7 +97,7 @@ class IgnoredTermsUtilityTest extends UnitTestCase
                     new ReplaceTerm('Neos.io', 'Neos.io'),
                     new ReplaceTerm('Code Q', 'Code Q')
                 ],
-                'Hallo, <ignore>Sitegeist</ignore>!'
+                'Hallo, <name id="0">Sitegeist</name>!'
             ],
             [
                 'Hallo, Sitegeis!',
@@ -92,10 +113,26 @@ class IgnoredTermsUtilityTest extends UnitTestCase
                 [
                     new ReplaceTerm('Sitegeist', 'Sitegeist'),
                     new ReplaceTerm('Neos.io', 'Neos.io'),
-                    new ReplaceTerm('Code Q', 'Code Q')
+                    new ReplaceTerm('Code Q', 'Code Q'),
+                    new ReplaceTerm('Code', 'Code')
                 ],
-                '<ignore>Sitegeist</ignore> und <ignore>Code Q</ignore> sind Agenturen für <ignore>Neos.io</ignore>'
+                '<name id="0">Sitegeist</name> und <name id="2">Code Q</name> sind Agenturen für <name id="1">Neos.io</name>'
             ],
+            [
+                'Dipl.-Ing. Felix Gradinaru lädt zur Gala des Kaiser-Maximilian-Preises 2025. Auch bekannt als kaiser-maximilian-preis. Nicht zu verwechseln mit Kaiser Maximilian-Preis und Kaiser-Maximilian Preis!',
+                [
+                    new ReplaceTerm('Kaiser Maximilian Preises', 'Kaiser Maximilian Preises'),
+                    new ReplaceTerm('Kaiser-Maximilian Preises', 'Kaiser-Maximilian Preises'),
+                    new ReplaceTerm('Kaiser Maximilian-Preises', 'Kaiser Maximilian-Preises'),
+                    new ReplaceTerm('Kaiser-Maximilian-Preises', 'Kaiser-Maximilian-Preises'),
+                    new ReplaceTerm('Kaiser Maximilian Preis', 'Kaiser Maximilian Preis'),
+                    new ReplaceTerm('Kaiser-Maximilian Preis', 'Kaiser-Maximilian Preis'),
+                    new ReplaceTerm('Kaiser Maximilian-Preis', 'Kaiser Maximilian-Preis'),
+                    new ReplaceTerm('Kaiser-Maximilian-Preis', 'Kaiser-Maximilian-Preis'),
+                    new ReplaceTerm('Dipl.-Ing.', 'Dipl.-Ing.'),
+                ],
+                '<name id="8">Dipl.-Ing.</name> Felix Gradinaru lädt zur Gala des <name id="3">Kaiser-Maximilian-Preises</name> 2025. Auch bekannt als <name id="7">Kaiser-Maximilian-Preis</name>. Nicht zu verwechseln mit <name id="6">Kaiser Maximilian-Preis</name> und <name id="5">Kaiser-Maximilian Preis</name>!'
+            ]
         ];
     }
 
@@ -120,9 +157,30 @@ class IgnoredTermsUtilityTest extends UnitTestCase
     public static function unwrapIgnoredTermsUnwrapsIgnoredTermsCorrectlyData(): array
     {
         return [
-            ['Hallo, <ignore>Sitegeist</ignore>!', 'Hallo, Sitegeist!'],
-            ['Hallo, Sitegeis!', 'Hallo, Sitegeis!'],
-            ['<ignore>Sitegeist</ignore> und <ignore>Code Q</ignore> sind Agenturen für <ignore>Neos.io</ignore>', 'Sitegeist und Code Q sind Agenturen für Neos.io'],
+            [
+                'Hallo, <name id="0">Sitegeist</name>!',
+                [
+                    new ReplaceTerm('Sitegeist', 'Sitegeist'),
+                    new ReplaceTerm('Neos.io', 'Neos.io'),
+                    new ReplaceTerm('Code Q', 'Code Q')
+                ],
+                'Hallo, Sitegeist!'
+            ],
+            [
+                'Hallo, Sitegeis!', [
+                    new ReplaceTerm('Sitegeist', 'Sitegeist'),
+                    new ReplaceTerm('Neos.io', 'Neos.io'),
+                    new ReplaceTerm('Code Q', 'Code Q')
+                ],
+                'Hallo, Sitegeis!'
+            ],
+            [
+                '<name id="0">Sitegeist</name> und <name id="2">Code Q</name> sind Agenturen für <name id="1">Neos.io</name>', [
+                    new ReplaceTerm('Sitegeist', 'Sitegeist'),
+                    new ReplaceTerm('Neos.io', 'Neos.io'),
+                    new ReplaceTerm('Code Q', 'Code Q')
+                ], 'Sitegeist und Code Q sind Agenturen für Neos.io'
+            ],
         ];
     }
 
@@ -130,14 +188,15 @@ class IgnoredTermsUtilityTest extends UnitTestCase
      * @test
      * @dataProvider unwrapIgnoredTermsUnwrapsIgnoredTermsCorrectlyData
      *
-     * @param string $string
-     * @param string $expectedString
+     * @param  string  $string
+     * @param  array<ReplaceTerm>  $replaceTerms
+     * @param  string  $expectedString
      *
      * @return void
      */
-    public function unwrapIgnoredTermsUnwrapsIgnoredTermsCorrectly(string $string, string $expectedString): void
+    public function unwrapIgnoredTermsUnwrapsIgnoredTermsCorrectly(string $string, array $replaceTerms, string $expectedString): void
     {
-        $unwrappedString = ReplaceTermsUtility::unwrapFromIgnoreTagInString($string);
+        $unwrappedString = ReplaceTermsUtility::unwrapFromIgnoreTagInString($string, $replaceTerms);
 
 
         $this->assertEquals($expectedString, $unwrappedString);
