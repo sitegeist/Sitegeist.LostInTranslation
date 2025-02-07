@@ -83,9 +83,10 @@ class DeepLTranslationService implements TranslationServiceInterface
         if ($isCacheEnabled) {
             foreach ($texts as $i => $text) {
                 $entryIdentifier = self::getEntryIdentifier($text, $targetLanguage, $sourceLanguage);
-                if ($this->translationCache->has($entryIdentifier)) {
-                    $cachedEntries[$i] = $this->translationCache->get($entryIdentifier);
-                    unset($texts[$i]);
+                $cachedEntry = $this->translationCache->get($entryIdentifier);
+                if ($cachedEntry !== false) {
+                    $cachedEntries[ $i ] = $cachedEntry;
+                    unset($texts[ $i ]);
                 }
             }
 

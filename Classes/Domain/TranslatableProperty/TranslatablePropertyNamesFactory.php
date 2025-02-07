@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
 use Neos\Flow\Annotations as Flow;
-use Neos\ContentRepository\Domain\Model\NodeType;
+use Neos\ContentRepository\Core\NodeType\NodeType;
 
 class TranslatablePropertyNamesFactory
 {
@@ -22,8 +22,8 @@ class TranslatablePropertyNamesFactory
 
     public function createForNodeType(NodeType $nodeType): TranslatablePropertyNames
     {
-        if (array_key_exists($nodeType->getName(), $this->firstLevelCache)) {
-            return $this->firstLevelCache[$nodeType->getName()];
+        if (array_key_exists($nodeType->name->value, $this->firstLevelCache)) {
+            return $this->firstLevelCache[$nodeType->name->value];
         }
         $propertyDefinitions = $nodeType->getProperties();
         $translateProperties = [];
@@ -41,7 +41,7 @@ class TranslatablePropertyNamesFactory
                 continue;
             }
         }
-        $this->firstLevelCache[$nodeType->getName()] = new TranslatablePropertyNames(...$translateProperties);
-        return $this->firstLevelCache[$nodeType->getName()];
+        $this->firstLevelCache[$nodeType->name->value] = new TranslatablePropertyNames(...$translateProperties);
+        return $this->firstLevelCache[$nodeType->name->value];
     }
 }
