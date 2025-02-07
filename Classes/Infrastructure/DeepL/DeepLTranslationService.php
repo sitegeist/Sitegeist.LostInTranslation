@@ -258,6 +258,8 @@ class DeepLTranslationService implements TranslationServiceInterface
             ->withHeader('Authorization', sprintf('DeepL-Auth-Key %s', $deeplAuthenticationKey->authenticationKey))
             ->withHeader('Content-Type', 'application/x-www-form-urlencoded');
 
+        $this->logger->debug('DeepL API request started', ['uri'=> $baseUri, 'key' => $deeplAuthenticationKey->authenticationKey]);
+
         if ($body) {
             $request = $request->withBody($this->streamFactory->createStream($body));
         }

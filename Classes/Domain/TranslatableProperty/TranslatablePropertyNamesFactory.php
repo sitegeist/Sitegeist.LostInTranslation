@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
+use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
+use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Core\NodeType\NodeType;
 
@@ -16,11 +18,11 @@ class TranslatablePropertyNamesFactory
     protected $translateInlineEditables;
 
     /**
-     * @var array<string, TranslatablePropertyNames>
+     * @var array<string, PropertyNames>
      */
     protected $firstLevelCache = [];
 
-    public function createForNodeType(NodeType $nodeType): TranslatablePropertyNames
+    public function createForNodeType(NodeType $nodeType): PropertyNames
     {
         if (array_key_exists($nodeType->name->value, $this->firstLevelCache)) {
             return $this->firstLevelCache[$nodeType->name->value];
@@ -32,16 +34,15 @@ class TranslatablePropertyNamesFactory
                 continue;
             }
             if ($this->translateInlineEditables && ($propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false)) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName);
+                $translateProperties[] = PropertyName::fromString($propertyName);
                 continue;
             }
-            // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
-            if ($propertyDefinition['options']['automaticTranslation'] ?? ($propertyDefinition['options']['translateOnAdoption'] ?? false)) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName);
+            if ($propertyDefinition['options']['automaticTranslation'] ?? false) {
+                $translateProperties[] = PropertyName::fromString($propertyName);
                 continue;
             }
         }
-        $this->firstLevelCache[$nodeType->name->value] = new TranslatablePropertyNames(...$translateProperties);
+        $this->firstLevelCache[$nodeType->name->value] = PropertyNames::fromArray($translateProperties);
         return $this->firstLevelCache[$nodeType->name->value];
     }
 }
