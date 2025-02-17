@@ -20,6 +20,10 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  */
 class TranslationCommandHookFactory implements CommandHookFactoryInterface
 {
+
+    #[Flow\InjectConfiguration(path:'nodeTranslation.enabled')]
+    public bool $enabled = false;
+
     #[Flow\InjectConfiguration(path:'nodeTranslation.languageDimensionName')]
     public string $languageDimensionName;
 
@@ -32,6 +36,10 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
 
     public function build(CommandHooksFactoryDependencies $commandHooksFactoryDependencies): CommandHookInterface
     {
+        if ($this->enabled === false) {
+            return new PassthroughCommandHook();
+        }
+
         return new TranslationCommandHook(
             $commandHooksFactoryDependencies->contentRepositoryId,
             $commandHooksFactoryDependencies->contentGraphReadModel,
