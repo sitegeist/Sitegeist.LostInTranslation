@@ -64,7 +64,6 @@ Sitegeist:
       #
       languageDimensionName: 'language'
 
-
       #
       # To be used if editor access to the translated languages is disabled by policy.
       # If enabled, the automated node translation will disregard the policy while translating the nodes.

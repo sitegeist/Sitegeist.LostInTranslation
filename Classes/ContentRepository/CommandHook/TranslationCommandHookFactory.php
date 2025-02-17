@@ -10,6 +10,7 @@ use Neos\ContentRepository\Core\Factory\CommandHookFactoryInterface;
 use Neos\ContentRepository\Core\Factory\CommandHooksFactoryDependencies;
 use Neos\ContentRepository\Core\Projection\CatchUpHook\CatchUpHookFactoryInterface;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
+use Neos\Flow\Annotations as Flow;
 use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -17,8 +18,11 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 /**
  * @implements CatchUpHookFactoryInterface<DocumentUriPathFinder>
  */
-final class TranslationCommandHookFactory implements CommandHookFactoryInterface
+class TranslationCommandHookFactory implements CommandHookFactoryInterface
 {
+    #[Flow\InjectConfiguration(path:'nodeTranslation.languageDimensionName')]
+    public string $languageDimensionName;
+
     public function __construct(
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         protected readonly TranslatablePropertyNamesFactory $translatablePropertyNamesFactory,
@@ -35,7 +39,7 @@ final class TranslationCommandHookFactory implements CommandHookFactoryInterface
             $this->contentRepositoryRegistry,
             $this->translatablePropertyNamesFactory,
             $this->translationService,
-            new ContentDimensionId('language')
+            new ContentDimensionId($this->languageDimensionName)
         );
     }
 }
