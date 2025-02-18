@@ -102,4 +102,4 @@ Sitegeist:
       #
       skipAuthorizationChecks: false
 
-
+      excludedNodePaths: []
