@@ -63,6 +63,12 @@ class NodeTranslationService
     protected $skipAuthorizationChecks;
 
     /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.excludedNodePaths")
+     * @var array
+     */
+    protected $excludedNodePaths = [];
+
+    /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
      * @var array<string,array{'default': string, 'defaultPreset': string, 'presets': array<string,mixed> }>
      */
@@ -137,6 +143,14 @@ class NodeTranslationService
             return;
         }
 
+        if (!empty($this->excludedNodePaths)) {
+            foreach ($this->excludedNodePaths as $excludedNodePath) {
+                if (str_starts_with($node->getPath(), $excludedNodePath)) {
+                    return;
+                }
+            }
+        }
+
         $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
         if (!$isAutomaticTranslationEnabledForNodeType) {
             return;
@@ -170,6 +184,14 @@ class NodeTranslationService
 
         if ($workspace->getName() !== $this->liveWorkspaceName) {
             return;
+        }
+
+        if (!empty($this->excludedNodePaths)) {
+            foreach ($this->excludedNodePaths as $excludedNodePath) {
+                if (str_starts_with($node->getPath(), $excludedNodePath)) {
+                    return;
+                }
+            }
         }
 
         $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
