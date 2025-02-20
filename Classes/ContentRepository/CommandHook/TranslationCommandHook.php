@@ -6,7 +6,9 @@ namespace Sitegeist\LostInTranslation\ContentRepository\CommandHook;
 
 use Neos\ContentRepository\Core\CommandHandler\CommandHookInterface;
 use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
+use Neos\ContentRepository\Core\CommandHandler\Commands;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
+use Neos\ContentRepository\Core\EventStore\Events;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
 use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
@@ -29,10 +31,9 @@ final class TranslationCommandHook implements CommandHookInterface
     private LoggerInterface $logger;
 
     public function __construct(
-        private readonly ContentRepositoryId $contentRepositoryId,
+        private bool $enabled,
         private readonly ContentGraphReadModelInterface $contentGraphReadModel,
         private readonly NodeTypeManager $nodeTypeManager,
-        private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         private readonly TranslatablePropertyNamesFactory $translatablePropertyNamesFactory,
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimensionId $languageDimensionId,
@@ -46,19 +47,28 @@ final class TranslationCommandHook implements CommandHookInterface
 
     public function onBeforeHandle(CommandInterface $command): CommandInterface
     {
+        if ($this->enabled === false) {
+            return $command;
+        }
+
         return $command;
     }
 
-    public function onAfterHandle(CommandInterface $command): void
+    public function onAfterHandle(CommandInterface $command, Events $events): Commands
     {
+        if ($this->enabled === false) {
+            return Commands::createEmpty();
+        }
+
         if ($command instanceof CreateNodeVariant) {
-            $this->handleCreateNodeVariant($command);
+            return $this->createNodeVariantCommandWasHandled($command, $events);
+        } else {
+            return Commands::createEmpty();
         }
     }
 
-    public function handleCreateNodeVariant(CreateNodeVariant $command): void
+    public function createNodeVariantCommandWasHandled(CreateNodeVariant $command, Events $events): Commands
     {
-
         $source = $this->contentGraphReadModel
             ->getContentGraph($command->workspaceName)
             ->getSubgraph($command->sourceOrigin->toDimensionSpacePoint(), VisibilityConstraints::withoutRestrictions())
@@ -79,27 +89,26 @@ final class TranslationCommandHook implements CommandHookInterface
             }
         }
 
-        if (!empty($propertiesToTranslate)) {
-            $this->logger->error("translated", $propertiesToTranslate);
-            $translatedProperties = $this->translationService->translate(
-                $propertiesToTranslate,
-                str_replace(['en_UK','en_US'], 'en', $command->targetOrigin->getCoordinate($this->languageDimensionId)),
-                str_replace(['en_UK','en_US'], 'en', $command->sourceOrigin->getCoordinate($this->languageDimensionId))
-            );
-            $this->logger->error("translated", $translatedProperties);
-        } else {
-            return;
+        if (empty($propertiesToTranslate)) {
+            return Commands::createEmpty();
         }
 
-        if (!empty($translatedProperties)) {
-            $contentRepository = $this->contentRepositoryRegistry->get($this->contentRepositoryId);
-            $newCommand = SetNodeProperties::create(
-                $command->workspaceName,
-                $command->nodeAggregateId,
-                $command->targetOrigin,
-                PropertyValuesToWrite::fromArray($translatedProperties)
-            );
-            $contentRepository->handle($newCommand);
+        $translatedProperties = $this->translationService->translate(
+            $propertiesToTranslate,
+            str_replace(['en_UK','en_US'], 'en', $command->targetOrigin->getCoordinate($this->languageDimensionId)),
+            str_replace(['en_UK','en_US'], 'en', $command->sourceOrigin->getCoordinate($this->languageDimensionId))
+        );
+
+        if (empty($translatedProperties)) {
+            return Commands::createEmpty();
         }
+
+        $newCommand = SetNodeProperties::create(
+            $command->workspaceName,
+            $command->nodeAggregateId,
+            $command->targetOrigin,
+            PropertyValuesToWrite::fromArray($translatedProperties)
+        );
+        return Commands::fromArray([$newCommand]);
     }
 }

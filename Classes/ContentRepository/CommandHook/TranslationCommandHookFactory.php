@@ -36,15 +36,10 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
 
     public function build(CommandHooksFactoryDependencies $commandHooksFactoryDependencies): CommandHookInterface
     {
-        if ($this->enabled === false) {
-            return new PassthroughCommandHook();
-        }
-
         return new TranslationCommandHook(
-            $commandHooksFactoryDependencies->contentRepositoryId,
+            $this->enabled,
             $commandHooksFactoryDependencies->contentGraphReadModel,
             $commandHooksFactoryDependencies->nodeTypeManager,
-            $this->contentRepositoryRegistry,
             $this->translatablePropertyNamesFactory,
             $this->translationService,
             new ContentDimensionId($this->languageDimensionName)
