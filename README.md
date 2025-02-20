@@ -93,13 +93,6 @@ Sitegeist:
       languageDimensionName: 'language'
 ```
 
-To enable automated translations for a language preset, set `options.translationStrategy` to  `once`, `sync` or `none`.
-The default mode is `once`;
-
-* `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
-* `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
-* `none` will not translate variants for this dimension.
-
 If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
 be configured explicitly for this preset via `options.deeplLanguage`.
 
@@ -119,37 +112,33 @@ Neos:
         presets:
 
           #
-          # English is the main language of the editors and spoken by editors,
-          # the automatic translation is disabled therefore
+          # English has to be configured differently for source and target as deeply requires so,
+          # The source and target are seperated by a `:`
           #
           'en':
             label: 'English'
             values: ['en']
             uriSegment: 'en'
             options:
-              translationStrategy: 'none'
+              deeplLanguage: 'EN:EN-GB'
 
           #
           # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
-          # Here we use the "once" strategy, which will translate nodes only once on switching the language
           #
           'dk':
             label: 'Dansk'
             values: ['dk']
             uriSegment: 'dk'
             options:
-              deeplLanguage: 'da'
-              translationStrategy: 'once'
+              deeplLanguage: 'DA'
 
           #
-          # For German, we want to have a steady sync of nodes
+          # For German the dimension value de is used in uppercase 
           #
           'de':
             label: 'Bayrisch'
             values: ['de']
-            uriSegment: 'de'
-            options:
-              translationStrategy: 'sync'
+            uriSegment: 'de'          
 
           #
           # The bavarian language is not supported by DeepL and is disabled
@@ -159,7 +148,7 @@ Neos:
             values: ['de_bar','de']
             uriSegment: 'de_bar'
             options:
-              translationStrategy: 'none'
+              deeplLanguage: false
 ```
 
 ### Ignoring Terms

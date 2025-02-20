@@ -5,22 +5,18 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\ContentRepository\CommandHook;
 
 use Neos\ContentRepository\Core\CommandHandler\CommandHookInterface;
+use Neos\ContentRepository\Core\Dimension\ContentDimension;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\Factory\CommandHookFactoryInterface;
 use Neos\ContentRepository\Core\Factory\CommandHooksFactoryDependencies;
-use Neos\ContentRepository\Core\Projection\CatchUpHook\CatchUpHookFactoryInterface;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
-use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
-use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
+use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
+use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
-/**
- * @implements CatchUpHookFactoryInterface<DocumentUriPathFinder>
- */
 class TranslationCommandHookFactory implements CommandHookFactoryInterface
 {
-
     #[Flow\InjectConfiguration(path:'nodeTranslation.enabled')]
     public bool $enabled = false;
 
@@ -29,20 +25,29 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
 
     public function __construct(
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
-        protected readonly TranslatablePropertyNamesFactory $translatablePropertyNamesFactory,
+        protected readonly NodeTypeTranslationDirectiveFactory $translatablePropertyNamesFactory,
         protected readonly TranslationServiceInterface $translationService,
     ) {
     }
 
     public function build(CommandHooksFactoryDependencies $commandHooksFactoryDependencies): CommandHookInterface
     {
-        return new TranslationCommandHook(
-            $this->enabled,
-            $commandHooksFactoryDependencies->contentGraphReadModel,
-            $commandHooksFactoryDependencies->nodeTypeManager,
-            $this->translatablePropertyNamesFactory,
-            $this->translationService,
+        $languageDimension = $commandHooksFactoryDependencies->contentDimensionSource->getDimension(
             new ContentDimensionId($this->languageDimensionName)
         );
+
+        if ($languageDimension instanceof ContentDimension) {
+            return new TranslationCommandHook(
+                $this->enabled,
+                $commandHooksFactoryDependencies->contentGraphReadModel,
+                $commandHooksFactoryDependencies->nodeTypeManager,
+                $this->translatablePropertyNamesFactory,
+                new DimensionValueDirectiveFactory(),
+                $this->translationService,
+                $languageDimension
+            );
+        } else {
+            throw new \Exception(sprintf('Lamguage dimension %s was nou found in content repository %s', $this->languageDimensionName, $commandHooksFactoryDependencies->contentRepositoryId->value));
+        }
     }
 }

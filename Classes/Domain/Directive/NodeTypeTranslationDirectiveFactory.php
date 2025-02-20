@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
+namespace Sitegeist\LostInTranslation\Domain\Directive;
 
+use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\Flow\Annotations as Flow;
-use Neos\ContentRepository\Core\NodeType\NodeType;
 
-class TranslatablePropertyNamesFactory
+class NodeTypeTranslationDirectiveFactory
 {
     /**
      * @var bool
@@ -18,11 +18,11 @@ class TranslatablePropertyNamesFactory
     protected $translateInlineEditables;
 
     /**
-     * @var array<string, PropertyNames>
+     * @var array<string, NodeTypeTranslationDirective>
      */
     protected $firstLevelCache = [];
 
-    public function createForNodeType(NodeType $nodeType): PropertyNames
+    public function createForNodeType(NodeType $nodeType): NodeTypeTranslationDirective
     {
         if (array_key_exists($nodeType->name->value, $this->firstLevelCache)) {
             return $this->firstLevelCache[$nodeType->name->value];
@@ -33,16 +33,25 @@ class TranslatablePropertyNamesFactory
             if (array_key_exists('type', $propertyDefinition) && $propertyDefinition['type'] !== 'string') {
                 continue;
             }
-            if ($this->translateInlineEditables && ($propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false)) {
-                $translateProperties[] = PropertyName::fromString($propertyName);
+            $explicitSetting = $propertyDefinition['options']['automaticTranslation'] ?? null;
+            if (is_bool($explicitSetting)) {
+                if ($explicitSetting === true) {
+                    $translateProperties[] = PropertyName::fromString($propertyName);
+                }
                 continue;
             }
-            if ($propertyDefinition['options']['automaticTranslation'] ?? false) {
+            $isInlineEditable = $propertyDefinition['ui']['inlineEditable'] ?? false;
+            if ($this->translateInlineEditables && $isInlineEditable) {
                 $translateProperties[] = PropertyName::fromString($propertyName);
                 continue;
             }
         }
-        $this->firstLevelCache[$nodeType->name->value] = PropertyNames::fromArray($translateProperties);
+
+        $this->firstLevelCache[$nodeType->name->value] = new NodeTypeTranslationDirective(
+            $nodeType->getConfiguration('options.automaticTranslation'),
+            PropertyNames::fromArray($translateProperties),
+        );
+
         return $this->firstLevelCache[$nodeType->name->value];
     }
 }
