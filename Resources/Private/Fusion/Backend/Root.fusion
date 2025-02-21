@@ -4,3 +4,6 @@ include: **/*.fusion
 
 Sitegeist.LostInTranslation.LostInTranslationModuleController.index = Sitegeist.LostInTranslation:Views.Index
 Sitegeist.LostInTranslation.LostInTranslationModuleController.setCustomKey = Sitegeist.LostInTranslation:Views.SetCustomKey
+Sitegeist.LostInTranslation.LostInTranslationModuleController.createGlossary = Sitegeist.LostInTranslation:Views.CreateGlossary
+Sitegeist.LostInTranslation.LostInTranslationModuleController.showGlossary = Sitegeist.LostInTranslation:Views.ShowGlossary
+Sitegeist.LostInTranslation.LostInTranslationModuleController.createEntryForGlossary  = Sitegeist.LostInTranslation:Views.CreateEntryForGlossary

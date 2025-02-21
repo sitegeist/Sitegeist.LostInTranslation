@@ -18,12 +18,14 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKey;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryIdService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class DeepLTranslationServiceTest extends UnitTestCase
 {
     protected MockObject|VariableFrontend $translationCache;
     protected MockObject|DeepLCustomAuthenticationKeyService $customKeyServiceMock;
+    protected MockObject|DeepLGlossaryIdService $glossaryIdServiceMock;
     protected MockObject|LoggerInterface $loggerMock;
     protected MockObject|Browser $browserMock;
 
@@ -34,6 +36,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
         $this->customKeyServiceMock = $this->getAccessibleMock(DeepLCustomAuthenticationKeyService::class, ['get'], [], '', false);
         $this->loggerMock = Mockery::mock(LoggerInterface::class);
         $this->browserMock = $this->getAccessibleMock(Browser::class, ['sendRequest'], [], '', false);
+        $this->glossaryIdServiceMock = $this->getAccessibleMock(DeepLGlossaryIdService::class, ['findGlossaryId'], [], '', false);
     }
 
     public static function translateWillCorrectlyTranslateTextsData(): array
@@ -149,7 +152,6 @@ class DeepLTranslationServiceTest extends UnitTestCase
             $this->loggerMock->shouldReceive($expectedLoggerMethod)->once()->withSomeOfArgs($expectedLoggerMessage);
         }
 
-
         $service = $this->getService(['authenticationKey' => 'configuredKey']);
         $service->method('getDeeplAuthenticationKey')->willReturn(new DeepLAuthenticationKey('foobarbaz'));
         if ($response) {
@@ -229,6 +231,7 @@ class DeepLTranslationServiceTest extends UnitTestCase
         $this->inject($service, 'logger', $this->loggerMock);
         $this->inject($service, 'translationCache', $this->translationCache);
         $this->inject($service, 'customAuthenticationKeyService', $this->customKeyServiceMock);
+        $this->inject($service, 'glossaryIdService', $this->glossaryIdServiceMock);
         $this->inject($service, 'settings', array_merge_recursive([
                 'baseUri' => 'https://api.deepl.com/v2/',
                 'baseUriFree' => 'https://api-free.deepl.com/v2/',

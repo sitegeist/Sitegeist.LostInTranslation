@@ -19,6 +19,7 @@ use Neos\Http\Factories\StreamFactory;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
+use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
 
@@ -35,6 +36,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
     /**
      * @Flow\Inject
+     * @phpstan-var LoggerInterface|null
      * @var LoggerInterface
      */
     protected $logger;
@@ -69,6 +71,12 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected $authenticationKeyFactory;
 
     /**
+     * @Flow\Inject
+     * @var DeepLGlossaryIdService
+     */
+    protected $glossaryIdService;
+
+    /**
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
@@ -76,6 +84,12 @@ class DeepLTranslationService implements TranslationServiceInterface
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
+        if ($sourceLanguage) {
+            $glossaryId = $this->glossaryIdService->findGlossaryId($sourceLanguage, $targetLanguage);
+        } else {
+            $glossaryId = null;
+        }
+
         $isCacheEnabled = $this->settings['enableCache'] ?? false;
 
         $cachedEntries = [];
@@ -103,6 +117,9 @@ class DeepLTranslationService implements TranslationServiceInterface
         $body = http_build_query($this->settings['defaultOptions']);
         if ($sourceLanguage) {
             $body .= '&source_lang=' . urlencode($sourceLanguage);
+            if ($glossaryId) {
+                $body .= '&glossary_id=' . $glossaryId;
+            }
         }
         $body .= '&target_lang=' . urlencode($targetLanguage);
         foreach ($values as $part) {
@@ -166,18 +183,18 @@ class DeepLTranslationService implements TranslationServiceInterface
             return $mergedTranslatedStrings;
         } else {
             if ($apiResponse->getStatusCode() === 403) {
-                $this->logger->critical('Your DeepL API credentials are either wrong, or you don\'t have access to the requested API.');
+                $this->logger?->critical('Your DeepL API credentials are either wrong, or you don\'t have access to the requested API.');
             } elseif ($apiResponse->getStatusCode() === 429) {
-                $this->logger->warning('You sent too many requests to the DeepL API.');
+                $this->logger?->warning('You sent too many requests to the DeepL API.');
             } elseif ($apiResponse->getStatusCode() === 456) {
-                $this->logger->warning('You reached your DeepL API character limit. Upgrade your plan or wait until your quota is filled up again.');
+                $this->logger?->warning('You reached your DeepL API character limit. Upgrade your plan or wait until your quota is filled up again.');
             } elseif ($apiResponse->getStatusCode() === 400) {
-                $this->logger->warning('Your DeepL API request was not well-formed. Please check the source and the target language in particular.', [
+                $this->logger?->warning('Your DeepL API request was not well-formed. Please check the source and the target language in particular.', [
                     'sourceLanguage' => $sourceLanguage,
                     'targetLanguage' => $targetLanguage
                 ]);
             } else {
-                $this->logger->warning('Unexpected status from Deepl API', ['status' => $apiResponse->getStatusCode()]);
+                $this->logger?->warning('Unexpected status from Deepl API', ['status' => $apiResponse->getStatusCode()]);
             }
 
             return array_replace($texts, $cachedEntries);
@@ -206,6 +223,28 @@ class DeepLTranslationService implements TranslationServiceInterface
         } catch (\Exception $exception) {
             return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, false);
         }
+    }
+
+    public function uploadGlossary(Glossary $glossary): ?string
+    {
+        $request = $this->createRequest('glossaries', 'POST')
+            ->withoutHeader('Content-Type')
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody($this->streamFactory->createStream(json_encode($glossary, JSON_THROW_ON_ERROR)));
+        $response = $this->getBrowser()->sendRequest($request);
+        if ($response->getStatusCode() === 201) {
+            $data = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+            return $data['glossary_id'] ?? null;
+        }
+        return null;
+    }
+
+    public function deleteGlossary(string $id): void
+    {
+        $request = $this->createRequest('glossaries/' . $id, 'DELETE')
+             ->withoutHeader('Content-Type')
+             ->withHeader('Content-Type', 'application/json');
+        $this->getBrowser()->sendRequest($request);
     }
 
     protected function getDeeplAuthenticationKey(): DeepLAuthenticationKey

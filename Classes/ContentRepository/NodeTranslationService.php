@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
+use Neos\ContentRepository\Domain\Model\Node;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
