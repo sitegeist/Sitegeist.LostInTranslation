@@ -29,12 +29,6 @@ class TranslationHelper implements ProtectedContextAwareInterface
     protected $translationService;
 
     /**
-     * @Flow\Inject
-     * @var Comparator
-     */
-    protected $comparator;
-
-    /**
      * @param string $text A string to be translated
      * @param string $targetLanguage The target language that should be translated to
      * @param string|null $sourceLanguage Optional: the source language of the texts
@@ -54,36 +48,6 @@ class TranslationHelper implements ProtectedContextAwareInterface
     public function translateMultiple(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
         return $this->translationService->translate($texts, $targetLanguage, $sourceLanguage);
-    }
-
-    /**
-     * @param NodeInterface $currentCollectionNode
-     * @param string $referenceLanguage
-     * @return Result
-     */
-    public function compareCollectionWithDimension(NodeInterface $currentCollectionNode, string $referenceLanguage): Result
-    {
-        $contentContext = $this->createContentContext($currentCollectionNode->getContext()->getWorkspaceName(), [$this->languageDimensionName => [$referenceLanguage]]);
-        $referenceCollectionNode = $contentContext->getNodeByIdentifier($currentCollectionNode->getIdentifier());
-        if ($referenceCollectionNode === null) {
-            return Result::createEmpty();
-        }
-        return $this->comparator->compareCollectionNode($currentCollectionNode, $referenceCollectionNode);
-    }
-
-    /**
-     * @param NodeInterface $currentDocumentNode
-     * @param string $referenceLanguage
-     * @return Result
-     */
-    public function compareDocumentWithDimension(NodeInterface $currentDocumentNode, string $referenceLanguage): Result
-    {
-        $contentContext = $this->createContentContext($currentDocumentNode->getContext()->getWorkspaceName(), [$this->languageDimensionName => [$referenceLanguage]]);
-        $referenceDocumentNode = $contentContext->getNodeByIdentifier($currentDocumentNode->getIdentifier());
-        if ($referenceDocumentNode === null) {
-            return Result::createEmpty();
-        }
-        return $this->comparator->compareDocumentNode($currentDocumentNode, $referenceDocumentNode);
     }
 
     /**
