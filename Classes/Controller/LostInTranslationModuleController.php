@@ -50,6 +50,8 @@ class LostInTranslationModuleController extends AbstractModuleController
 
     public function createGlossaryAction(): void
     {
+        $languageKeys = $this->translationService->getGlossaryLanguageKeys();
+        $this->view->assign('languageKeys', $languageKeys);
     }
 
     public function addGlossaryAction(string $source, string $target): void

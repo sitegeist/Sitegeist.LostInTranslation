@@ -14,7 +14,7 @@ use League\Csv\Writer;
  * @Flow\Entity
  * @ORM\Table(uniqueConstraints={@ORM\UniqueConstraint(name="languageCombination", columns={"sourceLanguageKey", "targetLanguageKey"})})
  */
-class Glossary implements \JsonSerializable
+class Glossary
 {
     /**
      * @var string
@@ -91,18 +91,12 @@ class Glossary implements \JsonSerializable
     /**
      * @return array<string, string>
      */
-    public function jsonSerialize(): array
+    public function getEntriesAsAssociativeArray(): array
     {
-        $csvWriter = Writer::createFromString();
+        $entries = [];
         foreach ($this->entries as $entry) {
-            $csvWriter->insertOne([$entry->sourceText, $entry->targetText]);
+            $entries[$entry->sourceText] = $entry->targetText;
         }
-        return [
-            'name' => $this->getLabel(),
-            'source_lang' => $this->sourceLanguageKey,
-            'target_lang' => $this->targetLanguageKey,
-            'entries' => trim($csvWriter->toString()),
-            'entries_format' => 'csv'
-        ];
+        return $entries;
     }
 }

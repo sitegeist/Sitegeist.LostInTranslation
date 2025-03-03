@@ -4,11 +4,11 @@
     "name": "sitegeist/lostintranslation",
     "license": "GPL-3.0-or-later",
     "require": {
-        "php": ">=8.1.0",
-        "neos/neos": "^7.3 || ^8.0 || dev-master",
-        "neos/neos-ui": "^7.3 || ^8.0 || dev-master",
-        "neos/http-factories": "^7.3 || ^8.0 || dev-master",
-        "league/csv": "^9.2"
+        "php": ">=8.2.0",
+        "deeplcom/deepl-php": "~1.11.0",
+        "neos/neos": "^8.3 || dev-master",
+        "neos/neos-ui": "^8.3 || dev-master",
+        "neos/http-factories": "^8.3 || dev-master"
     },
     "autoload": {
         "psr-4": {
