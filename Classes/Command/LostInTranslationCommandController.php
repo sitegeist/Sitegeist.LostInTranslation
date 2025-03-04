@@ -31,9 +31,9 @@ class LostInTranslationCommandController extends CommandController
     #[Flow\Inject]
     public Context $securityContext;
 
-    public function translateCommand(string $source, string $target, string $contenRepository = 'default', string $workspace = 'live', string $nodePath = '/<Neos.Neos:Sites>'): void
+    public function translateCommand(string $source, string $target, string $contentRepository = 'default', string $workspace = 'live', string $nodePath = '/<Neos.Neos:Sites>'): void
     {
-            $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contenRepository));
+            $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepository));
 
             $workspaceName = WorkspaceName::fromString($workspace);
 
