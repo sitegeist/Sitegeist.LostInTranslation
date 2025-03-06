@@ -37,21 +37,21 @@ class LostInTranslationCommandController extends CommandController
 
             $workspaceName = WorkspaceName::fromString($workspace);
 
-            if ($cr->findWorkspaceByName($workspaceName) === null) {
-                $this->outputLine("workspace not fround");
-                $this->quit(1);
-            }
+        if ($cr->findWorkspaceByName($workspaceName) === null) {
+            $this->outputLine("workspace not fround");
+            $this->quit(1);
+        }
 
             $graph = $cr->getContentGraph($workspaceName);
-            $originSubgraph = $graph->getSubgraph( DimensionSpacePoint::fromArray([$this->languageDimensionName => $source]), VisibilityConstraints::withoutRestrictions());
-            $targetSubgraph = $graph->getSubgraph( DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]), VisibilityConstraints::withoutRestrictions());
+            $originSubgraph = $graph->getSubgraph(DimensionSpacePoint::fromArray([$this->languageDimensionName => $source]), VisibilityConstraints::withoutRestrictions());
+            $targetSubgraph = $graph->getSubgraph(DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]), VisibilityConstraints::withoutRestrictions());
 
             $start = $originSubgraph->findNodeByAbsolutePath(AbsoluteNodePath::fromString($nodePath));
 
-            if ($start === null) {
-                $this->outputLine("No node found for path {$nodePath}");
-                $this->quit(1);
-            }
+        if ($start === null) {
+            $this->outputLine("No node found for path {$nodePath}");
+            $this->quit(1);
+        }
             $this->translateNodeRecursive($cr, $start, $originSubgraph, $targetSubgraph);
     }
 
@@ -66,7 +66,7 @@ class LostInTranslationCommandController extends CommandController
                 OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint())
             ));
         }
-        foreach ($originSubgraph->findChildNodes($originNode->aggregateId,  FindChildNodesFilter::create())->getIterator() as $childNode) {
+        foreach ($originSubgraph->findChildNodes($originNode->aggregateId, FindChildNodesFilter::create())->getIterator() as $childNode) {
             $this->translateNodeRecursive($cr, $childNode, $originSubgraph, $targetSubgraph);
         }
     }

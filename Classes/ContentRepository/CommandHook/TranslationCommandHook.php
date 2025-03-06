@@ -8,14 +8,13 @@ use Neos\ContentRepository\Core\CommandHandler\CommandHookInterface;
 use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
 use Neos\ContentRepository\Core\CommandHandler\Commands;
 use Neos\ContentRepository\Core\Dimension\ContentDimension;
-use Neos\ContentRepository\Core\EventStore\Events;
+use Neos\ContentRepository\Core\EventStore\PublishedEvents;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
 use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
-use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirective;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -42,20 +41,20 @@ final class TranslationCommandHook implements CommandHookInterface
         return $command;
     }
 
-    public function onAfterHandle(CommandInterface $command, Events $events): Commands
+    public function onAfterHandle(CommandInterface $command, PublishedEvents $events): Commands
     {
         if ($this->enabled === false) {
             return Commands::createEmpty();
         }
 
         if ($command instanceof CreateNodeVariant) {
-            return $this->createNodeVariantCommandWasHandled($command, $events);
+            return $this->createNodeVariantCommandWasHandled($command);
         } else {
             return Commands::createEmpty();
         }
     }
 
-    public function createNodeVariantCommandWasHandled(CreateNodeVariant $command, Events $events): Commands
+    public function createNodeVariantCommandWasHandled(CreateNodeVariant $command): Commands
     {
         $sourceLanguageDirective = $this->dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
             $this->languageDimension,
