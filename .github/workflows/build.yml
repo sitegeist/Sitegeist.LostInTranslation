@@ -45,7 +45,7 @@ jobs:
           composer config --no-plugins allow-plugins.neos/composer-plugin true
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           path: ${{ env.NEOS_FOLDER }}${{ env.DIST_FOLDER }}
 
