@@ -3,9 +3,6 @@ Neos:
     defaultContext:
       'Sitegeist.LostInTranslation': 'Sitegeist\LostInTranslation\Eel\TranslationHelper'
   Neos:
-    fusion:
-      autoInclude:
-        'Sitegeist.LostInTranslation': true
     modules:
       management:
         submodules:
@@ -15,3 +12,14 @@ Neos:
             icon: 'icon-language'
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
             privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
+
+  ContentRepositoryRegistry:
+    presets:
+      'default':
+#        contentGraphProjection:
+#          catchUpHooks:
+#            'Sitegeist.LostInTranslation:TranslationCatchupHook':
+#              factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CatchUpHook\TranslationCatchupHookFactory
+        commandHooks:
+          'Sitegeist.LostInTranslation:TranslationCommandHook':
+            factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory

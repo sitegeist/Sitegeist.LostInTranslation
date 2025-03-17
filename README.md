@@ -93,13 +93,6 @@ Sitegeist:
       languageDimensionName: 'language'
 ```
 
-To enable automated translations for a language preset, set `options.translationStrategy` to  `once`, `sync` or `none`.
-The default mode is `once`;
-
-* `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
-* `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
-* `none` will not translate variants for this dimension.
-
 If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
 be configured explicitly for this preset via `options.deeplLanguage`.
 
@@ -119,37 +112,33 @@ Neos:
         presets:
 
           #
-          # English is the main language of the editors and spoken by editors,
-          # the automatic translation is disabled therefore
+          # English has to be configured differently for source and target as deeply requires so,
+          # The source and target are seperated by a `:`
           #
           'en':
             label: 'English'
             values: ['en']
             uriSegment: 'en'
             options:
-              translationStrategy: 'none'
+              deeplLanguage: 'EN:EN-GB'
 
           #
           # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
-          # Here we use the "once" strategy, which will translate nodes only once on switching the language
           #
           'dk':
             label: 'Dansk'
             values: ['dk']
             uriSegment: 'dk'
             options:
-              deeplLanguage: 'da'
-              translationStrategy: 'once'
+              deeplLanguage: 'DA'
 
           #
-          # For German, we want to have a steady sync of nodes
+          # For German the dimension value de is used in uppercase 
           #
           'de':
             label: 'Bayrisch'
             values: ['de']
-            uriSegment: 'de'
-            options:
-              translationStrategy: 'sync'
+            uriSegment: 'de'          
 
           #
           # The bavarian language is not supported by DeepL and is disabled
@@ -159,7 +148,7 @@ Neos:
             values: ['de_bar','de']
             uriSegment: 'de_bar'
             options:
-              translationStrategy: 'none'
+              deeplLanguage: false
 ```
 
 ### Ignoring Terms
@@ -202,43 +191,6 @@ To translate an array of texts you can use:
 ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de', 'en')}
 # Output: ['Hallo Welt!', 'Mein Name ist...']
 ```
-
-### Compare and update translations
-
-The lost in translation package contains two prototypes that visualize differences between the current and the `default`
-translation.
-
-To show the information in the backend you can render the `Sitegeist.LostInTranslation:Collection.TranslationInformation` adjacent to a ContentCollection.
-
-```
-content = Neos.Fusion:Join {
-     info = Sitegeist.LostInTranslation:Collection.TranslationInformation {
-          nodePath = 'content'
-     }
-     content = Neos.Neos:ContentCollection {
-          nodePath = 'content'
-     }
-}
-```
-
-![DDEV__WebPage_test](https://github.com/sitegeist/Sitegeist.LostInTranslation/assets/1309380/7d268e18-5a2a-4292-8844-4800020b0ddb)
-
-### `Sitegeist.LostInTranslation:Document.TranslationInformation`
-
-Show informations about missing and outdated translations on document level. Allows to "translate missing" and "update outdated" nodes.
-The prototype is only showing in backend + edit mode.
-
-- `node`:  (Node, default `documentNode` from fusion context) The document node that shall be compared
-- `referenceLanguage`: (string, default language preset) The preset used to compare against
-
-### `Sitegeist.LostInTranslation:Collection.TranslationInformation`
-
-Show informations about missing and outdated translations on content collection level. Allows to "translate missing" and "update outdated" nodes.
-The prototype is only showing in backend + edit mode.
-
-- `nodePath`: (string, default null)
-- `node`:  (Node, default `node` from fusion context)
-- `referenceLanguage`: (string, default language preset) The preset used to compare against
 
 ### Translation Cache
 
