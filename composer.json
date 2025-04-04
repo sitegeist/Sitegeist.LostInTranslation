@@ -50,7 +50,6 @@
             "package-key": "Sitegeist.LostInTranslation"
         }
     },
-    "minimum-stability": "beta",
     "config": {
         "bin-dir": "bin",
         "vendor-dir": "Packages/Libraries",
