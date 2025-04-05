@@ -7,6 +7,7 @@ namespace Sitegeist\LostInTranslation\Tests\Unit\Infrastructure\DeepL;
 use DeepL\DeepLClient;
 use DeepL\DeepLException;
 use DeepL\TextResult;
+use DeepL\TranslateTextOptions;
 use DeepL\Usage as UsageResult;
 use Neos\Cache\Exception;
 use Neos\Flow\Tests\UnitTestCase;
@@ -16,6 +17,7 @@ use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKey;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKeyFactory;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeeplClientFactory;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class DeepLTranslationServiceTest extends UnitTestCase
@@ -95,6 +97,144 @@ class DeepLTranslationServiceTest extends UnitTestCase
         );
 
         $this->assertEquals($expectedTranslatedTexts, $translatedTexts);
+    }
+
+    /**
+     * @test
+     */
+    public function translateUsesGlossaryIfFound(): void
+    {
+        $mockGlossaryService = $this->createMock(DeepLGlossaryService::class);
+        $mockGlossaryService
+            ->expects(self::once())
+            ->method('findGlossaryId')
+            ->with('en', 'de')
+            ->willReturn('en_de_glossary');
+
+        $this->translationService->injectDeepLGlossaryService($mockGlossaryService);
+
+        $this->mockDeeplClient
+            ->expects(self::once())
+            ->method('translateText')
+            ->with(['en_foo', 'en_bar', 'en_baz'], 'en', 'de', [TranslateTextOptions::GLOSSARY => 'en_de_glossary'])
+            ->willReturn(
+            [
+                    new TextResult('de_foo', 'en', 6),
+                    new TextResult('de_bar', 'en', 6),
+                    new TextResult('de_baz', 'en', 6)
+                ]
+            );
+
+        $this->translationService->translate(
+            ['en_foo', 'en_bar', 'en_baz'],
+            'de',
+            'en'
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function translateWorksIfNoGlossaryIsFound(): void
+    {
+        $mockGlossaryService = $this->createMock(DeepLGlossaryService::class);
+        $mockGlossaryService
+            ->expects(self::once())
+            ->method('findGlossaryId')
+            ->with('en', 'de')
+            ->willReturn(null);
+
+        $this->translationService->injectDeepLGlossaryService($mockGlossaryService);
+
+        $this->mockDeeplClient
+            ->expects(self::once())
+            ->method('translateText')
+            ->with(['en_foo', 'en_bar', 'en_baz'], 'en', 'de', [])
+            ->willReturn(
+                [
+                    new TextResult('de_foo', 'en', 6),
+                    new TextResult('de_bar', 'en', 6),
+                    new TextResult('de_baz', 'en', 6)
+                ]
+            );
+
+        $this->translationService->translate(
+            ['en_foo', 'en_bar', 'en_baz'],
+            'de',
+            'en'
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function translatePassesTranslateOptionsToDeepLClient(): void
+    {
+        $this->translationService->injectSettings(
+            [
+                'DeepLApi' => [
+                    'defaultOptions' => [
+                        'suppe' => 'ist gut'
+                    ]
+                ]
+            ]
+        );
+
+        $this->mockDeeplClient
+            ->expects(self::once())
+            ->method('translateText')
+            ->with(['en_foo', 'en_bar', 'en_baz'], 'en', 'de', ['suppe' => 'ist gut'])
+            ->willReturn(
+                [
+                    new TextResult('de_foo', 'en', 6),
+                    new TextResult('de_bar', 'en', 6),
+                    new TextResult('de_baz', 'en', 6)
+                ]
+            );
+
+        $this->translationService->translate(
+            ['en_foo', 'en_bar', 'en_baz'],
+            'de',
+            'en'
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function translateMasksAndUnmasksIgnoredTerms(): void
+    {
+        $this->translationService->injectSettings(
+            [
+                'DeepLApi' => [
+                    'ignoredTerms' => ['suppe', 'nudel']
+                ]
+            ]
+        );
+
+        $this->mockDeeplClient
+            ->expects(self::once())
+            ->method('translateText')
+            ->with(['die <ignore>suppe</ignore> schmeckt', 'text <ignore>nudel</ignore>', '<ignore>nudel</ignore> text', 'other'], 'en', 'de')
+            ->willReturn(
+                [
+                    new TextResult('DE: die <ignore>suppe</ignore> schmeckt', 'en', 6),
+                    new TextResult('DE: text <ignore>nudel</ignore>', 'en', 6),
+                    new TextResult('DE: <ignore>nudel</ignore> text', 'en', 6),
+                    new TextResult('DE: other', 'en', 6)
+                ]
+            );
+
+        $translated = $this->translationService->translate(
+            ['die suppe schmeckt', 'text nudel', 'nudel text', 'other'],
+            'de',
+            'en'
+        );
+
+        $this->assertEquals(
+            $translated,
+            ['DE: die suppe schmeckt', 'DE: text nudel', 'DE: nudel text', 'DE: other'],
+        );
     }
 
     /**

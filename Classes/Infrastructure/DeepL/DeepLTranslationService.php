@@ -67,10 +67,20 @@ class DeepLTranslationService implements TranslationServiceInterface
      */
     public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
+        if (
+            array_key_exists('defaultOptions', $this->settings)
+            && is_array($this->settings['defaultOptions'])
+        ) {
+            $translateTextOptions = $this->settings['defaultOptions'];
+        } else {
+            $translateTextOptions = [];
+        }
+
         if ($sourceLanguage) {
             $glossaryId = $this->glossaryService?->findGlossaryId($sourceLanguage, $targetLanguage);
-        } else {
-            $glossaryId = null;
+            if ($glossaryId) {
+                $translateTextOptions[TranslateTextOptions::GLOSSARY] = $glossaryId;
+            }
         }
 
         $cachedEntries = [];
@@ -88,14 +98,6 @@ class DeepLTranslationService implements TranslationServiceInterface
         }
 
         $client = $this->deeplClientFactory->createDeepLClient();
-
-        $translateTextOptions = [
-            $this->settings['defaultOptions'] ?? []
-        ];
-
-        if ($glossaryId) {
-            $translateTextOptions[TranslateTextOptions::GLOSSARY] = $glossaryId;
-        }
 
         // store keys and values separately for later reunion
         $keys = array_keys($texts);
