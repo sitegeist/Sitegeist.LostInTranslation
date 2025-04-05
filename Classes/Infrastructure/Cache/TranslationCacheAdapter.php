@@ -35,7 +35,7 @@ class TranslationCacheAdapter
         return $this->translationCache->get($entryIdentifier);
     }
 
-    public function set(string $sourceText, string $targetText, $targetLanguage, ?string $sourceLanguage = null): void
+    public function set(string $sourceText, string $targetText, string $targetLanguage, ?string $sourceLanguage = null): void
     {
         if (!$this->enabled) {
             return;
@@ -44,8 +44,8 @@ class TranslationCacheAdapter
         $this->translationCache->set($entryIdentifier, $targetText);
     }
 
-    private function getEntryIdentifier(string $sourceText, string $targetLanguage, ?string $sourceLanguage = null): string
+    private function getEntryIdentifier(string $sourceText, string $targetLanguage, ?string $sourceLanguage): string
     {
-        return sha1($sourceText . $targetLanguage . $sourceLanguage ?? '-');
+        return sha1($sourceText . $targetLanguage . ($sourceLanguage ?? '-'));
     }
 }

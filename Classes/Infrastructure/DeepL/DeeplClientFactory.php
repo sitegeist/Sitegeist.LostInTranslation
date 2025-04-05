@@ -10,6 +10,9 @@ use Psr\Http\Client\ClientInterface;
 
 class DeeplClientFactory
 {
+    /**
+     * @var mixed[]
+     */
     protected array $settings;
 
     public function __construct(
@@ -18,14 +21,18 @@ class DeeplClientFactory
     ) {
     }
 
+    /**
+     * @param mixed[] $settings
+     * @return void
+     */
     public function injectSettings(array $settings): void
     {
          $this->settings = $settings['DeepLApi'];
     }
 
-    public function create(): DeeplClient
+    public function createDeepLClient(): DeeplClient
     {
-        $key = $this->authenticationKeyFactory->create();
+        $key = $this->authenticationKeyFactory->createDeepLAuthenticationKey();
 
         $options = [
             TranslatorOptions::HTTP_CLIENT => $this->httpClient

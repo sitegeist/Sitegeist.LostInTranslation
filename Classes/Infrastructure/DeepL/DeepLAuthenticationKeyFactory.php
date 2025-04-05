@@ -25,7 +25,7 @@ class DeepLAuthenticationKeyFactory
     /**
      * @return DeepLAuthenticationKey
      */
-    public function create(): DeepLAuthenticationKey
+    public function createDeepLAuthenticationKey(): DeepLAuthenticationKey
     {
         $customKey = $this->customAuthenticationKeyService->get();
         $settingsKey = $this->settings['authenticationKey'] ?? null;

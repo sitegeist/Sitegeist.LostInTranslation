@@ -33,7 +33,10 @@ use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
  */
 class DeepLTranslationService implements TranslationServiceInterface
 {
-    protected array $settings;
+    /**
+     * @var array{defaultOptions?: array<string,mixed>, ignoredTerms?:array<string,string>}
+ */
+    protected array $settings = [];
 
     protected ?LoggerInterface $logger = null;
     protected ?TranslationCacheAdapter $translationCacheAdapter = null;
@@ -60,6 +63,10 @@ class DeepLTranslationService implements TranslationServiceInterface
         $this->glossaryIdService = $glossaryIdService;
     }
 
+    /**
+     * @param array{DeepLApi: array{defaultOptions?: array<string,mixed>, ignoredTerms?:array<string,string>}} $settings
+     * @return void
+     */
     public function injectSettings(array $settings): void
     {
         $this->settings = $settings['DeepLApi'];
@@ -93,10 +100,10 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
         }
 
-        $client = $this->deeplClientFactory->create();
+        $client = $this->deeplClientFactory->createDeepLClient();
 
         $translateTextOptions = [
-            $this->settings['defaultOptions']
+            $this->settings['defaultOptions'] ?? []
         ];
 
         if ($glossaryId) {
@@ -119,7 +126,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
         try {
             /**
-             * @var TextResult[] $results
+             * @var TextResult[]|TextResult $results
              */
             $results = $client->translateText(
                 $valuesWithMaskedTerms,
@@ -127,6 +134,10 @@ class DeepLTranslationService implements TranslationServiceInterface
                 $targetLanguage,
                 $translateTextOptions
             );
+
+            if ($results instanceof TextResult) {
+                $results = [$results];
+            }
 
             $translations = array_map(
                 fn (TextResult $textResult) => IgnoredTermsUtility::unwrapIgnoredTerms($textResult->text),
@@ -145,7 +156,6 @@ class DeepLTranslationService implements TranslationServiceInterface
             $mergedTranslatedStrings = array_replace($translationWithOriginalIndex, $cachedEntries);
             ksort($mergedTranslatedStrings);
             return $mergedTranslatedStrings;
-
         } catch (DeepLException $e) {
             $this->logger?->critical('DeeplException caught: ' . $e->getMessage());
             return array_replace($texts, $cachedEntries);
@@ -155,15 +165,15 @@ class DeepLTranslationService implements TranslationServiceInterface
     public function getStatus(): ApiStatus
     {
         try {
-            $key = $this->deeplAuthenticationKeyFactory->create();
+            $key = $this->deeplAuthenticationKeyFactory->createDeepLAuthenticationKey();
         } catch (\Exception) {
             return new ApiStatus(false, 0, 0, false, false, false);
         }
 
         try {
-            $client = $this->deeplClientFactory->create();
+            $client = $this->deeplClientFactory->createDeepLClient();
             $usage = $client->getUsage();
-            return new ApiStatus(true, $usage->character->count, $usage->character->limit, true, $key->isCustomKey, $key->isFree);
+            return new ApiStatus(true, $usage->character?->count ?? 0, $usage->character?->limit ?? 0, true, $key->isCustomKey, $key->isFree);
         } catch (DeepLException $exception) {
             return new ApiStatus(false, 0, 0, true, $key->isCustomKey, $key->isFree);
         }
@@ -171,7 +181,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
     public function getGlossaryLanguageKeys(): GlossaryLanguageKeys
     {
-        $client = $this->deeplClientFactory->create();
+        $client = $this->deeplClientFactory->createDeepLClient();
         $pairs = $client->getGlossaryLanguages();
         $sourceLanguages = [];
         $targetLanguages = [];
@@ -185,7 +195,7 @@ class DeepLTranslationService implements TranslationServiceInterface
     public function uploadGlossary(Glossary $glossary): ?string
     {
         try {
-            $client = $this->deeplClientFactory->create();
+            $client = $this->deeplClientFactory->createDeepLClient();
             $info = $client->createGlossary(
                 $glossary->getLabel(),
                 $glossary->sourceLanguageKey,
@@ -202,7 +212,7 @@ class DeepLTranslationService implements TranslationServiceInterface
     public function deleteGlossary(string $id): void
     {
         try {
-            $client = $this->deeplClientFactory->create();
+            $client = $this->deeplClientFactory->createDeepLClient();
             $client->deleteGlossary($id);
             return;
         } catch (DeepLException $exception) {
@@ -218,9 +228,8 @@ class DeepLTranslationService implements TranslationServiceInterface
      *
      * @return string
      */
-    public static function getEntryIdentifier(string $text, string $targetLanguage, string $sourceLanguage = null): string
+    public static function getEntryIdentifier(string $text, string $targetLanguage, ?string $sourceLanguage = null): string
     {
         return sha1($text . $targetLanguage . $sourceLanguage);
     }
-
 }

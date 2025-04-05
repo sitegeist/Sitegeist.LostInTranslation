@@ -17,10 +17,9 @@ readonly class GlossaryLanguageKeys
      * @param string[] $sourceLanguages
      * @param string[] $targetLanguages
      */
-    public function __construct (
+    public function __construct(
         public array $sourceLanguages,
         public array $targetLanguages
     ) {
-
     }
 }

@@ -192,6 +192,7 @@ class NodeTranslationService
         }
 
         // The "true" here is necessary to receive referenced nodes just as identifiers and not as objects!
+        /** @phpstan-ignore arguments.count */
         $properties = (array)$sourceNode->getProperties(true);
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {
