@@ -7,7 +7,7 @@ namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
 use Neos\Flow\Annotations as Flow;
 
-class DeepLGlossaryIdService
+class DeepLGlossaryService
 {
     /**
      * @var GlossaryRepository

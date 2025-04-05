@@ -6,10 +6,11 @@ namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
 class DeepLAuthenticationKey
 {
-    public bool $isFree;
+    public readonly bool $isFree;
     public function __construct(
         public readonly string $authenticationKey,
-        public readonly bool $isCustomKey = false
+        public readonly bool $isCustomKey = false,
+        public readonly bool $isSettingKey = false,
     ) {
         $this->isFree = str_ends_with($authenticationKey, ':fx');
     }

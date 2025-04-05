@@ -32,6 +32,10 @@ class DeepLAuthenticationKeyFactory
         if (!isset($settingsKey) && !isset($customKey)) {
             throw new InvalidArgumentException('Empty strings are not allowed as authentication key');
         }
-        return new DeepLAuthenticationKey($customKey ?? $settingsKey, !is_null($customKey));
+        return new DeepLAuthenticationKey(
+            $customKey ?? $settingsKey,
+            !is_null($customKey),
+            !is_null($settingsKey)
+        );
     }
 }

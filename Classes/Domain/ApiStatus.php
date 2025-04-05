@@ -6,54 +6,20 @@ namespace Sitegeist\LostInTranslation\Domain;
 
 class ApiStatus
 {
-    /**
-     * @var bool
-     */
-    protected $connectionSuccessFull = false;
-
-    /**
-     * @var int
-     */
-    protected $characterCount = 0;
-
-    /**
-     * @var int
-     */
-    protected $characterLimit = 0;
-
-    /**
-     * @var bool
-     */
-    protected $hasSettingsKey = false;
-
-    /**
-     * @var bool
-     */
-    protected $hasCustomKey = false;
-
-    /**
-     * @var bool
-     */
-    protected $isFreeApi = false;
-
     public function __construct(
-        bool $connectionSuccessFull,
-        int $characterCount = 0,
-        int $characterLimit = 0,
-        bool $hasSettingsKey = false,
-        bool $hasCustomKey = false,
-        bool $isFreeApi = false
+        public readonly bool $connectionSuccessFull,
+        public readonly int $characterCount = 0,
+        public readonly int $characterLimit = 0,
+        public readonly bool $hasSettingsKey = false,
+        public readonly bool $hasCustomKey = false,
+        public readonly bool $isFreeApi = false,
+        public readonly bool $limitIsReached = false,
     ) {
-        $this->connectionSuccessFull = $connectionSuccessFull;
-        $this->characterCount = $characterCount;
-        $this->characterLimit = $characterLimit;
-        $this->hasSettingsKey = $hasSettingsKey;
-        $this->hasCustomKey = $hasCustomKey;
-        $this->isFreeApi = $isFreeApi;
     }
 
     /**
      * @return bool
+     * @deprecated
      */
     public function isConnectionSuccessFull(): bool
     {
@@ -62,6 +28,7 @@ class ApiStatus
 
     /**
      * @return int
+     * @deprecated
      */
     public function getCharacterCount(): int
     {
@@ -70,6 +37,7 @@ class ApiStatus
 
     /**
      * @return int
+     * @deprecated
      */
     public function getCharacterLimit(): int
     {
@@ -78,6 +46,7 @@ class ApiStatus
 
     /**
      * @return bool
+     * @deprecated
      */
     public function isHasSettingsKey(): bool
     {
@@ -86,6 +55,7 @@ class ApiStatus
 
     /**
      * @return bool
+     * @deprecated
      */
     public function isHasCustomKey(): bool
     {
@@ -94,6 +64,7 @@ class ApiStatus
 
     /**
      * @return bool
+     * @deprecated
      */
     public function isFreeApi(): bool
     {
