@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
+use Neos\Flow\Annotations as Flow;
 use DeepL\DeepLException;
 use DeepL\GlossaryEntries;
 use DeepL\TextResult;

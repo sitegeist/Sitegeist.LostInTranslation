@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
 use Neos\Cache\Frontend\StringFrontend;
+use Neos\Flow\Annotations as Flow;
 
 class DeepLCacheService
 {
