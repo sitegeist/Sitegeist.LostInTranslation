@@ -220,7 +220,7 @@ class DeepLTranslationService implements TranslationServiceInterface
      *
      * @return string
      */
-    public static function getEntryIdentifier(string $text, string $targetLanguage, string $sourceLanguage = null): string
+    public static function getEntryIdentifier(string $text, string $targetLanguage, ?string $sourceLanguage = null): string
     {
         return sha1($text . $targetLanguage . $sourceLanguage);
     }
@@ -248,7 +248,7 @@ class DeepLTranslationService implements TranslationServiceInterface
     protected function createRequest(
         string $endpoint,
         string $method = 'GET',
-        string $body = null
+        ?string $body = null
     ): ServerRequestInterface {
         $deeplAuthenticationKey = $this->getDeeplAuthenticationKey();
         $baseUri = $deeplAuthenticationKey->isFree ? $this->settings['baseUriFree'] : $this->settings['baseUri'];
