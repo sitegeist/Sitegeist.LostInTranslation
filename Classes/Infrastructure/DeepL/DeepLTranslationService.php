@@ -152,7 +152,7 @@ class DeepLTranslationService implements TranslationServiceInterface
             }
             $translations = array_map(
                 function ($part) use ($replaceTerms) {
-                    return ReplaceTermsUtility::unwrapFromIgnoreTagInString($part['text'], $replaceTerms);
+                    return html_entity_decode(ReplaceTermsUtility::unwrapFromIgnoreTagInString($part['text'], $replaceTerms));
                 },
                 $returnedData['translations']
             );
