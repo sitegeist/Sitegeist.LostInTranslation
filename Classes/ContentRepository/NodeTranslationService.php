@@ -132,6 +132,12 @@ class NodeTranslationService
     protected array $nodesToBeTranslated = [];
 
     /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.shouldCropPropertiesWithStringLengthValidation")
+     * @var bool
+     */
+    protected bool $shouldCropPropertiesWithStringLengthValidation = false;
+
+    /**
      * @param NodeInterface $node
      * @param Context $context
      * @param bool $recursive
@@ -316,7 +322,13 @@ class NodeTranslationService
         foreach ($properties as $propertyName => $propertyValue) {
             // Make sure the uriPathSegment is valid
             if ($propertyName === 'uriPathSegment' && !preg_match('/^[a-z0-9\-]+$/i', $propertyValue)) {
+                $propertyValue = self::cropPropertyValueAccordingToStringLengthValidator($targetNode, $propertyName, $propertyValue, false);
                 $propertyValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $propertyValue);
+            }
+
+            // Optionally ensure that properties with string length validation are cropped
+            if ($this->shouldCropPropertiesWithStringLengthValidation && $propertyName !== 'uriPathSegment') {
+                $propertyValue = self::cropPropertyValueAccordingToStringLengthValidator($targetNode, $propertyName, $propertyValue);
             }
 
             if ($targetNode->getProperty($propertyName) !== $propertyValue) {
@@ -440,5 +452,30 @@ class NodeTranslationService
     public function resetContextCache(): void
     {
         $this->contextFirstLevelCache = [];
+    }
+
+    /**
+     * @param  NodeInterface  $targetNode
+     * @param  string  $propertyName
+     * @param  mixed  $propertyValue
+     * @param  bool  $ellipsis
+     * @return mixed
+     */
+    private static function cropPropertyValueAccordingToStringLengthValidator(NodeInterface $targetNode, string $propertyName, mixed $propertyValue, bool $ellipsis = true): mixed
+    {
+        if (!is_string($propertyValue)) {
+            return $propertyValue;
+        }
+
+        $propertyConfiguration = $targetNode->getNodeType()->getConfiguration(sprintf('properties.%s', $propertyName));
+        if ($propertyConfiguration && isset($propertyConfiguration['validation']['Neos.Neos/Validation/StringLengthValidator'])) {
+            $maxLength = $propertyConfiguration['validation']['Neos.Neos/Validation/StringLengthValidator']['maximum'] ?? null;
+
+            if ($maxLength && strlen($propertyValue) > $maxLength) {
+                $propertyValue = substr($propertyValue, 0, $maxLength - ($ellipsis ? 1 : 0)) . ($ellipsis ? '…' : '');
+            }
+        }
+
+        return $propertyValue;
     }
 }
