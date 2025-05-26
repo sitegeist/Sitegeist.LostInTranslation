@@ -103,3 +103,10 @@ Sitegeist:
       skipAuthorizationChecks: false
 
       excludedNodePaths: []
+
+      #
+      # If set to true, translated property values are checked if they are longer
+      # than the configured maximum length in the property validation.
+      # If they are longer, the text will be cropped to the maximum length and appended with "…".
+      #
+      shouldCropPropertiesWithStringLengthValidation: false
