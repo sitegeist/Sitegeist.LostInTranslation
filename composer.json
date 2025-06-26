@@ -4,10 +4,11 @@
     "name": "sitegeist/lostintranslation",
     "license": "GPL-3.0-or-later",
     "require": {
-        "php": ">=8.1.0",
-        "neos/neos": "^7.3 || ^8.0 || dev-master",
-        "neos/neos-ui": "^7.3 || ^8.0 || dev-master",
-        "neos/http-factories": "^7.3 || ^8.0 || dev-master"
+        "php": ">=8.2.0",
+        "deeplcom/deepl-php": "~1.11.0",
+        "neos/neos": "^8.3 || dev-master",
+        "neos/neos-ui": "^8.3 || dev-master",
+        "neos/http-factories": "^8.3 || dev-master"
     },
     "autoload": {
         "psr-4": {
@@ -20,7 +21,7 @@
         }
     },
     "require-dev": {
-        "phpstan/phpstan": "1.10.37",
+        "phpstan/phpstan": "^1.10.0",
         "squizlabs/php_codesniffer": "^3.7",
         "phpunit/phpunit": "^9",
         "mockery/mockery": "@stable",
@@ -29,16 +30,18 @@
     },
     "scripts": {
         "fix:style": "phpcbf --colors --standard=PSR12 Classes",
+        "fix": [
+            "@fix:style"
+        ],
         "test:style": "phpcs --colors -n --standard=PSR12 Classes",
-        "test:stan": "phpstan analyse Classes",
+        "test:stan": "phpstan -v analyse Classes",
         "test:unit": "bin/phpunit --bootstrap Tests/UnitTestBootstrap.php --configuration Tests/UnitTests.xml",
         "test:functional": "bin/phpunit --bootstrap Tests/FunctionalTestBootstrap.php --configuration Tests/FunctionalTests.xml",
         "cc": "phpstan clear cache",
         "test": [
-            "composer install",
-            "composer test:style" ,
-            "composer test:stan",
-            "composer test:unit"
+            "@test:style",
+            "@test:stan",
+            "@test:unit"
         ]
     },
     "extra": {
@@ -50,7 +53,8 @@
         "bin-dir": "bin",
         "vendor-dir": "Packages/Libraries",
         "allow-plugins": {
-            "neos/composer-plugin": true
+            "neos/composer-plugin": true,
+            "php-http/discovery": false
         }
     },
     "archive": {

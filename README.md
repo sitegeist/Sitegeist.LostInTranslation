@@ -122,11 +122,15 @@ Neos:
           # English is the main language of the editors and spoken by editors,
           # the automatic translation is disabled therefore
           #
+          # English has to be configured differently for source and target as deepl requires so,
+          # The source and target are seperated by a `:`
+          #
           'en':
             label: 'English'
             values: ['en']
             uriSegment: 'en'
             options:
+              deeplLanguage: 'en:en-GB'
               translationStrategy: 'none'
 
           #

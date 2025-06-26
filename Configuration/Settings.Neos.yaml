@@ -10,7 +10,7 @@ Neos:
       management:
         submodules:
           sitegeist_lostintranslation:
-            label: 'Lost In Translations'
+            label: 'Lost In Translation'
             description: 'DeepL based Translations for Neos'
             icon: 'icon-language'
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'

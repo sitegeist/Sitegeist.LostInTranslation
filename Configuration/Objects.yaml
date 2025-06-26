@@ -1,4 +1,4 @@
-Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService:
+Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService:
   properties:
     translationCache:
       object:
