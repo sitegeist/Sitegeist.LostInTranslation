@@ -77,6 +77,7 @@ class TranslationCommandController extends CommandController
         $nodeTypeFilter = sprintf('[instanceof %s]', $nodeTypeFilter);
         $documentNodeQuery = new FlowQuery([$siteNode]);
         $documentNodeQuery->pushOperation('find', [$nodeTypeFilter]);
+        // @phpstan-ignore method.notFound
         $documentNodes = $documentNodeQuery->get();
         array_unshift($documentNodes, $siteNode);
 
