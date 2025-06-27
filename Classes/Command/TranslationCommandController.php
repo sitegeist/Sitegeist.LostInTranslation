@@ -53,17 +53,22 @@ class TranslationCommandController extends CommandController
     protected $nodeDataRepository;
 
     /**
-     * @param string      $nodePath
-     * @param string|null $from
-     * @param string|null $to
-     * @param string      $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
+     * @param string      $nodePath The start node path to start the sync from, e.g. '/sites/example.com/home'. It must not be '/sites'.
+     * @param string      $from The ISO language code to take the contents for translation *from*. It must exist as a language dimension preset in the configuration.
+     * @param string      $to The ISO language code to translate the contents *to*. It must exist as a language dimension preset in the configuration.
+     * @param string      $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped through.
      *
      * @return void
      * @throws Exception
      * @throws StopCommandException
      */
-    public function syncCommand(string $nodePath, ?string $from = null, ?string $to = null, string $nodeTypeFilter = 'Neos.Neos:Document'): void
+    public function syncCommand(string $nodePath, string $from, string $to, string $nodeTypeFilter = 'Neos.Neos:Document'): void
     {
+        if ($nodePath === '/sites') {
+            $this->output->outputLine('The node path must not be "/sites". Please specify a valid node path, e.g. "/sites/example.com/home".');
+            $this->quit(1);
+        }
+
         $sourceContext = $this->getContentContext($from);
         $rootNode = $sourceContext->getNode($nodePath);
 
