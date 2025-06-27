@@ -10,6 +10,11 @@ use Sitegeist\LostInTranslation\Domain\ReplaceTerm;
 class ReplaceTermsUtility
 {
     /**
+     * @param array<string>  $ignoreTerms
+     * @param array<array{term: string, translations: array<string, string>}>  $replaceTerms
+     * @param string $targetLanguage
+     *
+     * @return array<ReplaceTerm>
      * @throws Exception
      */
     public static function getTermsToReplace(array $ignoreTerms, array $replaceTerms, string $targetLanguage): array
@@ -17,7 +22,7 @@ class ReplaceTermsUtility
         // First we add the terms that should be replaced with a translation
         // We sort all terms by length to ensure that the longest terms are replaced first
         $sortedReplaceTerms = $replaceTerms;
-        usort($sortedReplaceTerms, static function(array $replaceTermA, array $replaceTermB) {
+        usort($sortedReplaceTerms, static function (array $replaceTermA, array $replaceTermB) {
             return strlen($replaceTermB['term']) - strlen($replaceTermA['term']);
         });
         $replaceTermsArray = [];
@@ -26,7 +31,7 @@ class ReplaceTermsUtility
                 continue;
             }
             if (!is_string($replaceTerm['translations'][$targetLanguage])) {
-                throw new Exception(sprintf('The replace term for "%s" must be a string', $replaceTerm), 1735818017971);
+                throw new Exception(sprintf('The replace term for "%s" must be a string', $replaceTerm['term']), 1735818017971);
             }
             $replaceTermsArray[$replaceTerm['term']] = new ReplaceTerm($replaceTerm['term'], $replaceTerm['translations'][$targetLanguage]);
         }
@@ -34,7 +39,7 @@ class ReplaceTermsUtility
         // This is to ensure backwards compatibility
         // We again sort the terms by length to ensure that the longest terms are replaced first
         $sortedIgnoreTerms = $ignoreTerms;
-        usort($sortedIgnoreTerms, static function(string $ignoreTermA, string $ignoreTermB) {
+        usort($sortedIgnoreTerms, static function (string $ignoreTermA, string $ignoreTermB) {
             return strlen($ignoreTermB) - strlen($ignoreTermA);
         });
         $ignoreTermsArray = [];
@@ -50,7 +55,7 @@ class ReplaceTermsUtility
 
     /**
      * @param string $string
-     * @param ReplaceTerm[]  $replaceTerms
+     * @param array<string, ReplaceTerm>  $replaceTerms
      *
      * @return string
      */
@@ -59,6 +64,7 @@ class ReplaceTermsUtility
         $stringWithReplacedTermsAndIgnoreTags = $string;
         foreach ($replaceTerms as $sha1 => $term) {
             $pattern = '/<name\b[^>]*>.*?<\/name>(*SKIP)(*FAIL)|' . preg_quote($term->getOriginal(), '/') . '/i';
+            // @phpstan-ignore argument.type
             $stringWithReplacedTermsAndIgnoreTags = preg_replace($pattern, sprintf('<name id="%s">%s</name>', $sha1, $term->getOriginal()), $stringWithReplacedTermsAndIgnoreTags);
         }
         return !is_null($stringWithReplacedTermsAndIgnoreTags) ? $stringWithReplacedTermsAndIgnoreTags : $string;
@@ -71,6 +77,7 @@ class ReplaceTermsUtility
      */
     public static function unwrapFromIgnoreTagInString(string $string, array $replaceTerms): string
     {
+        // @phpstan-ignore return.type
         return preg_replace_callback(
             '/<name id="([^"]+)">([^<]+)<\/name>/',
             static function ($matches) use ($replaceTerms) {
