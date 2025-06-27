@@ -271,7 +271,7 @@ class NodeTranslationService
      * @param  bool  $force Omits checking the translation strategy
      * @return void
      */
-    public function syncNode(NodeInterface $sourceNode, string $workspaceName = 'live', string $targetPresetIdentifier = null, bool $force = false): void
+    public function syncNode(NodeInterface $sourceNode, string $workspaceName = 'live', ?string $targetPresetIdentifier = null, bool $force = false): void
     {
         $isAutomaticTranslationEnabledForNodeType = $sourceNode->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
         if (!$isAutomaticTranslationEnabledForNodeType) {
