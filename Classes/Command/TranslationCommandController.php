@@ -25,7 +25,7 @@ class TranslationCommandController extends CommandController
 
     /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
-     * @var array
+     * @var array<string, array{defaultPreset: string}>
      */
     protected $contentDimensionConfiguration;
 
