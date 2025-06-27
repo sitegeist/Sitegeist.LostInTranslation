@@ -7,8 +7,10 @@ namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 use Neos\Flow\Annotations as Flow;
 use DeepL\DeepLException;
 use DeepL\TextResult;
+use Neos\Flow\Configuration\Exception;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
+use Sitegeist\LostInTranslation\Domain\ReplaceTerm;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Utility\ReplaceTermsUtility;
 
@@ -41,7 +43,7 @@ class DeepLTranslationService implements TranslationServiceInterface
     }
 
     /**
-     * @param array{DeepLApi: array{defaultOptions?: array<string,mixed>, ignoredTerms?:array<string,string>}} $settings
+     * @param array{DeepLApi: array{defaultOptions?: array<string,mixed>, ignoredTerms?:array<string,string>}, replaceTerms?:array<string,array{term:string,translations:array<string,string>}>} $settings
      * @return void
      */
     public function injectSettings(array $settings): void
@@ -50,7 +52,7 @@ class DeepLTranslationService implements TranslationServiceInterface
     }
 
     /**
-     * @var array
+     * @var array<string, array<string, ReplaceTerm>>
      */
     protected $replaceTermsByLanguage = [];
 
@@ -166,10 +168,16 @@ class DeepLTranslationService implements TranslationServiceInterface
         }
     }
 
+    /**
+     * @param string $language
+     *
+     * @return array<string,ReplaceTerm>
+     * @throws Exception
+     */
     protected function getReplaceTermsForLanguage(string $language): array
     {
         if (!isset($this->replaceTermsByLanguage[$language])) {
-            $this->replaceTermsByLanguage[$language] = ReplaceTermsUtility::getTermsToReplace($this->settings['ignoredTerms'], $this->settings['replaceTerms'], $language);
+            $this->replaceTermsByLanguage[$language] = ReplaceTermsUtility::getTermsToReplace($this->settings['ignoredTerms'] ?? [], $this->settings['replaceTerms'] ?? [], $language);
         }
 
         return $this->replaceTermsByLanguage[$language];
