@@ -11,7 +11,6 @@ use Neos\Eel\FlowQuery\FlowQuery;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Cli\Exception\StopCommandException;
-use Neos\Neos\Domain\Model\Site;
 use Neos\Neos\Domain\Repository\SiteRepository;
 use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
 
@@ -54,32 +53,31 @@ class TranslationCommandController extends CommandController
     protected $nodeDataRepository;
 
     /**
-     * @param  string  $siteNodeName
-     * @param  string|null  $from
-     * @param  string|null  $to
-     * @param  string  $nodeTypeFilter  Expects exactly one document node type to loop through, otherwise all documents will be looped
+     * @param string      $nodePath
+     * @param string|null $from
+     * @param string|null $to
+     * @param string      $nodeTypeFilter Expects exactly one document node type to loop through, otherwise all documents will be looped
+     *
      * @return void
      * @throws Exception
      * @throws StopCommandException
      */
-    public function syncCommand(string $siteNodeName, string $from = null, string $to = null, string $nodeTypeFilter = 'Neos.Neos:Document'): void
+    public function syncCommand(string $nodePath, ?string $from = null, ?string $to = null, string $nodeTypeFilter = 'Neos.Neos:Document'): void
     {
-        /** @var Site|null $site */
-        $site = $this->siteRepository->findOneByNodeName($siteNodeName);
+        $sourceContext = $this->getContentContext($from);
+        $rootNode = $sourceContext->getNode($nodePath);
 
-        if (is_null($site)) {
-            $this->output->output('<error>The site with node name "%s" does not exist.</error>', [$siteNodeName]);
+        if (!$rootNode instanceof NodeInterface) {
+            $this->output->outputLine('The node path "%s" does not exist in the source context.', [$nodePath]);
             $this->quit(1);
         }
 
-        $sourceContext = $this->getContentContext($from);
-        $siteNode = $sourceContext->getNode('/sites/' . $siteNodeName);
         $nodeTypeFilter = sprintf('[instanceof %s]', $nodeTypeFilter);
-        $documentNodeQuery = new FlowQuery([$siteNode]);
+        $documentNodeQuery = new FlowQuery([$rootNode]);
         $documentNodeQuery->pushOperation('find', [$nodeTypeFilter]);
         // @phpstan-ignore method.notFound
         $documentNodes = $documentNodeQuery->get();
-        array_unshift($documentNodes, $siteNode);
+        array_unshift($documentNodes, $rootNode);
 
         $this->output->outputLine('Found %s document nodes', [sizeof($documentNodes)]);
         $this->output->progressStart(sizeof($documentNodes));
@@ -102,7 +100,7 @@ class TranslationCommandController extends CommandController
      * @param  string|null  $targetPresetIdentifier
      * @return void
      */
-    protected function processNode(NodeInterface $node, string $targetPresetIdentifier = null): void
+    protected function processNode(NodeInterface $node, ?string $targetPresetIdentifier = null): void
     {
         $this->nodeTranslationService->syncNode($node, 'live', $targetPresetIdentifier, true);
 
@@ -119,7 +117,7 @@ class TranslationCommandController extends CommandController
      * @param  string|null  $languageDimension
      * @return Context
      */
-    protected function getContentContext(string $languageDimension = null): Context
+    protected function getContentContext(?string $languageDimension = null): Context
     {
         return $this->nodeTranslationService->getContextForLanguageDimensionAndWorkspaceName($languageDimension ?: $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset']);
     }
