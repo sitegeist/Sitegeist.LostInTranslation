@@ -17,6 +17,7 @@ use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKey;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLAuthenticationKeyFactory;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeeplClientFactory;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class DeepLTranslationServiceTest extends UnitTestCase
@@ -96,6 +97,72 @@ class DeepLTranslationServiceTest extends UnitTestCase
         );
 
         $this->assertEquals($expectedTranslatedTexts, $translatedTexts);
+    }
+
+    /**
+     * @test
+     */
+    public function translateUsesGlossaryIfFound(): void
+    {
+        $mockGlossaryService = $this->createMock(DeepLGlossaryService::class);
+        $mockGlossaryService
+            ->expects(self::once())
+            ->method('findGlossaryId')
+            ->with('en', 'de')
+            ->willReturn('en_de_glossary');
+
+        $this->translationService->injectDeepLGlossaryService($mockGlossaryService);
+
+        $this->mockDeeplClient
+            ->expects(self::once())
+            ->method('translateText')
+            ->with(['en_foo', 'en_bar', 'en_baz'], 'en', 'de', [TranslateTextOptions::GLOSSARY => 'en_de_glossary'])
+            ->willReturn(
+            [
+                    new TextResult('de_foo', 'en', 6),
+                    new TextResult('de_bar', 'en', 6),
+                    new TextResult('de_baz', 'en', 6)
+                ]
+            );
+
+        $this->translationService->translate(
+            ['en_foo', 'en_bar', 'en_baz'],
+            'de',
+            'en'
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function translateWorksIfNoGlossaryIsFound(): void
+    {
+        $mockGlossaryService = $this->createMock(DeepLGlossaryService::class);
+        $mockGlossaryService
+            ->expects(self::once())
+            ->method('findGlossaryId')
+            ->with('en', 'de')
+            ->willReturn(null);
+
+        $this->translationService->injectDeepLGlossaryService($mockGlossaryService);
+
+        $this->mockDeeplClient
+            ->expects(self::once())
+            ->method('translateText')
+            ->with(['en_foo', 'en_bar', 'en_baz'], 'en', 'de', [])
+            ->willReturn(
+                [
+                    new TextResult('de_foo', 'en', 6),
+                    new TextResult('de_bar', 'en', 6),
+                    new TextResult('de_baz', 'en', 6)
+                ]
+            );
+
+        $this->translationService->translate(
+            ['en_foo', 'en_bar', 'en_baz'],
+            'de',
+            'en'
+        );
     }
 
     /**

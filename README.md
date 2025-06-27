@@ -68,6 +68,37 @@ Sitegeist:
       authenticationKey: '.........................'
 ```
 
+### Glossaries
+
+Glossaries are created and uploaded to DeepL via the Lost in Translation Backend Module.
+When node-translations are created the matching glossary for the language combination at hand
+is chosen automatically.
+
+Glossary names are internally prefixed with a configurable identifier that ensures that different Neos instances
+that share a DeepL account will not interfere by cleaning up each others glossaries.
+
+By default the prefix is the `FLOW_CONTEXT` as this is already configured in all Neos Instances and is often used to
+seperate multiple environments.
+
+**:warning: If you use multiple environments with the same FLOW_CONTEXT and DeepL Account you should ensure that the
+glossaryLabelPrefix is configured differently for each environment.**
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    DeepLApi:
+      #
+      # The label prefix can be used to prevent different instances overwriting or deleting each others
+      # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
+      #
+      glossaryLabelPrefix: '%env:FLOW_CONTEXT%'
+```
+
+The commands `./flow glossary:uploadall` and `./flow glossary:cleanupall` allow to automate those tasks and may 
+be integrated in backup and restore or synchronization scripts.
+
+### Content-Repository 
+
 The translation of nodes can is configured via settings:
 
 ```yaml
@@ -165,6 +196,8 @@ Neos:
             options:
               translationStrategy: 'none'
 ```
+
+
 
 ### Ignoring Terms
 

@@ -1,0 +1,26 @@
+prototype(Sitegeist.LostInTranslation:Views.CreateGlossary) < prototype(Neos.Fusion:Component) {
+  renderer = afx`
+    <legend>Add a Glossary</legend>
+
+    <Neos.Fusion.Form:Form
+      form.target.action="addGlossary"
+    >
+      <div class="neos-control-group">
+        <label class="neos-control-label" for="key">Source -> Target language</label>
+        <div class="neos-controls neos-controls-row">
+          <Neos.Fusion.Form:Select field.name="sourceAndTarget" attributes.class="neos-span12">
+            <Neos.Fusion:Loop items={sourceTargetCombinations} itemName="key">
+              <Neos.Fusion.Form:Select.Option option.value={key}>{key}</Neos.Fusion.Form:Select.Option>
+            </Neos.Fusion:Loop>
+          </Neos.Fusion.Form:Select>
+        </div>
+      </div>
+
+      <div class="neos-footer">
+        <Neos.Fusion:Link.Action href.action="index" class="neos-button">Back</Neos.Fusion:Link.Action>
+        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">Save Glossary</Neos.Fusion.Form:Button>
+      </div>
+
+    </Neos.Fusion.Form:Form>
+  `
+}

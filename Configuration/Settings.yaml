@@ -8,6 +8,12 @@ Sitegeist:
       #
       authenticationKey: ''
 
+      #
+      # The label prefix can be used to prevent different instances overwriting or deleting each others
+      # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
+      #
+      glossaryLabelPrefix: '%env:FLOW_CONTEXT%'
+
       defaultOptions:
         tag_handling: 'xml'
         split_sentences: 'nonewlines'
