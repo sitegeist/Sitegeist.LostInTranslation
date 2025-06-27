@@ -181,16 +181,25 @@ class NodeTranslationService
 
         if (array_key_exists('options', $sourceLanguagePreset) && array_key_exists('deeplLanguage', $sourceLanguagePreset['options'])) {
             $sourceLanguage = $sourceLanguagePreset['options']['deeplLanguage'];
+            if (str_contains($sourceLanguage, ':')) {
+                $sourceLanguageParts = explode(':', $sourceLanguage, 2);
+                $sourceLanguage = $sourceLanguageParts[0];
+            }
         }
 
         if (array_key_exists('options', $targetLanguagePreset) && array_key_exists('deeplLanguage', $targetLanguagePreset['options'])) {
             $targetLanguage = $targetLanguagePreset['options']['deeplLanguage'];
+            if (str_contains($targetLanguage, ':')) {
+                $targetLanguageParts = explode(':', $targetLanguage, 2);
+                $targetLanguage = $targetLanguageParts[1];
+            }
         }
         if (empty($sourceLanguage) || empty($targetLanguage) || ($sourceLanguage == $targetLanguage)) {
             return;
         }
 
         // The "true" here is necessary to receive referenced nodes just as identifiers and not as objects!
+        /** @phpstan-ignore arguments.count */
         $properties = (array)$sourceNode->getProperties(true);
         $propertiesToTranslate = [];
         foreach ($properties as $propertyName => $propertyValue) {

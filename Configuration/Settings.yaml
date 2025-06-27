@@ -8,9 +8,6 @@ Sitegeist:
       #
       authenticationKey: ''
 
-      baseUri: 'https://api.deepl.com/v2/'
-      baseUriFree: 'https://api-free.deepl.com/v2/'
-
       defaultOptions:
         tag_handling: 'xml'
         split_sentences: 'nonewlines'
