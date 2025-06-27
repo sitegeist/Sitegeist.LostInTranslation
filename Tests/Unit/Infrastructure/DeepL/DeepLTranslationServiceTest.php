@@ -215,12 +215,12 @@ class DeepLTranslationServiceTest extends UnitTestCase
         $this->mockDeeplClient
             ->expects(self::once())
             ->method('translateText')
-            ->with(['die <ignore>suppe</ignore> schmeckt', 'text <ignore>nudel</ignore>', '<ignore>nudel</ignore> text', 'other'], 'en', 'de')
+            ->with(['die <name id="0">suppe</name> schmeckt', 'text <name id="1">nudel</name>', '<name id="1">nudel</name> text', 'other'], 'en', 'de')
             ->willReturn(
                 [
-                    new TextResult('DE: die <ignore>suppe</ignore> schmeckt', 'en', 6),
-                    new TextResult('DE: text <ignore>nudel</ignore>', 'en', 6),
-                    new TextResult('DE: <ignore>nudel</ignore> text', 'en', 6),
+                    new TextResult('DE: die <name id="0">suppe</name> schmeckt', 'en', 6),
+                    new TextResult('DE: text <name id="1">nudel</name>', 'en', 6),
+                    new TextResult('DE: <name id="1">nudel</name> text', 'en', 6),
                     new TextResult('DE: other', 'en', 6)
                 ]
             );
