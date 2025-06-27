@@ -6,7 +6,7 @@ use Neos\Flow\Tests\UnitTestCase;
 use Sitegeist\LostInTranslation\Domain\ReplaceTerm;
 use Sitegeist\LostInTranslation\Utility\ReplaceTermsUtility;
 
-class IgnoredTermsUtilityTest extends UnitTestCase
+class ReplaceTermsUtilityTest extends UnitTestCase
 {
     public static function evaluateReplaceTermsArrayCreatesCorrectArrayData(): array
     {
