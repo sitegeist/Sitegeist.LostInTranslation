@@ -1,9 +1,9 @@
-prototype(Sitegeist.LostInTranslation:Views.CreateEntryForGlossary) < prototype(Neos.Fusion:Component) {
-  renderer = afx`
+prototype(Sitegeist.LostInTranslation:Views.CreateGlossaryEntry) < prototype(Neos.Fusion:Component) {
+    renderer = afx`
     <legend>Add entry to Glossary {glossary.label}</legend>
 
     <Neos.Fusion.Form:Form
-      form.target.action="addEntryToGlossary"
+      form.target.action="addGlossaryEntry"
     >
       <Neos.Fusion.Form:Hidden field.name="glossary" field.value={glossary} />
 

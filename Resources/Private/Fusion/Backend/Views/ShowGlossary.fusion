@@ -61,17 +61,20 @@ prototype(Sitegeist.LostInTranslation:Views.ShowGlossary) < prototype(Neos.Fusio
                                 data-toggle="modal" href={"#deleteEntry" + iterator.index}>
                             <i class="fas fa-trash"></i> Delete Entry
                         </button>
+                        <Neos.Fusion:Link.Action href.action="editGlossaryEntry" href.arguments.entry={entry} class="neos-button neos-pull-right">
+                            <i class="fas fa-edit"></i> Edit Entry
+                        </Neos.Fusion:Link.Action>
 
                         <div class="neos-hide" id={"deleteEntry" + iterator.index}>
                             <div class="neos-modal">
                                 <div class="neos-modal-header">
                                     <button type="button" class="neos-close neos-button" data-dismiss="modal"></button>
-                                    <div class="neos-header">Delete Glossary {glossary.label}</div>
+                                    <div class="neos-header">Delete Entry {entry.sourceText}</div>
                                 </div>
                                 <div class="neos-modal-footer">
                                     <a href="#" class="neos-button" data-dismiss="modal">Cancel</a>
                                     <Neos.Fusion.Form:Form
-                                        form.target.action="removeEntryFromGlossary"
+                                        form.target.action="deleteGlossaryEntry"
                                         attributes.class="neos-inline"
                                     >
                                         <Neos.Fusion.Form:Hidden field.name="entry" field.value={entry}/>
@@ -94,7 +97,7 @@ prototype(Sitegeist.LostInTranslation:Views.ShowGlossary) < prototype(Neos.Fusio
             <Neos.Fusion:Link.Action href.action="index" class="neos-button">
                 Back to list
             </Neos.Fusion:Link.Action>
-            <Neos.Fusion:Link.Action href.action="createEntryForGlossary" href.arguments.glossary={glossary} class="neos-button neos-button-primary">
+            <Neos.Fusion:Link.Action href.action="createGlossaryEntry" href.arguments.glossary={glossary} class="neos-button neos-button-primary">
                 Add Entry
             </Neos.Fusion:Link.Action>
 

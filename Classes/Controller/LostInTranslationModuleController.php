@@ -64,7 +64,13 @@ class LostInTranslationModuleController extends AbstractModuleController
     {
         $status = $this->translationService->getStatus();
         $this->view->assign('status', $status);
-        $this->view->assign('glossaries', $this->glossaryRepository->findAll());
+        $this->view->assign('glossaries', $this->glossaryRepository->findAll()->toArray());
+    }
+
+    public function showStatusAction(): void
+    {
+        $status = $this->translationService->getStatus();
+        $this->view->assign('status', $status);
     }
 
     public function setCustomKeyAction(): void
@@ -174,12 +180,12 @@ class LostInTranslationModuleController extends AbstractModuleController
         $this->forward('index');
     }
 
-    public function createEntryForGlossaryAction(Glossary $glossary): void
+    public function createGlossaryEntryAction(Glossary $glossary): void
     {
         $this->view->assign('glossary', $glossary);
     }
 
-    public function addEntryToGlossaryAction(Glossary $glossary, string $sourceText, string $targetText): void
+    public function addGlossaryEntryAction(Glossary $glossary, string $sourceText, string $targetText): void
     {
         $entry = new GlossaryEntry();
         $entry->glossary = $glossary;
@@ -189,8 +195,22 @@ class LostInTranslationModuleController extends AbstractModuleController
         $this->glossaryRepository->update($glossary);
         $this->forward(actionName: 'showGlossary', arguments: ['glossary' => $glossary]);
     }
+    public function editGlossaryEntryAction(GlossaryEntry $entry): void
+    {
+        $this->view->assign('entry', $entry);
+        $this->view->assign('glossary', $entry->glossary);
+    }
 
-    public function removeEntryFromGlossaryAction(GlossaryEntry $entry): void
+    public function updateGlossaryEntryAction(GlossaryEntry $entry, string $sourceText, string $targetText): void
+    {
+        $entry->sourceText = $sourceText;
+        $entry->targetText = $targetText;
+        $entry->glossary->updateModificationDate();
+        $this->glossaryRepository->update($entry->glossary);
+        $this->forward(actionName: 'showGlossary', arguments: ['glossary' => $entry->glossary]);
+    }
+
+    public function deleteGlossaryEntryAction(GlossaryEntry $entry): void
     {
         $glossary = $entry->glossary;
         $glossary->removeEntry($entry);

@@ -76,6 +76,11 @@ class Glossary
         $this->entries->add($entry);
     }
 
+    public function updateModificationDate(): void
+    {
+        $this->modificationDate = new \DateTimeImmutable();
+    }
+
     public function updateSynchronizationIdentifier(string $id): void
     {
         $this->synchronizationDate = new \DateTimeImmutable();
