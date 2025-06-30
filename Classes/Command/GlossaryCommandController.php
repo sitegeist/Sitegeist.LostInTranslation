@@ -31,7 +31,7 @@ class GlossaryCommandController extends CommandController
 
     public function cleanupAllCommand(): void
     {
-        $num = $this->deepLGlossaryService->cleanupRemoteGlossaries();
-        $this->output->outputLine(sprintf('Removed %s outdated glossaries', $num));
+        $deleted = $this->deepLGlossaryService->cleanupRemoteGlossaries();
+        $this->output->outputLine(sprintf('Removed %s outdated glossaries', count($deleted)));
     }
 }

@@ -98,11 +98,11 @@ class LostInTranslationModuleController extends AbstractModuleController
                 $deeplLanguagesParts = explode(':', $deeplLanguage);
                 foreach ($deeplLanguagesParts as $deeplLanguagesPart) {
                     $keyParts = explode('-', $deeplLanguagesPart);
-                    $languageKeysOfInterest[] = strtoupper($keyParts[0]);
+                    $languageKeysOfInterest[] = strtolower($keyParts[0]);
                 }
             } else {
                 $keyParts = explode('-', $key);
-                $languageKeysOfInterest[] = strtoupper($keyParts[0]);
+                $languageKeysOfInterest[] = strtolower($keyParts[0]);
             }
         }
 
@@ -118,6 +118,7 @@ class LostInTranslationModuleController extends AbstractModuleController
                 $sourceTargetCombinations[] = $languagePair->sourceLang . ' -> ' . $languagePair->targetLang;
             }
         }
+
         $this->view->assign('sourceTargetCombinations', $sourceTargetCombinations);
     }
 
@@ -146,7 +147,8 @@ class LostInTranslationModuleController extends AbstractModuleController
         if (is_string($identifier)) {
             $glossary->updateSynchronizationIdentifier($identifier);
             $this->glossaryRepository->update($glossary);
-            $removedNumber = $this->glossaryService->cleanupRemoteGlossaries();
+            $deleted = $this->glossaryService->cleanupRemoteGlossaries();
+            $removedNumber = count($deleted);
             if ($removedNumber == 0) {
                 $this->addFlashMessage("Glossary was uploaded", "");
             } elseif ($removedNumber == 1) {
@@ -158,25 +160,7 @@ class LostInTranslationModuleController extends AbstractModuleController
             $this->addFlashMessage("Upload failed", "", Message::SEVERITY_ERROR);
         }
 
-        $this->forward(actionName: 'cleanupRemoteGlossaries', arguments: ['glossary' => $toIndex ? null : $glossary]);
-    }
-
-    public function cleanupRemoteGlossariesAction(?Glossary $glossary = null): void
-    {
-        $localGlossaries = $this->glossaryRepository->findAll()->toArray();
-        $localGlossarySyncIdentifiers = array_filter(array_map(
-            fn (Glossary $glossary) => $glossary->synchronizationIdentifier,
-            $localGlossaries
-        ));
-
-        $remoteGlossaries = $this->glossaryService->listRemoteGlossaries();
-        foreach ($remoteGlossaries as $remoteGlossary) {
-            if (!in_array($remoteGlossary->glossaryId, $localGlossarySyncIdentifiers)) {
-                $this->glossaryService->deleteRemoteGlossary($remoteGlossary->glossaryId);
-            }
-        }
-
-        if ($glossary === null) {
+        if ($toIndex === true) {
             $this->forward(actionName: 'index');
         } else {
             $this->forward(actionName: 'showGlossary', arguments: ['glossary' => $glossary]);

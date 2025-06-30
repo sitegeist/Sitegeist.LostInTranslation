@@ -5,6 +5,7 @@ namespace Sitegeist\LostInTranslation\Tests\Unit\Infrastructure\DeepL;
 use DeepL\DeepLClient;
 use DeepL\GlossaryEntries;
 use DeepL\GlossaryInfo;
+use Neos\Flow\Persistence\Doctrine\QueryResult;
 use Neos\Flow\Tests\UnitTestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use Sitegeist\LostInTranslation\Domain\Model\Glossary;
@@ -38,7 +39,8 @@ class DeepLGlossaryServiceTest extends UnitTestCase
             $this->glossaryRepository
         );
 
-        $this->inject($this->glossaryService, 'glossaryLabelPrefix', '__prefix__');
+        $this->inject($this->glossaryService, 'labelPrefix', '__prefix__');
+        $this->inject($this->glossaryService, 'keepNumber', 0);
     }
 
     /** @test */
@@ -114,5 +116,94 @@ class DeepLGlossaryServiceTest extends UnitTestCase
         ]);
 
         $this->assertEquals( [$glossaryInfoB, $glossaryInfoC], $this->glossaryService->listRemoteGlossaries());
+    }
+
+    /** @test */
+    public function cleanUpGlossariesWillRemoveAllOutdated(): void
+    {
+        // remote glossaries
+        $this->deeplClient->expects($this->once())->method('listGlossaries')->willReturn([
+            new GlossaryInfo('o_1', '__other___::es -> pt', true, 'es', 'pt', new \DateTime('5 days ago') , 0),
+            new GlossaryInfo('de_1', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('2 days ago') , 0),
+            new GlossaryInfo('de_2', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('1 days ago') , 0),
+            new GlossaryInfo('de_3', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('today') , 0),
+            new GlossaryInfo('en_1', '__prefix__::en -> de', true, 'en', 'de', new \DateTime('2 days ago') , 0),
+            new GlossaryInfo('en_2', '__prefix__::en -> de', true, 'en', 'de', new \DateTime(datetime: '1 days ago') , 0),
+            new GlossaryInfo('en_3', '__prefix__::en -> de', true, 'en', 'de', new \DateTime('today') , 0),
+            new GlossaryInfo('o_2', '__other___::pt -> es', true, 'pt', 'es', new \DateTime('now') , 0),
+        ]);
+
+        // local glossaries
+        $localGlossaryA =  $this->createMock(Glossary::class);
+        $localGlossaryA->sourceLanguageKey = 'de';
+        $localGlossaryA->targetLanguageKey = 'en';
+        $localGlossaryA->synchronizationIdentifier = 'de_3';
+        $localGlossaryA->expects($this->once())->method('getLabel')->willReturn('de -> en');
+
+        $localGlossaryB =  $this->createMock(Glossary::class);
+        $localGlossaryB->sourceLanguageKey = 'en';
+        $localGlossaryB->targetLanguageKey = 'de';
+        $localGlossaryB->synchronizationIdentifier = 'en_3';
+        $localGlossaryB->expects($this->once())->method('getLabel')->willReturn('en -> de');
+
+        $mockQueryResult = $this->createMock(QueryResult::class);
+        $mockQueryResult->expects($this->any())->method('toArray')->willReturn([
+            $localGlossaryA, $localGlossaryB
+        ]);
+        $this->glossaryRepository->expects($this->once())->method('findAll')->willReturn($mockQueryResult);
+        $this->deeplClient->expects($this->any())->method('deleteGlossary');
+
+        $this->inject($this->glossaryService, 'keepNumber', 0);
+
+        $deleted = $this->glossaryService->cleanupRemoteGlossaries();
+        $this->assertEquals( ['de_1', 'de_2', 'en_1', 'en_2'], $deleted );
+    }
+
+
+    /** @test */
+    public function cleanUpGlossariesWillRemoveAllOutdatedAndRespectNumberToKeep(): void
+    {
+        // remote glossaries
+        $this->deeplClient->expects($this->once())->method('listGlossaries')->willReturn([
+            new GlossaryInfo('o_1', '__other___::es -> pt', true, 'es', 'pt', new \DateTime('5 days ago') , 0),
+
+            new GlossaryInfo('de_1', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('4 days ago') , 0),
+            new GlossaryInfo('de_2', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('3 days ago') , 0),
+            new GlossaryInfo('de_3', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('2 days ago') , 0),
+            new GlossaryInfo('de_4', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('1 days ago') , 0),
+            new GlossaryInfo('de_5', '__prefix__::de -> en', true, 'de', 'en', new \DateTime('today') , 0),
+
+            new GlossaryInfo('en_1', '__prefix__::en -> de', true, 'en', 'de', new \DateTime(datetime: '3 days ago') , 0),
+            new GlossaryInfo('en_2', '__prefix__::en -> de', true, 'en', 'de', new \DateTime('2 days ago') , 0),
+            new GlossaryInfo('en_3', '__prefix__::en -> de', true, 'en', 'de', new \DateTime('1 days ago') , 0),
+            new GlossaryInfo('en_4', '__prefix__::en -> de', true, 'en', 'de', new \DateTime('today') , 0),
+
+            new GlossaryInfo('o_2', '__other___::pt -> es', true, 'pt', 'es', new \DateTime('now') , 0),
+        ]);
+
+        // local glossaries
+        $localGlossaryA =  $this->createMock(Glossary::class);
+        $localGlossaryA->sourceLanguageKey = 'de';
+        $localGlossaryA->targetLanguageKey = 'en';
+        $localGlossaryA->synchronizationIdentifier = 'de_5';
+        $localGlossaryA->expects($this->once())->method('getLabel')->willReturn('de -> en');
+
+        $localGlossaryB =  $this->createMock(Glossary::class);
+        $localGlossaryB->sourceLanguageKey = 'en';
+        $localGlossaryB->targetLanguageKey = 'de';
+        $localGlossaryB->synchronizationIdentifier = 'en_4';
+        $localGlossaryB->expects($this->once())->method('getLabel')->willReturn('en -> de');
+
+
+        $mockQueryResult = $this->createMock(QueryResult::class);
+        $mockQueryResult->expects($this->any())->method('toArray')->willReturn([
+            $localGlossaryA, $localGlossaryB
+        ]);
+        $this->glossaryRepository->expects($this->once())->method('findAll')->willReturn($mockQueryResult);
+        $this->deeplClient->expects($this->any())->method('deleteGlossary');
+
+        $this->inject($this->glossaryService, 'keepNumber', 2);
+        $deleted = $this->glossaryService->cleanupRemoteGlossaries();
+        $this->assertEquals( ['de_1','de_2','de_3','en_1','en_2'], $deleted);
     }
 }

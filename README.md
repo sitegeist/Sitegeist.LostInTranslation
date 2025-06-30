@@ -81,17 +81,25 @@ By default the prefix is the `FLOW_CONTEXT` as this is already configured in all
 seperate multiple environments.
 
 **:warning: If you use multiple environments with the same FLOW_CONTEXT and DeepL Account you should ensure that the
-glossaryLabelPrefix is configured differently for each environment.**
+glossary.labelPrefix is configured differently for each environment.**
 
 ```yaml
 Sitegeist:
   LostInTranslation:
     DeepLApi:
-      #
-      # The label prefix can be used to prevent different instances overwriting or deleting each others
-      # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
-      #
-      glossaryLabelPrefix: '%env:FLOW_CONTEXT%'
+        # 
+        # Glossary management
+        # 
+        glossary:
+            #
+            # The label prefix can be used to prevent different instances overwriting or deleting each others
+            # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
+            #
+            labelPrefix: '%env:FLOW_CONTEXT%'
+            #
+            # The number of outdated remote glossaries to keep to reduce problems when systems are cloned
+            #
+            keepNumber: 10
 ```
 
 The commands `./flow glossary:uploadall` and `./flow glossary:cleanupall` allow to automate those tasks and may 
