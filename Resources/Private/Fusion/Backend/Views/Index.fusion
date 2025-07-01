@@ -52,7 +52,7 @@ prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Compo
             &nbsp;{glossary.upToDate ? 'up to date' : 'outdated'}
 
           </td>
-          <td>
+          <td class="neos-actions">
             <button class="neos-button neos-button-danger neos-pull-right" title="delete custom ley" data-toggle="modal" href={"#deleteGlossary" + iterator.index}>
               <i class="fas fa-trash"></i> Delete Glossary
             </button>
