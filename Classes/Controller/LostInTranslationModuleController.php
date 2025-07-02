@@ -11,6 +11,7 @@ use Neos\Neos\Controller\Module\AbstractModuleController;
 use Neos\Flow\Annotations as Flow;
 use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\Model\GlossaryEntry;
+use Sitegeist\LostInTranslation\Domain\Repository\GlossaryEntryRepository;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
@@ -42,6 +43,12 @@ class LostInTranslationModuleController extends AbstractModuleController
      * @Flow\Inject
      */
     protected $glossaryRepository;
+
+    /**
+     * @var GlossaryEntryRepository
+     * @Flow\Inject
+     */
+    protected $glossaryEntryRepository;
 
     /**
      * @Flow\Inject
@@ -211,10 +218,15 @@ class LostInTranslationModuleController extends AbstractModuleController
 
     public function updateGlossaryEntryAction(GlossaryEntry $entry, string $sourceText, string $targetText): void
     {
+
         $entry->sourceText = $sourceText;
         $entry->targetText = $targetText;
-        $entry->glossary->updateModificationDate();
+        $this->glossaryEntryRepository->update($entry);
+
+        $glossary = $entry->glossary;
+        $glossary->updateModificationDate();
         $this->glossaryRepository->update($entry->glossary);
+
         $this->forward(actionName: 'showGlossary', arguments: ['glossary' => $entry->glossary]);
     }
 
