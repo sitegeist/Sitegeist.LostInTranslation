@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
+use DeepL\GlossaryEntries;
+use DeepL\TranslateTextOptions;
 use Neos\Flow\Annotations as Flow;
 use DeepL\DeepLException;
 use DeepL\TextResult;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
+use Sitegeist\LostInTranslation\Domain\Model\Glossary;
+use Sitegeist\LostInTranslation\Domain\Model\GlossaryLanguageKeys;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
 
@@ -24,6 +28,8 @@ class DeepLTranslationService implements TranslationServiceInterface
 
     protected ?LoggerInterface $logger = null;
     protected ?DeepLCacheService $translationCache = null;
+    protected ?DeepLGlossaryService $glossaryService = null;
+
     public function __construct(
         private readonly DeeplClientFactory $deeplClientFactory,
         private readonly DeepLAuthenticationKeyFactory $deeplAuthenticationKeyFactory,
@@ -38,6 +44,11 @@ class DeepLTranslationService implements TranslationServiceInterface
     public function injectTranslationCache(DeepLCacheService $translationCache): void
     {
         $this->translationCache = $translationCache;
+    }
+
+    public function injectDeepLGlossaryService(DeepLGlossaryService $glossaryService): void
+    {
+        $this->glossaryService = $glossaryService;
     }
 
     /**
@@ -73,6 +84,13 @@ class DeepLTranslationService implements TranslationServiceInterface
             $translateTextOptions = $this->settings['defaultOptions'];
         } else {
             $translateTextOptions = [];
+        }
+
+        if ($sourceLanguage) {
+            $glossaryId = $this->glossaryService?->findGlossaryId($sourceLanguage, $targetLanguage);
+            if ($glossaryId) {
+                $translateTextOptions[TranslateTextOptions::GLOSSARY] = $glossaryId;
+            }
         }
 
         $cachedEntries = [];

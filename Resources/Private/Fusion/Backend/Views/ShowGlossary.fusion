@@ -1,0 +1,106 @@
+prototype(Sitegeist.LostInTranslation:Views.ShowGlossary) < prototype(Neos.Fusion:Component) {
+    renderer = afx`
+        <legend>Glossary {glossary.label}</legend>
+
+        <table class="neos-table">
+            <tbody>
+            <tr>
+                <td>Modified</td>
+                <td>{Date.format(glossary.modificationDate, 'd.m.Y H:i')}</td>
+            </tr>
+            <tr>
+                <td>Synchronized</td>
+                <td>{glossary.synchronizationDate ? Date.format(glossary.synchronizationDate, 'd.m.Y H:i') : '-'}</td>
+            </tr>
+            <tr>
+                <td>Remote ID</td>
+                <td>{glossary.synchronizationIdentifier}</td>
+            </tr>
+            <tr>
+                <td>Status</td>
+                <td>
+                    <i class="fas fa-check-circle" style="color:green;" @if={glossary.upToDate}></i>
+                    <i class="fas fa-exclamation-triangle" style="color:red;" @if={!glossary.upToDate}></i>
+                    &nbsp;{glossary.upToDate ? 'up to date' : 'outdated'}
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <Neos.Fusion.Form:Form form.target.action="uploadGlossary">
+            <Neos.Fusion.Form:Hidden field.name="glossary" field.value={glossary}/>
+            <button class="neos-button" title="delete custom ley" data-toggle="modal"
+                    href={"#uploadGlossary" + iterator.index}>
+                <i class="fas fa-upload"></i> Upload Glossary
+            </button>
+        </Neos.Fusion.Form:Form>
+
+        <legend>Entries</legend>
+
+        <p @if={!glossary.entries}>No entries yet. Please create </p>
+
+        <table class="neos-table" @if={glossary.entries}>
+            <thead>
+            <tr>
+                <th>Source - {glossary.sourceLanguageKey}</th>
+                <th>Target - {glossary.targetLanguageKey}</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <Neos.Fusion:Loop items={glossary.entries} itemName="entry">
+                <tr>
+                    <td>
+                        {entry.sourceText}
+                    </td>
+                    <td>
+                        {entry.targetText}
+                    </td>
+                    <td class="neos-action">
+                        <button class="neos-button neos-button-danger neos-pull-right" title="delete custom ley"
+                                data-toggle="modal" href={"#deleteEntry" + iterator.index}>
+                            <i class="fas fa-trash"></i> Delete Entry
+                        </button>
+                        <Neos.Fusion:Link.Action href.action="editGlossaryEntry" href.arguments.entry={entry} class="neos-button neos-pull-right">
+                            <i class="fas fa-edit"></i> Edit Entry
+                        </Neos.Fusion:Link.Action>
+
+                        <div class="neos-hide" id={"deleteEntry" + iterator.index}>
+                            <div class="neos-modal">
+                                <div class="neos-modal-header">
+                                    <button type="button" class="neos-close neos-button" data-dismiss="modal"></button>
+                                    <div class="neos-header">Delete Entry {entry.sourceText}</div>
+                                </div>
+                                <div class="neos-modal-footer">
+                                    <a href="#" class="neos-button" data-dismiss="modal">Cancel</a>
+                                    <Neos.Fusion.Form:Form
+                                        form.target.action="deleteGlossaryEntry"
+                                        attributes.class="neos-inline"
+                                    >
+                                        <Neos.Fusion.Form:Hidden field.name="entry" field.value={entry}/>
+                                        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-danger">
+                                            Delete Entry
+                                        </Neos.Fusion.Form:Button>
+                                    </Neos.Fusion.Form:Form>
+                                </div>
+                            </div>
+                            <div class="neos-modal-backdrop neos-in"></div>
+                        </div>
+
+                    </td>
+                </tr>
+            </Neos.Fusion:Loop>
+            </tbody>
+        </table>
+
+        <div class="neos-control-group">
+            <Neos.Fusion:Link.Action href.action="index" class="neos-button">
+                Back to list
+            </Neos.Fusion:Link.Action>
+            <Neos.Fusion:Link.Action href.action="createGlossaryEntry" href.arguments.glossary={glossary} class="neos-button neos-button-primary">
+                Add Entry
+            </Neos.Fusion:Link.Action>
+
+        </div>
+    `
+}

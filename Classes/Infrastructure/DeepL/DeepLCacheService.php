@@ -50,4 +50,12 @@ class DeepLCacheService
         $entryIdentifier = $this->cacheIdentifierFactory->createEntryIdentifier($sourceText, $sourceLanguage, $targetLanguage);
         $this->translationCache->set($entryIdentifier, $targetText);
     }
+
+    public function flush(): void
+    {
+        if (!$this->enabled) {
+            return;
+        }
+        $this->translationCache->flush();
+    }
 }
