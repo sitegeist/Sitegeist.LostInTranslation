@@ -268,6 +268,44 @@ content = Neos.Fusion:Join {
 
 ![DDEV__WebPage_test](https://github.com/sitegeist/Sitegeist.LostInTranslation/assets/1309380/7d268e18-5a2a-4292-8844-4800020b0ddb)
 
+## Sync Command
+
+The package comes with a sync command to manually sync a subtree from one language to the other. 
+This can be used from time to time, or for creating a new language from scratch.
+
+## Usage
+
+```bash
+./flow translation:sync <nodePath> <from> <to> [<nodeTypeFilter>]
+```
+
+### Parameters
+
+- **`nodePath`** *(string)*:  
+  The path of the root node to start the synchronization from.  
+  **Example**: `/sites/example.com/home`.  
+  **Note**: The path must not be `/sites`.
+
+- **`from`** *(string)*:  
+  The ISO language code to take the contents for translation *from*.  
+  This must exist as a language dimension preset in the configuration.
+
+- **`to`** *(string)*:  
+  The ISO language code to translate the contents *to*.  
+  This must exist as a language dimension preset in the configuration.
+
+- **`nodeTypeFilter`** *(string, optional)*:  
+  Filters the nodes to be synchronized by their type.  
+  Defaults to `Neos.Neos:Document`.
+
+### Example
+
+```bash
+./flow translation:sync /sites/example.com/home en_US de Neos.Neos:Document
+```
+
+This command synchronizes all document nodes under `/sites/example.com/home` from English (`en_US`) to German (`de`).
+
 ### `Sitegeist.LostInTranslation:Document.TranslationInformation`
 
 Show informations about missing and outdated translations on document level. Allows to "translate missing" and "update outdated" nodes.
