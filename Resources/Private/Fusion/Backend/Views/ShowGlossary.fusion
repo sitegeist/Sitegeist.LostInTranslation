@@ -56,7 +56,7 @@ prototype(Sitegeist.LostInTranslation:Views.ShowGlossary) < prototype(Neos.Fusio
                     <td>
                         {entry.targetText}
                     </td>
-                    <td class="neos-actions">
+                    <td class="neos-action">
                         <button class="neos-button neos-button-danger neos-pull-right" title="delete custom ley"
                                 data-toggle="modal" href={"#deleteEntry" + iterator.index}>
                             <i class="fas fa-trash"></i> Delete Entry
