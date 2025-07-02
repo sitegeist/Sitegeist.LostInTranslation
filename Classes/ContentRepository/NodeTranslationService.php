@@ -104,13 +104,13 @@ class NodeTranslationService
     protected $liveWorkspaceName = 'live';
 
     /**
-     * This property reveals whether LostInTranslation is currently translating a node.
-     * It can be used via the getter isActive() if you want to separate methods executed
-     * by this plugin from those executed by a user, for instance in an Aspect.
+     * If nodes are moved in Neos, then it will move node variants in other dimensions
+     * as well. As we already move nodes when we sync, we don't want this behaviour
+     * twice. With this property and the respective aspect, we prevent that.
      *
      * @var bool
      */
-    protected bool $recursionPreventionEnabled = false;
+    protected bool $recursionPreventionEnabled = true;
 
     /**
      * @param NodeInterface $node
@@ -136,14 +136,14 @@ class NodeTranslationService
             return;
         }
 
-        $this->recursionPreventionEnabled = true;
+        $this->recursionPreventionEnabled = false;
         try {
             $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
             if ($adoptedNode instanceof NodeInterface) {
                 $this->translateNode($node, $adoptedNode, $context);
             }
         } finally {
-            $this->recursionPreventionEnabled = false;
+            $this->recursionPreventionEnabled = true;
         }
     }
 
@@ -299,7 +299,7 @@ class NodeTranslationService
             return;
         }
 
-        $this->recursionPreventionEnabled = true;
+        $this->recursionPreventionEnabled = false;
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -348,7 +348,7 @@ class NodeTranslationService
             }
         }
 
-        $this->recursionPreventionEnabled = false;
+        $this->recursionPreventionEnabled = true;
     }
 
     /**

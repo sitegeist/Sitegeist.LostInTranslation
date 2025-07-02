@@ -52,7 +52,7 @@ class AroundMoveNodeDataAspect
         $nodeDataLanguageDimensionValue = Arrays::getValueByPath($dimensionValues, $this->languageDimensionName . '.0');
 
         if (
-            !is_null($nodeDataLanguageDimensionValue) && !$this->nodeTranslationService->isRecursionPreventionEnabled() && Arrays::getValueByPath(
+            !is_null($nodeDataLanguageDimensionValue) && $this->nodeTranslationService->isRecursionPreventionEnabled() && Arrays::getValueByPath(
                 $configuration,
                 sprintf('presets.%s.options.translationStrategy', $nodeDataLanguageDimensionValue)
             ) === NodeTranslationService::TRANSLATION_STRATEGY_SYNC
