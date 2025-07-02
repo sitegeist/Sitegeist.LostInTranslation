@@ -27,7 +27,7 @@ class AroundMoveNodeDataAspect
 
     /**
      * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
-     * @var array<string, array>
+     * @var array<string, array{}>
      */
     protected $contentDimensionConfiguration;
 
@@ -39,7 +39,7 @@ class AroundMoveNodeDataAspect
      */
     public function aroundMoveNodeData(JoinPointInterface $joinPoint): mixed
     {
-        // @phpstan-ignore-line
+        // @phpstan-ignore constant.notFound
         if (FLOW_SAPITYPE === 'CLI') {
             return $joinPoint->getAdviceChain()->proceed($joinPoint);
         }
