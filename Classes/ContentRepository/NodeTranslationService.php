@@ -110,7 +110,7 @@ class NodeTranslationService
      *
      * @var bool
      */
-    protected bool $active = false;
+    protected bool $recursionPreventionEnabled = false;
 
     /**
      * @param NodeInterface $node
@@ -136,12 +136,12 @@ class NodeTranslationService
             return;
         }
 
-        $this->active = true;
+        $this->recursionPreventionEnabled = true;
         $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
         if ($adoptedNode instanceof NodeInterface) {
             $this->translateNode($node, $adoptedNode, $context);
         }
-        $this->active = false;
+        $this->recursionPreventionEnabled = false;
     }
 
     /**
@@ -296,7 +296,7 @@ class NodeTranslationService
             return;
         }
 
-        $this->active = true;
+        $this->recursionPreventionEnabled = true;
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -345,15 +345,15 @@ class NodeTranslationService
             }
         }
 
-        $this->active = false;
+        $this->recursionPreventionEnabled = false;
     }
 
     /**
      * @return bool
      */
-    public function isActive(): bool
+    public function isRecursionPreventionEnabled(): bool
     {
-        return $this->active;
+        return $this->recursionPreventionEnabled;
     }
 
     public function resetContextCache(): void
