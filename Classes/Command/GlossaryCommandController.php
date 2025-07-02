@@ -6,12 +6,16 @@ use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\CommandController;
 use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryService;
 
 class GlossaryCommandController extends CommandController
 {
     #[Flow\Inject]
     protected DeepLGlossaryService $deepLGlossaryService;
+
+    #[Flow\Inject]
+    protected DeepLCacheService $deepLCacheService;
 
     #[Flow\Inject]
     protected GlossaryRepository $glossaryRepository;
@@ -27,6 +31,7 @@ class GlossaryCommandController extends CommandController
                 $this->output->outputLine(sprintf('Glossary %s was uploaded with id %s', $glossary->getLabel(), $id));
             }
         }
+        $this->deepLCacheService->flush();
     }
 
     public function cleanupAllCommand(): void

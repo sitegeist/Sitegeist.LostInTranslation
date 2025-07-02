@@ -12,6 +12,7 @@ use Neos\Flow\Annotations as Flow;
 use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\Model\GlossaryEntry;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
@@ -23,6 +24,12 @@ class LostInTranslationModuleController extends AbstractModuleController
      * @Flow\Inject
      */
     protected $translationService;
+
+    /**
+     * @var DeepLCacheService
+     * @Flow\Inject
+     */
+    protected $cacheService;
 
     /**
      * @var DeepLGlossaryService
@@ -153,6 +160,7 @@ class LostInTranslationModuleController extends AbstractModuleController
         if (is_string($identifier)) {
             $glossary->updateSynchronizationIdentifier($identifier);
             $this->glossaryRepository->update($glossary);
+            $this->cacheService->flush();
             $deleted = $this->glossaryService->cleanupRemoteGlossaries();
             $removedNumber = count($deleted);
             if ($removedNumber == 0) {
