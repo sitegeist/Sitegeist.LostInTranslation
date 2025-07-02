@@ -62,7 +62,7 @@ class NodeTranslationService
 
     /**
      * @Flow\InjectConfiguration(path="nodeTranslation.excludedNodePaths")
-     * @var array
+     * @var array<string>
      */
     protected $excludedNodePaths = [];
 
