@@ -137,11 +137,14 @@ class NodeTranslationService
         }
 
         $this->recursionPreventionEnabled = true;
-        $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
-        if ($adoptedNode instanceof NodeInterface) {
-            $this->translateNode($node, $adoptedNode, $context);
+        try {
+            $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
+            if ($adoptedNode instanceof NodeInterface) {
+                $this->translateNode($node, $adoptedNode, $context);
+            }
+        } finally {
+            $this->recursionPreventionEnabled = false;
         }
-        $this->recursionPreventionEnabled = false;
     }
 
     /**
