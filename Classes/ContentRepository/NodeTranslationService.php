@@ -126,7 +126,7 @@ class NodeTranslationService
     protected bool $recursionPreventionEnabled = true;
 
     /**
-     * @var array<string, NodeInterface>
+     * @var array<string, array<string, array<string, NodeInterface>>>
      */
     protected array $nodesToBeTranslated = [];
 
@@ -219,12 +219,11 @@ class NodeTranslationService
     {
         /**
          * @var string $workspaceName
-         * @var array<string, array<string, NodeInterface[]>> $nodesByWorkspace
+         * @var array<string, array<string, NodeInterface>> $nodesByWorkspace
          */
         foreach ($this->nodesToBeTranslated as $workspaceName => $nodesByWorkspace) {
             /**
-             * @var string $languageDimensionValue
-             * @var array<string, NodeInterface[]> $nodesByLanguageDimensionValue
+             * @var array<string, NodeInterface> $nodesByLanguageDimensionValue
              */
             foreach ($nodesByWorkspace as $nodesByLanguageDimensionValue) {
                 foreach ($nodesByLanguageDimensionValue as $node) {
