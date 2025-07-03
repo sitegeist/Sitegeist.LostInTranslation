@@ -226,9 +226,8 @@ class NodeTranslationService
              * @var string $languageDimensionValue
              * @var array<string, NodeInterface[]> $nodesByLanguageDimensionValue
              */
-            foreach ($nodesByWorkspace as $languageDimensionValue => $nodesByLanguageDimensionValue) {
-                $context = $this->getContextForLanguageDimensionAndWorkspaceName($languageDimensionValue, $workspaceName);
-                foreach ($nodesByLanguageDimensionValue as $nodeIdentifier => $node) {
+            foreach ($nodesByWorkspace as $nodesByLanguageDimensionValue) {
+                foreach ($nodesByLanguageDimensionValue as $node) {
                     if ($this->skipAuthorizationChecks) {
                         $this->securityContext->withoutAuthorizationChecks(function () use ($node, $workspaceName) {
                             $this->syncNode($node, $workspaceName);
