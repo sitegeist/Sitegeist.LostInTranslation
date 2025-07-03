@@ -126,7 +126,7 @@ class NodeTranslationService
     protected bool $recursionPreventionEnabled = true;
 
     /**
-     * @var array
+     * @var array<string, NodeInterface>
      */
     protected array $nodesToBeTranslated = [];
 
@@ -219,19 +219,15 @@ class NodeTranslationService
     {
         /**
          * @var string $workspaceName
-         * @var array $nodesByWorkspace
+         * @var array<string, array<string, NodeInterface[]>> $nodesByWorkspace
          */
         foreach ($this->nodesToBeTranslated as $workspaceName => $nodesByWorkspace) {
             /**
              * @var string $languageDimensionValue
-             * @var array $nodesByLanguageDimensionValue
+             * @var array<string, NodeInterface[]> $nodesByLanguageDimensionValue
              */
             foreach ($nodesByWorkspace as $languageDimensionValue => $nodesByLanguageDimensionValue) {
                 $context = $this->getContextForLanguageDimensionAndWorkspaceName($languageDimensionValue, $workspaceName);
-                /**
-                 * @var string $nodeIdentifier
-                 * @var bool $translate
-                 */
                 foreach ($nodesByLanguageDimensionValue as $nodeIdentifier => $node) {
                     if ($this->skipAuthorizationChecks) {
                         $this->securityContext->withoutAuthorizationChecks(function () use ($node, $workspaceName) {
