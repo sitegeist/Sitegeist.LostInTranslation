@@ -110,6 +110,15 @@ class NodeTranslationService
     protected $liveWorkspaceName = 'live';
 
     /**
+     * If nodes are moved in Neos, then it will move node variants in other dimensions
+     * as well. As we already move nodes when we sync, we don't want this behaviour
+     * twice. With this property and the respective aspect, we prevent that.
+     *
+     * @var bool
+     */
+    protected bool $recursionPreventionEnabled = true;
+
+    /**
      * @param NodeInterface $node
      * @param Context $context
      * @param bool $recursive
@@ -141,9 +150,14 @@ class NodeTranslationService
             return;
         }
 
-        $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
-        if ($adoptedNode instanceof NodeInterface) {
-            $this->translateNode($node, $adoptedNode, $context);
+        $this->recursionPreventionEnabled = false;
+        try {
+            $adoptedNode = $context->getNodeByIdentifier((string)$node->getIdentifier());
+            if ($adoptedNode instanceof NodeInterface) {
+                $this->translateNode($node, $adoptedNode, $context);
+            }
+        } finally {
+            $this->recursionPreventionEnabled = true;
         }
     }
 
@@ -306,6 +320,8 @@ class NodeTranslationService
         if ($nodeSourceDimensionValue !== $defaultPreset) {
             return;
         }
+
+        $this->recursionPreventionEnabled = false;
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -353,6 +369,16 @@ class NodeTranslationService
                 }
             }
         }
+
+        $this->recursionPreventionEnabled = true;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isRecursionPreventionEnabled(): bool
+    {
+        return $this->recursionPreventionEnabled;
     }
 
     public function resetContextCache(): void
