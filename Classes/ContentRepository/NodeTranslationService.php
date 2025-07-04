@@ -7,9 +7,10 @@ namespace Sitegeist\LostInTranslation\ContentRepository;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\ContentRepository\Domain\Service\Context;
-use Neos\ContentRepository\Domain\Service\ContextFactory;
 use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Persistence\Doctrine\PersistenceManager;
+use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
@@ -110,6 +111,12 @@ class NodeTranslationService
     protected $liveWorkspaceName = 'live';
 
     /**
+     * @Flow\Inject
+     * @var PersistenceManager
+     */
+    protected $persistenceManager;
+
+    /**
      * If nodes are moved in Neos, then it will move node variants in other dimensions
      * as well. As we already move nodes when we sync, we don't want this behaviour
      * twice. With this property and the respective aspect, we prevent that.
@@ -117,6 +124,11 @@ class NodeTranslationService
      * @var bool
      */
     protected bool $recursionPreventionEnabled = true;
+
+    /**
+     * @var array<string, array<string, array<string, NodeInterface>>>
+     */
+    protected array $nodesToBeTranslated = [];
 
     /**
      * @param NodeInterface $node
@@ -162,11 +174,11 @@ class NodeTranslationService
     }
 
     /**
-     * @param NodeInterface $node
-     * @param Workspace $workspace
+     * @param  NodeInterface  $node
+     * @param  Workspace  $workspace
      * @return void
      */
-    public function afterNodePublish(NodeInterface $node, Workspace $workspace): void
+    public function collectNodesToBeTranslated(NodeInterface $node, Workspace $workspace): void
     {
         if (!$this->enabled) {
             return;
@@ -184,13 +196,50 @@ class NodeTranslationService
             }
         }
 
-        if ($this->skipAuthorizationChecks) {
-            $this->securityContext->withoutAuthorizationChecks(function () use ($node) {
-                $this->syncNode($node, $this->liveWorkspaceName);
-            });
-        } else {
-            $this->syncNode($node, $this->liveWorkspaceName);
+        $isAutomaticTranslationEnabledForNodeType = $node->getNodeType()->getConfiguration('options.automaticTranslation') ?? true;
+        if (!$isAutomaticTranslationEnabledForNodeType) {
+            return;
         }
+
+        $nodeSourceDimensionValue = $node->getContext()->getTargetDimensions()[$this->languageDimensionName];
+        $defaultPreset = $this->contentDimensionConfiguration[$this->languageDimensionName]['defaultPreset'];
+
+        if ($nodeSourceDimensionValue !== $defaultPreset) {
+            return;
+        }
+
+        $this->nodesToBeTranslated[$workspace->getName()][$nodeSourceDimensionValue][$node->getIdentifier()] = $node;
+    }
+
+    /**
+     * @return void
+     * @throws IllegalObjectTypeException|\Exception
+     */
+    public function translateNodes(): void
+    {
+        /**
+         * @var string $workspaceName
+         * @var array<string, array<string, NodeInterface>> $nodesByWorkspace
+         */
+        foreach ($this->nodesToBeTranslated as $workspaceName => $nodesByWorkspace) {
+            /**
+             * @var array<string, NodeInterface> $nodesByLanguageDimensionValue
+             */
+            foreach ($nodesByWorkspace as $nodesByLanguageDimensionValue) {
+                foreach ($nodesByLanguageDimensionValue as $node) {
+                    if ($this->skipAuthorizationChecks) {
+                        $this->securityContext->withoutAuthorizationChecks(function () use ($node, $workspaceName) {
+                            $this->syncNode($node, $workspaceName);
+                        });
+                    } else {
+                        $this->syncNode($node, $workspaceName);
+                    }
+                }
+            }
+        }
+
+        $this->nodesToBeTranslated = [];
+        $this->persistenceManager->persistAll();
     }
 
     /**
