@@ -9,6 +9,7 @@ use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
+use Neos\ContentRepository\Core\Feature\Security\Exception\AccessDenied;
 use Neos\ContentRepository\Core\Projection\ContentGraph\AbsoluteNodePath;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
@@ -18,6 +19,7 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
 
 class LostInTranslationCommandController extends CommandController
@@ -31,6 +33,18 @@ class LostInTranslationCommandController extends CommandController
     #[Flow\Inject]
     public Context $securityContext;
 
+    /**
+     * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
+     *
+     * @param string $source
+     * @param string $target
+     * @param string $contentRepository
+     * @param string $workspace
+     * @param string $nodePath
+     * @return void
+     * @throws AccessDenied
+     * @throws StopCommandException
+     */
     public function translateCommand(string $source, string $target, string $contentRepository = 'default', string $workspace = 'live', string $nodePath = '/<Neos.Neos:Sites>'): void
     {
             $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepository));
