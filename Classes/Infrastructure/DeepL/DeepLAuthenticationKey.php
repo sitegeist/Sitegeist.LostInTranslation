@@ -8,7 +8,7 @@ class DeepLAuthenticationKey
 {
     public bool $isFree;
     public function __construct(
-        public readonly string $authenticationKey,
+        public readonly string $authenticationKey = '',
         public readonly bool $isCustomKey = false
     ) {
         $this->isFree = str_ends_with($authenticationKey, ':fx');
