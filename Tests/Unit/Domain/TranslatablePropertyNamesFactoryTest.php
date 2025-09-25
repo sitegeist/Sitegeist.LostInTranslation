@@ -95,27 +95,67 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
             ->willReturn($mockTranslationConnector);
 
         $this->inject($this->translatablePropertyNamesFactory, 'objectManager', $mockObjectManager);
+        $this->inject($this->translatablePropertyNamesFactory, 'translateTypesWithConnectors', true);
         $this->inject($this->translatablePropertyNamesFactory, 'translationConnectors', ['Example\Class' => 'Example\TranslationConnector']);
 
         $nodeType = new NodeType('Example', [], [
             'properties' => [
-                'objectWithConnector' => [
+                'object' => [
                     'type' => 'Example\Class',
-                    'options' => [
-                        'automaticTranslation' => true
-                    ]
                 ],
                 'objectWithoutConnector' => [
                     'type' => 'Example\Other\Class',
+                ],
+                'objectWithConnectorButDisabled' => [
+                    'type' => 'Example\Class',
                     'options' => [
-                        'automaticTranslation' => true
+                        'automaticTranslation' => false,
                     ]
-                ]
+                ],
             ]
         ]);
 
         $expectedPropertyNames = new TranslatablePropertyNames(
-        new TranslatablePropertyName('objectWithConnector', $mockTranslationConnector)
+        new TranslatablePropertyName('object', $mockTranslationConnector)
+        );
+
+        $this->assertEquals($expectedPropertyNames, $this->translatablePropertyNamesFactory->createForNodeType($nodeType) );
+    }
+
+    public function testPropertiesWithConfiguredConnectorOptIn(): void
+    {
+        $mockTranslationConnector = $this->createMock(TranslationConnectorInterface::class);
+
+        $mockObjectManager = $this->createMock(ObjectManagerInterface::class);
+        $mockObjectManager
+            ->expects(self::once())
+            ->method('get')
+            ->with('Example\TranslationConnector')
+            ->willReturn($mockTranslationConnector);
+
+        $this->inject($this->translatablePropertyNamesFactory, 'objectManager', $mockObjectManager);
+        $this->inject($this->translatablePropertyNamesFactory, 'translateTypesWithConnectors', false);
+        $this->inject($this->translatablePropertyNamesFactory, 'translationConnectors', ['Example\Class' => 'Example\TranslationConnector']);
+
+        $nodeType = new NodeType('Example', [], [
+            'properties' => [
+                'object' => [
+                    'type' => 'Example\Class',
+                    'options' => [
+                        'automaticTranslation' => true,
+                    ]
+                ],
+                'objectWithoutConnector' => [
+                    'type' => 'Example\Other\Class',
+                ],
+                'objectWithoutOptIn' => [
+                    'type' => 'Example\Class',
+                ],
+            ]
+        ]);
+
+        $expectedPropertyNames = new TranslatablePropertyNames(
+            new TranslatablePropertyName('object', $mockTranslationConnector)
         );
 
         $this->assertEquals($expectedPropertyNames, $this->translatablePropertyNamesFactory->createForNodeType($nodeType) );

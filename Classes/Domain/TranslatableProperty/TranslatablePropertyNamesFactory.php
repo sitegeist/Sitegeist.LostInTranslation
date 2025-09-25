@@ -18,6 +18,12 @@ class TranslatablePropertyNamesFactory
     protected $translateInlineEditables;
 
     /**
+     * @var bool
+     * @Flow\InjectConfiguration(path="nodeTranslation.translateTypesWithConnectors")
+     */
+    protected $translateTypesWithConnectors;
+
+    /**
      * @Flow\InjectConfiguration(path="nodeTranslation.translationConnectors")
      * @var array<class-string, class-string>
      */
@@ -46,17 +52,21 @@ class TranslatablePropertyNamesFactory
 
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
             $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ]
-                ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? false);
+                ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? null);
             $isInlineEditable = $propertyDefinition['ui']['inlineEditable']
                 ?? false;
             $translationConnector = $this->translationConnectors[$type]
                 ?? null;
 
+            if ($automaticTranslationIsEnabled === false) {
+                continue;
+            }
+
             if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
                 $translateProperties[] = new TranslatablePropertyName($propertyName);
-            } elseif ($type === "string" && $automaticTranslationIsEnabled) {
+            } elseif ($type === "string" && $automaticTranslationIsEnabled === true) {
                 $translateProperties[] = new TranslatablePropertyName($propertyName);
-            } elseif ($translationConnector && $automaticTranslationIsEnabled) {
+            } elseif ($translationConnector && ($this->translateTypesWithConnectors || $automaticTranslationIsEnabled)) {
                 $translationConnectorInstance = $this->objectManager->get($translationConnector);
                 assert($translationConnectorInstance instanceof TranslationConnectorInterface);
                 $translateProperties[] = new TranslatablePropertyName($propertyName, $translationConnectorInstance);
