@@ -288,26 +288,31 @@ class NodeTranslationService
         /** @phpstan-ignore arguments.count */
         $properties = (array)$sourceNode->getProperties(true);
         $propertiesToTranslate = [];
+
         foreach ($properties as $propertyName => $propertyValue) {
-            if (empty($propertyValue) || !is_string($propertyValue)) {
+            if (empty($propertyValue)) {
                 continue;
             }
+            assert($propertyName !== '');
+            assert($propertyValue !== '');
             if (!$translatableProperties->isTranslatable($propertyName)) {
                 continue;
             }
-            if ((trim(strip_tags($propertyValue))) == "") {
+            if (is_string($propertyValue) && trim(strip_tags($propertyValue)) === "") {
                 continue;
             }
             if ($connectorName = $translatableProperties->getTranslationObjectConnector($propertyName)) {
                 $propertiesToTranslate[$propertyName] = $connectorName::extractTranslations($propertyValue);
+                unset($properties[$propertyName]);
             } else {
                 $propertiesToTranslate[$propertyName] = $propertyValue;
+                unset($properties[$propertyName]);
             }
-            unset($properties[$propertyName]);
         }
 
         if (count($propertiesToTranslate) > 0) {
             $propertiesToTranslateDeflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
+            /** @var array<non-empty-string, string> $translatedPropertiesDeflated */
             $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateDeflated, $targetLanguage, $sourceLanguage);
             $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
             $properties = array_merge($translatedProperties, $properties);
@@ -319,8 +324,12 @@ class NodeTranslationService
                 $propertyValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $propertyValue);
             }
             if (is_array($propertyValue)) {
-                $connectorName = $translatableProperties->getTranslationObjectConnector($propertyName);
-                $targetValue = $connectorName::applyTranslations($targetNode->getProperty($propertyName), $propertyValue);
+                $targetValue = $targetNode->getProperty($propertyName);
+                if ($connectorName = $translatableProperties->getTranslationObjectConnector($propertyName)) {
+                    if (is_object($targetValue)) {
+                        $targetValue = $connectorName::applyTranslations($targetValue, $propertyValue);
+                    }
+                }
             } else {
                 $targetValue = $propertyValue;
             }

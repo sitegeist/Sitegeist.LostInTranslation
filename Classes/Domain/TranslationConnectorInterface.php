@@ -1,22 +1,23 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain;
 
 /**
- * @template T
+ * @template T of object
  */
-interface TranslationObjectConnectorInterface {
-
+interface TranslationConnectorInterface
+{
     /**
      * @param T $object
-     * @return array<string, string>
+     * @return array<non-empty-string, string>
      */
     public static function extractTranslations(object $object): array;
 
     /**
      * @param T $object
-     * @param array<string, string> $translations
+     * @param array<non-empty-string, string> $translations
      * @return T
      */
     public static function applyTranslations(object $object, array $translations): object;

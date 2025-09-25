@@ -6,7 +6,9 @@ namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeType;
-use Sitegeist\LostInTranslation\Domain\TranslationObjectConnectorInterface;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyName;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNames;
+use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 class TranslatablePropertyNamesFactory
 {
@@ -29,23 +31,23 @@ class TranslatablePropertyNamesFactory
         $propertyDefinitions = $nodeType->getProperties();
         $translateProperties = [];
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
-            $translationObjectConnector = $propertyDefinition['options']['translationObjectConnector'] ?? null;
-            if (array_key_exists('type', $propertyDefinition) && $propertyDefinition['type'] !== 'string') {
-                continue;
-            }
-            if (isset($propertyDefinition['options']['automaticTranslation']) && !$propertyDefinition['options']['automaticTranslation']) {
-                continue;  // do not translate (inline-editable) properties explicitly set to: 'automaticTranslation: false'
-            }
-            if ($this->translateInlineEditables && ($propertyDefinitions[$propertyName]['ui']['inlineEditable'] ?? false)) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName, $translationObjectConnector);
-                continue;
-            }
-            // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
-            if ($propertyDefinition[ 'options' ][ 'automaticTranslation' ] ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? false)) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName, $translationObjectConnector);
-                continue;
-            }
+            $type = $propertyDefinition['type'];
 
+            // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
+            $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ]
+                ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? false);
+            $isInlineEditable = $propertyDefinition['ui']['inlineEditable']
+                ?? false;
+            $translationConnector = $propertyDefinition['options']['automaticTranslationConnector']
+                ?? null;
+
+            if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
+                $translateProperties[] = new TranslatablePropertyName($propertyName);
+            } elseif ($type === "string" && $automaticTranslationIsEnabled) {
+                $translateProperties[] = new TranslatablePropertyName($propertyName);
+            } elseif ($translationConnector && $automaticTranslationIsEnabled) {
+                $translateProperties[] = new TranslatablePropertyName($propertyName, $translationConnector);
+            }
         }
         $this->firstLevelCache[$nodeType->getName()] = new TranslatablePropertyNames(...$translateProperties);
         return $this->firstLevelCache[$nodeType->getName()];

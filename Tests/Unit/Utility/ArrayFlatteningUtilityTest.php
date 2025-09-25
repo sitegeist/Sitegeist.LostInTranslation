@@ -12,32 +12,27 @@ class ArrayFlatteningUtilityTest  extends UnitTestCase {
     {
         yield 'empty array' => [
             [],
-            [],
-            '.'
+            []
         ];
 
         yield 'simple array' => [
             ['foo' => 'bar', 'bar' => 'baz'],
-            ['foo' => 'bar', 'bar' => 'baz'],
-            '.'
+            ['foo' => 'bar', 'bar' => 'baz']
         ];
 
         yield 'nested array' => [
             ['foo' => ['bar' => 'baz', 'baz' => 'bam'], 'bar' => ['baz' => 'bam']],
-            ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam'],
-            '.'
+            ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam']
         ];
 
         yield 'mixed array' => [
             ['foo' => ['bar' => 'baz', 'baz' => 'bam'], 'bar' => ['baz' => 'bam'], 'baz' => 'bam'],
-            ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam', 'baz' => 'bam'],
-            '.'
+            ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam', 'baz' => 'bam']
         ];
 
         yield 'deeply nested mixed array' => [
             ['foo' => ['bar' => 'baz', 'baz' => 'bam'], 'bar' => ['baz' => 'bam'], 'baz' => 'bam'],
-            ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam', 'baz' => 'bam'],
-            '.'
+            ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam', 'baz' => 'bam']
         ];
     }
 
@@ -48,9 +43,9 @@ class ArrayFlatteningUtilityTest  extends UnitTestCase {
      * @param string $seperator
      * @return void
      */
-    public function testArrayDeflation(array $enflated, array $deflated, string $seperator): void
+    public function testArrayDeflation(array $enflated, array $deflated): void
     {
-        $this->assertEquals($deflated, ArrayFlatteningUtility::deflate($enflated, $seperator));
+        $this->assertEquals($deflated, ArrayFlatteningUtility::deflate($enflated));
     }
 
     /**
@@ -60,8 +55,8 @@ class ArrayFlatteningUtilityTest  extends UnitTestCase {
      * @param string $seperator
      * @return void
      */
-    public function testArrayEnflation(array $enflated, array $deflated, string $seperator): void
+    public function testArrayEnflation(array $enflated, array $deflated): void
     {
-        $this->assertEquals($enflated, ArrayFlatteningUtility::enflate($deflated, $seperator));
+        $this->assertEquals($enflated, ArrayFlatteningUtility::enflate($deflated));
     }
 }

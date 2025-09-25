@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
-use Sitegeist\LostInTranslation\Domain\TranslationObjectConnectorInterface;
+use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 /**
  * @implements \IteratorAggregate<int, TranslatablePropertyName>
@@ -32,20 +32,20 @@ class TranslatablePropertyNames implements \IteratorAggregate
 
     /**
      * @param string $propertyName
-     * @return class-string<TranslationObjectConnectorInterface>|null
+     * @return class-string<TranslationConnectorInterface<object>>|null
      */
     public function getTranslationObjectConnector(string $propertyName): ?string
     {
         foreach ($this->translatableProperties as $translatableProperty) {
             if ($translatableProperty->getName() == $propertyName) {
-                return $translatableProperty->getTranslationObjectConnector();
+                return $translatableProperty->getTranslationConnectorClassName();
             }
         }
         return null;
     }
 
     /**
-     * @return \ArrayIterator<string, TranslatablePropertyName>
+     * @return \ArrayIterator<int, TranslatablePropertyName>
      */
     public function getIterator(): \Iterator
     {
