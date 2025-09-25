@@ -32,13 +32,13 @@ class TranslatablePropertyNames implements \IteratorAggregate
 
     /**
      * @param string $propertyName
-     * @return class-string<TranslationConnectorInterface<object>>|null
+     * @return TranslationConnectorInterface<object>|null
      */
-    public function getTranslationObjectConnector(string $propertyName): ?string
+    public function getTranslationObjectConnector(string $propertyName): ?TranslationConnectorInterface
     {
         foreach ($this->translatableProperties as $translatableProperty) {
             if ($translatableProperty->getName() == $propertyName) {
-                return $translatableProperty->getTranslationConnectorClassName();
+                return $translatableProperty->getTranslationConnector();
             }
         }
         return null;

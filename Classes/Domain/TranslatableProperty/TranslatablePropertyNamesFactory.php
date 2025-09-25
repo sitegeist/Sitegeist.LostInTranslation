@@ -6,8 +6,7 @@ namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
 use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeType;
-use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyName;
-use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNames;
+use Neos\Flow\ObjectManagement\ObjectManagerInterface;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 class TranslatablePropertyNamesFactory
@@ -17,6 +16,18 @@ class TranslatablePropertyNamesFactory
      * @Flow\InjectConfiguration(path="nodeTranslation.translateInlineEditables")
      */
     protected $translateInlineEditables;
+
+    /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.translationConnectors")
+     * @var array<class-string, class-string>
+     */
+    protected $translationConnectors;
+
+    /**
+     * @Flow\Inject
+     * @var ObjectManagerInterface
+     */
+    protected $objectManager;
 
     /**
      * @var array<string, TranslatablePropertyNames>
@@ -38,7 +49,7 @@ class TranslatablePropertyNamesFactory
                 ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? false);
             $isInlineEditable = $propertyDefinition['ui']['inlineEditable']
                 ?? false;
-            $translationConnector = $propertyDefinition['options']['automaticTranslationConnector']
+            $translationConnector = $this->translationConnectors[$type]
                 ?? null;
 
             if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
@@ -46,7 +57,9 @@ class TranslatablePropertyNamesFactory
             } elseif ($type === "string" && $automaticTranslationIsEnabled) {
                 $translateProperties[] = new TranslatablePropertyName($propertyName);
             } elseif ($translationConnector && $automaticTranslationIsEnabled) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName, $translationConnector);
+                $translationConnectorInstance = $this->objectManager->get($translationConnector);
+                assert($translationConnectorInstance instanceof TranslationConnectorInterface);
+                $translateProperties[] = new TranslatablePropertyName($propertyName, $translationConnectorInstance);
             }
         }
         $this->firstLevelCache[$nodeType->getName()] = new TranslatablePropertyNames(...$translateProperties);

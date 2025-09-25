@@ -13,12 +13,12 @@ interface TranslationConnectorInterface
      * @param T $object
      * @return array<non-empty-string, string>
      */
-    public static function extractTranslations(object $object): array;
+    public function extractTranslations(object $object): array;
 
     /**
      * @param T $object
      * @param array<non-empty-string, string> $translations
      * @return T
      */
-    public static function applyTranslations(object $object, array $translations): object;
+    public function applyTranslations(object $object, array $translations): object;
 }

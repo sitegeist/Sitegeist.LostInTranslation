@@ -83,3 +83,11 @@ Sitegeist:
       skipAuthorizationChecks: false
 
       excludedNodePaths: []
+
+      #
+      # Connectors to translate value object properties
+      #
+      # for each value object type a clas implementing the TranslationConnectorInterface
+      # can be configured to extract and apply translations
+      #
+      translationConnectors: []

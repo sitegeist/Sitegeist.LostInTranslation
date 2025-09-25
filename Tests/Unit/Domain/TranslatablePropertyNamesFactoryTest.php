@@ -4,19 +4,24 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Tests\Unit\Domain;
 
 use Neos\ContentRepository\Domain\Model\NodeType;
+use Neos\Flow\ObjectManagement\ObjectManagerInterface;
 use Neos\Flow\Tests\UnitTestCase;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyName;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNames;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
+use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 class TranslatablePropertyNamesFactoryTest extends UnitTestCase
 {
 
     private TranslatablePropertyNamesFactory $translatablePropertyNamesFactory;
+
     public function setUp(): void
     {
+
         $this->translatablePropertyNamesFactory = new TranslatablePropertyNamesFactory();
         $this->inject($this->translatablePropertyNamesFactory, 'translateInlineEditables', true);
+
     }
 
     public function exampleProvider(): \Generator
@@ -68,40 +73,6 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
                 new TranslatablePropertyName('textPropertyWithOptions'),
             ),
         ];
-
-        yield 'value object property' => [
-            new NodeType('Example', [], [
-                'properties' => [
-                    'valueObjectProperty' => [
-                        'type' => 'Some\Class',
-                        'options' => [
-                            'automaticTranslationConnector' => 'Some\Class\Name',
-                            'automaticTranslation' => true
-                        ]
-                    ]
-                ]
-            ]),
-            new TranslatablePropertyNames(
-                new TranslatablePropertyName('valueObjectProperty', 'Some\Class\Name'),
-            ),
-        ];
-
-        yield 'test image property' => [
-            new NodeType('Image', [], [
-                'properties' => [
-                    'image' => [
-                        'type' => 'Sitegeist\Kaleidoscope\ValueObjects\ImageSourceProxy',
-                        'options' => [
-                            'automaticTranslationConnector' => 'Sitegeist\Kaleidoscope\ValueObjects\Connector\ImageSourceProxyLostInTranslationConnector',
-                            'automaticTranslation' => true
-                        ]
-                    ]
-                ]
-            ]),
-            new TranslatablePropertyNames(
-                new TranslatablePropertyName('image', 'Sitegeist\Kaleidoscope\ValueObjects\Connector\ImageSourceProxyLostInTranslationConnector'),
-            ),
-        ];
     }
 
     /**
@@ -110,4 +81,44 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
     public function testDetectionOfTranslatableProperties(NodeType $nodeType, TranslatablePropertyNames $expectedPropertyNames): void {
         $this->assertEquals($expectedPropertyNames, $this->translatablePropertyNamesFactory->createForNodeType($nodeType) );
     }
+
+
+    public function testPropertiesWithConfiguredConnector(): void
+    {
+        $mockTranslationConnector = $this->createMock(TranslationConnectorInterface::class);
+
+        $mockObjectManager = $this->createMock(ObjectManagerInterface::class);
+        $mockObjectManager
+            ->expects(self::once())
+            ->method('get')
+            ->with('Example\TranslationConnector')
+            ->willReturn($mockTranslationConnector);
+
+        $this->inject($this->translatablePropertyNamesFactory, 'objectManager', $mockObjectManager);
+        $this->inject($this->translatablePropertyNamesFactory, 'translationConnectors', ['Example\Class' => 'Example\TranslationConnector']);
+
+        $nodeType = new NodeType('Example', [], [
+            'properties' => [
+                'objectWithConnector' => [
+                    'type' => 'Example\Class',
+                    'options' => [
+                        'automaticTranslation' => true
+                    ]
+                ],
+                'objectWithoutConnector' => [
+                    'type' => 'Example\Other\Class',
+                    'options' => [
+                        'automaticTranslation' => true
+                    ]
+                ]
+            ]
+        ]);
+
+        $expectedPropertyNames = new TranslatablePropertyNames(
+        new TranslatablePropertyName('objectWithConnector', $mockTranslationConnector)
+        );
+
+        $this->assertEquals($expectedPropertyNames, $this->translatablePropertyNamesFactory->createForNodeType($nodeType) );
+    }
+
 }
