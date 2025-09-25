@@ -15,6 +15,7 @@ use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
+use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
 /**
  * @Flow\Scope("singleton")
@@ -297,12 +298,18 @@ class NodeTranslationService
             if ((trim(strip_tags($propertyValue))) == "") {
                 continue;
             }
-            $propertiesToTranslate[$propertyName] = $propertyValue;
+            if ($connectorName = $translatableProperties->getTranslationObjectConnector($propertyName)) {
+                $propertiesToTranslate[$propertyName] = $connectorName::extractTranslations($propertyValue);
+            } else {
+                $propertiesToTranslate[$propertyName] = $propertyValue;
+            }
             unset($properties[$propertyName]);
         }
 
         if (count($propertiesToTranslate) > 0) {
-            $translatedProperties = $this->translationService->translate($propertiesToTranslate, $targetLanguage, $sourceLanguage);
+            $propertiesToTranslateDeflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
+            $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateDeflated, $targetLanguage, $sourceLanguage);
+            $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
             $properties = array_merge($translatedProperties, $properties);
         }
 
@@ -311,9 +318,14 @@ class NodeTranslationService
             if ($propertyName === 'uriPathSegment' && !preg_match('/^[a-z0-9\-]+$/i', $propertyValue)) {
                 $propertyValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $propertyValue);
             }
-
-            if ($targetNode->getProperty($propertyName) !== $propertyValue) {
-                $targetNode->setProperty($propertyName, $propertyValue);
+            if (is_array($propertyValue)) {
+                $connectorName = $translatableProperties->getTranslationObjectConnector($propertyName);
+                $targetValue = $connectorName::applyTranslations($targetNode->getProperty($propertyName), $propertyValue);
+            } else {
+                $targetValue = $propertyValue;
+            }
+            if ($targetNode->getProperty($propertyName) !== $targetValue) {
+                $targetNode->setProperty($propertyName, $targetValue);
             }
         }
     }
