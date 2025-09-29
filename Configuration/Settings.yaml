@@ -83,3 +83,17 @@ Sitegeist:
       skipAuthorizationChecks: false
 
       excludedNodePaths: []
+
+      #
+      # Translate all object properties that have a translationConnector configured
+      # if this is set to false each property must be enabled via options.automaticTranslation
+      #
+      translateTypesWithConnectors: true
+
+      #
+      # Connectors to translate value object properties
+      #
+      # for each value object type a clas implementing the TranslationConnectorInterface
+      # can be configured to extract and apply translations
+      #
+      translationConnectors: []
