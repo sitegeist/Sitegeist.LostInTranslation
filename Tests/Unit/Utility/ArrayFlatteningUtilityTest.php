@@ -30,9 +30,14 @@ class ArrayFlatteningUtilityTest  extends UnitTestCase {
             ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam', 'baz' => 'bam']
         ];
 
-        yield 'deeply nested mixed array' => [
+        yield 'nested mixed array' => [
             ['foo' => ['bar' => 'baz', 'baz' => 'bam'], 'bar' => ['baz' => 'bam'], 'baz' => 'bam'],
             ['foo.bar' => 'baz', 'foo.baz' => 'bam', 'bar.baz' => 'bam', 'baz' => 'bam']
+        ];
+
+        yield 'nested with . in subkeys' => [
+            ['foo' => ['bar.baz' => "bam", 'bar.bam' => 'blah'], 'bar' => ['baz.bam' => 'blah'], 'baz' => 'bam'],
+            ['foo.bar.baz' => 'bam', 'foo.bar.bam' => 'blah', 'bar.baz.bam' => 'blah', 'baz' => 'bam']
         ];
     }
 
