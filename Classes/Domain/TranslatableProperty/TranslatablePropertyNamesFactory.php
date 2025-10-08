@@ -48,6 +48,9 @@ class TranslatablePropertyNamesFactory
         $propertyDefinitions = $nodeType->getProperties();
         $translateProperties = [];
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
+            if (!isset($propertyDefinition['type'])) {
+                continue;
+            }
             $type = $propertyDefinition['type'];
 
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
