@@ -49,7 +49,7 @@ class TranslatablePropertyNamesFactory
         $translateProperties = [];
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
             $type = $propertyDefinition['type'] ?? null;
-            if (empty($type) {
+            if (empty($type)) {
                 continue;
             }
 
