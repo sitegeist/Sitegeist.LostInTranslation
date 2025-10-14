@@ -392,6 +392,7 @@ class NodeTranslationService
         }
 
         $this->recursionPreventionEnabled = false;
+        $targetNodes = [];
         foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
             if ($nodeSourceDimensionValue === $presetIdentifier) {
                 continue;
@@ -431,6 +432,7 @@ class NodeTranslationService
 
                 $context->getFirstLevelNodeCache()->flush();
                 $this->publishingService->publishNode($targetNode);
+                $targetNodes[] = $targetNode;
             } else {
                 $removeContext = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
                 $targetNode = $removeContext->getNodeByIdentifier($sourceNode->getIdentifier());
@@ -439,8 +441,18 @@ class NodeTranslationService
                 }
             }
         }
-
+        $this->emitAfterNodeTranslated($sourceNode, $targetNodes, $workspaceName);
         $this->recursionPreventionEnabled = true;
+    }
+
+    /**
+     * Signals that a node has been translated
+     *
+     * @Flow\Signal
+     * @api
+     */
+    public function emitAfterNodeTranslated(NodeInterface $sourceNode, array $targetNodes, string $workspaceName): void
+    {
     }
 
     /**
