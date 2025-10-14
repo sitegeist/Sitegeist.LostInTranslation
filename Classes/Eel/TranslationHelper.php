@@ -20,12 +20,12 @@ class TranslationHelper implements ProtectedContextAwareInterface
      * @Flow\InjectConfiguration(path="nodeTranslation.languageDimensionName")
      * @var string
      */
-     protected $languageDimensionName;
+    protected $languageDimensionName;
 
-     /**
-     * @Flow\Inject
-     * @var DeepLTranslationService
-     */
+    /**
+    * @Flow\Inject
+    * @var DeepLTranslationService
+    */
     protected $translationService;
 
     /**
@@ -38,22 +38,24 @@ class TranslationHelper implements ProtectedContextAwareInterface
      * @param string $text A string to be translated
      * @param string $targetLanguage The target language that should be translated to
      * @param string|null $sourceLanguage Optional: the source language of the texts
+     * @param string|null $formality Optional: 'less', 'more', 'default', 'prefer_less', 'prefer_more' or null if not specified
      * @return string The translated text
      */
-    public function translate(string $text, string $targetLanguage, ?string $sourceLanguage = null): string
+    public function translate(string $text, string $targetLanguage, ?string $sourceLanguage = null, ?string $formality = null): string
     {
-        return $this->translationService->translate(['text' => $text], $targetLanguage, $sourceLanguage)['text'];
+        return $this->translationService->translate(['text' => $text], $targetLanguage, $sourceLanguage, $formality)['text'];
     }
 
     /**
      * @param array<string, string> $texts An array of strings to be translated
      * @param string $targetLanguage The target language that should be translated to
      * @param string|null $sourceLanguage Optional: the source language of the texts
+     * @param string|null $formality Optional: 'less', 'more', 'default', 'prefer_less', 'prefer_more' or null if not specified
      * @return array<string, string> An array with the translated texts and with the same indices from the input array
      */
-    public function translateMultiple(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
+    public function translateMultiple(array $texts, string $targetLanguage, ?string $sourceLanguage = null, ?string $formality = null): array
     {
-        return $this->translationService->translate($texts, $targetLanguage, $sourceLanguage);
+        return $this->translationService->translate($texts, $targetLanguage, $sourceLanguage, $formality);
     }
 
     /**

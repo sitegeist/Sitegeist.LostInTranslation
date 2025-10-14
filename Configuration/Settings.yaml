@@ -97,3 +97,13 @@ Sitegeist:
       # can be configured to extract and apply translations
       #
       translationConnectors: []
+
+      #
+      # A connector that can be used to define the formality for a node
+      # 'less': use informal language.
+      # 'more': use formal, more polite language.
+      # 'default': use default formality.
+      # 'prefer_less': use informal language if available, otherwise default.
+      # 'prefer_more': use formal, more polite language if available, otherwise default.
+      #
+      formalityConnector: null

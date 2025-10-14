@@ -15,6 +15,7 @@ use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLFormalityService;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
 /**
@@ -37,6 +38,12 @@ class NodeTranslationService
      * @var PublishingService
      */
     protected $publishingService;
+
+    /**
+     * @Flow\Inject
+     * @var DeepLFormalityService
+     */
+    protected $deepLFormalityService;
 
     /**
      * @Flow\InjectConfiguration(path="nodeTranslation.enabled")
@@ -311,9 +318,10 @@ class NodeTranslationService
         }
 
         if (count($propertiesToTranslate) > 0) {
+            $formality = $this->deepLFormalityService->getFormality($sourceNode, $targetNode);
             $propertiesToTranslateDeflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
             /** @var array<non-empty-string, string> $translatedPropertiesDeflated */
-            $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateDeflated, $targetLanguage, $sourceLanguage);
+            $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateDeflated, $targetLanguage, $sourceLanguage, $formality);
             $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
             $properties = array_merge($translatedProperties, $properties);
         }

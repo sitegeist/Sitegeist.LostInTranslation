@@ -64,9 +64,10 @@ class DeepLTranslationService implements TranslationServiceInterface
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
+     * @param string|null $formality 'less', 'more', 'default', 'prefer_less', 'prefer_more' or null if not specified
      * @return array<string,string>
      */
-    public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
+    public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null, ?string $formality = null): array
     {
         // deepl api does throw critical errors when 'en' or 'pt' is used
         // this prevents that by defaulting to the most likely option
@@ -84,6 +85,9 @@ class DeepLTranslationService implements TranslationServiceInterface
             $translateTextOptions = $this->settings['defaultOptions'];
         } else {
             $translateTextOptions = [];
+        }
+        if (!empty($formality) && in_array($formality, ['less', 'more', 'default', 'prefer_less', 'prefer_more'], true)) {
+            $translateTextOptions[TranslateTextOptions::FORMALITY] = $formality;
         }
 
         if ($sourceLanguage) {
@@ -116,7 +120,7 @@ class DeepLTranslationService implements TranslationServiceInterface
         // wrap ignoredTerms
         if (isset($this->settings['ignoredTerms']) && count($this->settings['ignoredTerms']) > 0) {
             $valuesWithMaskedTerms = array_map(
-                fn(string $text) => IgnoredTermsUtility::wrapIgnoredTerms($text, $this->settings['ignoredTerms']),
+                fn (string $text) => IgnoredTermsUtility::wrapIgnoredTerms($text, $this->settings['ignoredTerms']),
                 $values
             );
         } else {
