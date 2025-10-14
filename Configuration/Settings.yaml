@@ -3,8 +3,8 @@ Sitegeist:
     DeepLApi:
 
       #
-      # This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api.
-      # There are free plans that support a limited number but for productive use we recommend using a payed plan.
+      # This package needs an authenticationKey for the DeepL API from https://www.deepl.com/pro-api.
+      # There are free plans that support a limited number, but for productive use we recommend using a paid plan.
       #
       authenticationKey: ''
 
@@ -13,8 +13,8 @@ Sitegeist:
       #
       glossary:
         #
-        # The label prefix can be used to prevent different instances overwriting or deleting each others
-        # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
+        # The label prefix can be used to prevent different instances from overwriting or deleting each other's
+        # glossaries. The default value is the FLOW_CONTEXT, but this may need adjustment based on your use case
         #
         labelPrefix: '%env:FLOW_CONTEXT%'
         #
@@ -38,7 +38,7 @@ Sitegeist:
 
       #
       # Here you can specify how a request to the DeepL API should
-      # be attempted. Any number higher than 1 means that there will be
+      # be attempted. Any number greater than 1 means there will be
       # retries.
       #
       # 1 = one attempt
@@ -48,8 +48,8 @@ Sitegeist:
       numberOfAttempts: 1
 
       #
-      # Here you can optionally disable the translation cache,
-      # see README for more information.
+      # Here you can optionally disable the translation cache;
+      # see the README for more information.
       # BEWARE: disabling this cache while using the Eel Helper
       # can significantly slow down your page or even
       # lead to timeouts. Use with care!
@@ -58,15 +58,15 @@ Sitegeist:
 
     nodeTranslation:
       #
-      # Enable the automatic translations of nodes while they are adopted to another dimension
+      # Enable the automatic translation of nodes when they are adopted to another dimension
       #
       enabled: true
 
       #
       # Translate all inline editable fields without further configuration.
       #
-      # If this is disabled iline editables can be configured for translation by setting
-      # `options.translateOnAdoption: true` for each property seperatly
+      # If this is disabled, inline editables can be configured for translation by setting
+      # `options.translateOnAdoption: true` for each property separately
       #
       translateInlineEditables: true
 
@@ -85,15 +85,15 @@ Sitegeist:
       excludedNodePaths: []
 
       #
-      # Translate all object properties that have a translationConnector configured
-      # if this is set to false each property must be enabled via options.automaticTranslation
+      # Translate all object properties that have a translationConnector configured;
+      # if this is set to false, each property must be enabled via options.automaticTranslation
       #
       translateTypesWithConnectors: true
 
       #
       # Connectors to translate value object properties
       #
-      # for each value object type a clas implementing the TranslationConnectorInterface
+      # for each value object type a class implementing the TranslationConnectorInterface
       # can be configured to extract and apply translations
       #
       translationConnectors: []

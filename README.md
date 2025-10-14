@@ -1,22 +1,23 @@
 # Sitegeist.LostInTranslation
-## Automatic Translations for Neos via DeeplApi
 
-Documents and Contents are translated automatically once editors choose to "create and copy" a version in another language.
-The included DeeplService can be used for other purposes aswell.
+## Automatic Translations for Neos via DeepLApi
+
+Documents and contents are translated automatically once editors choose to "create and copy" a version in another language.
+The included DeeplService can be used for other purposes as well.
 
 The development was a collaboration of Sitegeist and Code Q.
 
 ### Authors & Sponsors
 
-* Martin Ficzel - ficzel@sitegeist.de
-* Felix Gradinaru - fg@codeq.at
+* Martin Ficzel - <ficzel@sitegeist.de>
+* Felix Gradinaru - <fg@codeq.at>
 
 *The development and the public-releases of this package is generously sponsored
-by our employers http://www.sitegeist.de and http://www.codeq.at.*
+by our employers <http://www.sitegeist.de> and <http://www.codeq.at>.*
 
 ## Installation
 
-Sitegeist.LostInTranslation is available via packagist. Run `composer require sitegeist/lostintranslation`.
+Sitegeist.LostInTranslation is available via Packagist. Run `composer require sitegeist/lostintranslation`.
 
 We use semantic-versioning so every breaking change will increase the major-version number.
 
@@ -58,8 +59,8 @@ Also, automatic translation for all types derived from `Neos.Neos:Node` is enabl
 
 ## Configuration
 
-This package needs an authenticationKey for the DeeplL Api from https://www.deepl.com/pro-api.
-There are free plans that support a limited number but for productive use we recommend using a payed plan.
+This package needs an authenticationKey for the DeepL API from <https://www.deepl.com/pro-api>.
+There are free plans that support a limited number, but for productive use we recommend using a paid plan.
 
 ```yaml
 Sitegeist:
@@ -87,13 +88,13 @@ glossary.labelPrefix is configured differently for each environment.**
 Sitegeist:
   LostInTranslation:
     DeepLApi:
-        # 
+        #
         # Glossary management
-        # 
+        #
         glossary:
             #
-            # The label prefix can be used to prevent different instances overwriting or deleting each others
-            # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
+            # The label prefix can be used to prevent different instances from overwriting or deleting each other's
+            # glossaries. The default value is the FLOW_CONTEXT, but this may need adjustment based on your use case
             #
             labelPrefix: '%env:FLOW_CONTEXT%'
             #
@@ -102,27 +103,27 @@ Sitegeist:
             keepNumber: 10
 ```
 
-The commands `./flow glossary:uploadall` and `./flow glossary:cleanupall` allow to automate those tasks and may 
-be integrated in backup and restore or synchronization scripts.
+The commands `./flow glossary:uploadall` and `./flow glossary:cleanupall` allow automating those tasks and may
+be integrated into backup and restore or synchronization scripts.
 
-### Content-Repository 
+### Content Repository
 
-The translation of nodes can is configured via settings:
+The translation of nodes can be configured via settings:
 
 ```yaml
 Sitegeist:
   LostInTranslation:
     nodeTranslation:
       #
-      # Enable the automatic translations of nodes while they are adopted to another dimension
+      # Enable the automatic translation of nodes when they are adopted to another dimension
       #
       enabled: true
 
       #
       # Translate all inline editable fields without further configuration.
       #
-      # If this is disabled iline editables can be configured for translation by setting
-      # `options.translateOnAdoption: true` for each property seperatly
+      # If this is disabled, inline editables can be configured for translation by setting
+      # `options.translateOnAdoption: true` for each property separately
       #
       translateInlineEditables: true
 
@@ -133,13 +134,13 @@ Sitegeist:
 ```
 
 To enable automated translations for a language preset, set `options.translationStrategy` to  `once`, `sync` or `none`.
-The default mode is `once`;
+The default mode is `once`.
 
 * `once` will translate the node only once when the editor switches the language in the backend while editing this node. This is useful if you want to get an initial translation, but work on the different variants on your own after that.
 * `sync` will translate and sync the node every time the node in the default language is published. Thus, it will not make sense to edit the node variant in an automatically translated language using this options, as your changed will be overwritten every time.
 * `none` will not translate variants for this dimension.
 
-If a preset of the language dimension uses a locale identifier that is not compatible with DeepL the deeplLanguage can
+If a preset of the language dimension uses a locale identifier that is not compatible with DeepL, the `deeplLanguage` can
 be configured explicitly for this preset via `options.deeplLanguage`.
 
 ```yaml
@@ -149,7 +150,7 @@ Neos:
       'language':
 
         #
-        # The `defaultPreset` marks the source of for all translations whith mode `sync`
+        # The `defaultPreset` marks the source for all translations with mode `sync`
         #
         label: 'Language'
         default: 'en'
@@ -161,8 +162,8 @@ Neos:
           # English is the main language of the editors and spoken by editors,
           # the automatic translation is disabled therefore
           #
-          # English has to be configured differently for source and target as deepl requires so,
-          # The source and target are seperated by a `:`
+          # English has to be configured differently for source and target as DeepL requires;
+          # The source and target are separated by a `:`
           #
           'en':
             label: 'English'
@@ -173,7 +174,7 @@ Neos:
               translationStrategy: 'none'
 
           #
-          # Danish uses a different locale identifier then DeepL so the `deeplLanguage` has to be configured explicitly
+          # Danish uses a different locale identifier than DeepL so the `deeplLanguage` has to be configured explicitly
           # Here we use the "once" strategy, which will translate nodes only once on switching the language
           #
           'dk':
@@ -195,7 +196,7 @@ Neos:
               translationStrategy: 'sync'
 
           #
-          # The bavarian language is not supported by DeepL and is disabled
+          # The Bavarian language is not supported by DeepL and is disabled
           #
           'de_bar':
             label: 'Bayrisch'
@@ -205,12 +206,10 @@ Neos:
               translationStrategy: 'none'
 ```
 
-
-
-### Ignoring Terms
+### Ignoring terms
 
 You can define terms that should be ignored by DeepL in the configuration.
-The terms will are evaluated case-insensitive when searching for them, however
+The terms are evaluated case-insensitively when searching for them; however,
 they will always be replaced with their actual occurrence.
 
 This is how an example configuration could look like:
@@ -227,9 +226,9 @@ Sitegeist:
 
 ## Eel Helper
 
-The package also provides two Eel Helper to translate texts in Fusion.
+The package also provides two Eel Helpers to translate texts in Fusion.
 
-**:warning: Every one of these Eel helpers make an individual request to DeepL.** Thus having many of them on one page can significantly slow down the performance for if the page is uncached.
+**:warning: Every one of these Eel helpers makes an individual request to DeepL.** Thus having many of them on one page can significantly slow down performance if the page is uncached.
 :bulb: Only use while the [translation cache](#translation-cache) is enabled!
 
 To translate a single text you can use:
@@ -250,12 +249,12 @@ ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de',
 
 ### Compare and update translations
 
-The lost in translation package contains two prototypes that visualize differences between the current and the `default`
+The Lost in Translation package contains two prototypes that visualize differences between the current and the `default`
 translation.
 
 To show the information in the backend you can render the `Sitegeist.LostInTranslation:Collection.TranslationInformation` adjacent to a ContentCollection.
 
-```
+```neosfusion
 content = Neos.Fusion:Join {
      info = Sitegeist.LostInTranslation:Collection.TranslationInformation {
           nodePath = 'content'
@@ -270,7 +269,7 @@ content = Neos.Fusion:Join {
 
 ## Sync Command
 
-The package comes with a sync command to manually sync a subtree from one language to the other. 
+The package comes with a sync command to manually sync a subtree from one language to the other.
 This can be used from time to time, or for creating a new language from scratch.
 
 ## Usage
@@ -308,16 +307,16 @@ This command synchronizes all document nodes under `/sites/example.com/home` fro
 
 ### `Sitegeist.LostInTranslation:Document.TranslationInformation`
 
-Show informations about missing and outdated translations on document level. Allows to "translate missing" and "update outdated" nodes.
-The prototype is only showing in backend + edit mode.
+Show information about missing and outdated translations on document level. Allows to "translate missing" and "update outdated" nodes.
+The prototype is only shown in backend + edit mode.
 
 - `node`:  (Node, default `documentNode` from fusion context) The document node that shall be compared
 - `referenceLanguage`: (string, default language preset) The preset used to compare against
 
 ### `Sitegeist.LostInTranslation:Collection.TranslationInformation`
 
-Show informations about missing and outdated translations on content collection level. Allows to "translate missing" and "update outdated" nodes.
-The prototype is only showing in backend + edit mode.
+Show information about missing and outdated translations on content collection level. Allows to "translate missing" and "update outdated" nodes.
+The prototype is only shown in backend + edit mode.
 
 - `nodePath`: (string, default null)
 - `node`:  (Node, default `node` from fusion context)
@@ -327,7 +326,7 @@ The prototype is only showing in backend + edit mode.
 
 The plugin includes a translation cache for the DeepL API that stores the individual text parts
 and their translated result for up to one week.
-By default, the cache is enabled. To disable the cache, you need to set the following setting:
+By default, the cache is enabled. To disable the cache, set the following setting:
 
 ```yaml
 Sitegeist:
@@ -338,7 +337,7 @@ Sitegeist:
 
 ## Performance
 
-For every translated node a single request is made to the DeepL API. This can lead to significant delay when Documents with lots of nodes are translated. It is likely that future versions will improve this.
+For every translated node a single request is made to the DeepL API. This can lead to significant delay when documents with lots of nodes are translated. It is likely that future versions will improve this.
 
 ## Contribution
 
@@ -351,5 +350,5 @@ We will gladly accept contributions. Please send us pull requests.
 * The preset option `translationStrategy` was introduced. There are now two auto-translation strategies
   * Strategy `once` will auto-translate the node once "on adoption", i.e. the editor switches to a different language dimension
   * Strategy `sync` will auto-translate and sync the node every time a node is updated in the default preset language
-* The node setting `options.translateOnAdoption` as been renamed to `options.automaticTranslation`
+* The node setting `options.translateOnAdoption` has been renamed to `options.automaticTranslation`
 * The new node option `options.automaticTranslation` was introduced
