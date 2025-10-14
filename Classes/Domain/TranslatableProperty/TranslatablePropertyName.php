@@ -15,13 +15,13 @@ class TranslatablePropertyName
     protected $name;
 
     /**
-     * @var TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<object>|null
+     * @var TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null
      */
     protected $translationConnector;
 
     /**
      * @param string $name
-     * @param TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<object>|null $translationConnector
+     * @param TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null $translationConnector
      */
     public function __construct(string $name, TranslationConnectorInterface | TranslationArrayConnectorInterface | null $translationConnector = null)
     {
@@ -35,7 +35,7 @@ class TranslatablePropertyName
     }
 
     /**
-     * @return TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<object>|null
+     * @return TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null
      */
     public function getTranslationConnector(): TranslationConnectorInterface | TranslationArrayConnectorInterface | null
     {

@@ -33,7 +33,7 @@ class TranslatablePropertyNames implements \IteratorAggregate
 
     /**
      * @param string $propertyName
-     * @return TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<object>|null
+     * @return TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null
      */
     public function getTranslationObjectConnector(string $propertyName): TranslationConnectorInterface | TranslationArrayConnectorInterface | null
     {
