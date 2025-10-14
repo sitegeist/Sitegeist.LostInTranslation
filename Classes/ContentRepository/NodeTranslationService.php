@@ -450,6 +450,10 @@ class NodeTranslationService
      *
      * @Flow\Signal
      * @api
+     * @param NodeInterface $sourceNode
+     * @param NodeInterface[] $targetNodes
+     * @param string $workspaceName
+     * @return void
      */
     public function emitAfterNodeTranslated(NodeInterface $sourceNode, array $targetNodes, string $workspaceName): void
     {
