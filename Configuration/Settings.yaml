@@ -100,10 +100,16 @@ Sitegeist:
 
       #
       # A connector that can be used to define the formality for a node
+      #
+      # The connector receives following parameters:
+      # - $sourceNode: the node being translated
+      # - $targetNode: the node being created/changed
+      # The connector must return one of the following string values or null:
       # 'less': use informal language.
       # 'more': use formal, more polite language.
       # 'default': use default formality.
       # 'prefer_less': use informal language if available, otherwise default.
       # 'prefer_more': use formal, more polite language if available, otherwise default.
+      # You can read more about formality here: https://developers.deepl.com/api-reference/translate#param-formality
       #
       formalityConnector: null
