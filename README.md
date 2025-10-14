@@ -235,7 +235,7 @@ The package also provides two Eel Helper to translate texts in Fusion.
 To translate a single text you can use:
 
 ```neosfusion
-# ${Sitegeist.LostInTranslation.translate(string textToBeTranslated, string targetLanguage, string|null sourceLanguage = null): string}
+# ${Sitegeist.LostInTranslation.translate(string textToBeTranslated, string targetLanguage, string|null sourceLanguage = null, string|null formality = null): string}
 ${Sitegeist.LostInTranslation.translate('Hello world!', 'de', 'en')}
 # Output: Hallo Welt!
 ```
@@ -243,10 +243,15 @@ ${Sitegeist.LostInTranslation.translate('Hello world!', 'de', 'en')}
 To translate an array of texts you can use:
 
 ```neosfusion
-# ${Sitegeist.LostInTranslation.translate(array textsToBeTranslated, string targetLanguage, string|null sourceLanguage = null): array}
+# ${Sitegeist.LostInTranslation.translate(array textsToBeTranslated, string targetLanguage, string|null sourceLanguage = null, string|null formality = null): array}
 ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de', 'en')}
 # Output: ['Hallo Welt!', 'Mein Name ist...']
 ```
+
+The `formality` can be used to set the tone:
+
+`${Sitegeist.LostInTranslation.translate('Do you like coke?', 'en', 'de', 'prefer_less')}` would output `Magst du Cola?`,
+where `${Sitegeist.LostInTranslation.translate('Do you like coke?', 'en', 'de', 'prefer_more')}` would output `Mögen Sie Cola?`
 
 ### Compare and update translations
 
