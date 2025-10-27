@@ -23,3 +23,5 @@ Neos:
         commandHooks:
           'Sitegeist.LostInTranslation:TranslationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory
+        authProvider:
+          factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory

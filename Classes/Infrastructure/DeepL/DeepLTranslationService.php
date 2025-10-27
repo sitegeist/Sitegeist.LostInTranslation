@@ -10,6 +10,7 @@ use DeepL\Translator;
 use DeepL\TranslatorOptions;
 use DeepL\Usage;
 use Neos\Cache\Frontend\StringFrontend;
+use Neos\ContentRepository\Core\Feature\Security\Dto\UserId;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Http\Client\Browser;
 use Neos\Flow\Http\Client\CurlEngine;
@@ -207,6 +208,11 @@ class DeepLTranslationService implements TranslationServiceInterface
         } catch (\Exception $exception) {
             return new ApiStatus(false, 0, 0, $hasSettingsKey, $hasCustomKey, false);
         }
+    }
+
+    public function getAIServiceId(): UserId
+    {
+        return UserId::fromString('AI:DeepL:DeepL');
     }
 
     protected function getDeeplAuthenticationKey(): DeepLAuthenticationKey
