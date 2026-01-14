@@ -357,6 +357,10 @@ class NodeTranslationService
                     if (is_object($targetValue)) {
                         $targetValue = $connector->applyTranslations($targetValue, $propertyValue);
                     }
+                } else {
+                    // For repeatable fields or other array properties without a connector,
+                    // use the translated array value directly
+                    $targetValue = $propertyValue;
                 }
             } else {
                 $targetValue = $propertyValue;
