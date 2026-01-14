@@ -40,4 +40,9 @@ class TranslatablePropertyName
     {
         return $this->translationConnector;
     }
+
+    public function isRepeatable(): bool
+    {
+        return false;
+    }
 }

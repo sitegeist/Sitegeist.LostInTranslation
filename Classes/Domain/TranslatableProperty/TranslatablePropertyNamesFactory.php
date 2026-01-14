@@ -36,6 +36,12 @@ class TranslatablePropertyNamesFactory
     protected $objectManager;
 
     /**
+     * @var bool
+     * @Flow\InjectConfiguration(path="nodeTranslation.translateRepeatableFields")
+     */
+    protected $translateRepeatableFields;
+
+    /**
      * @var array<string, TranslatablePropertyNames>
      */
     protected $firstLevelCache = [];
@@ -50,6 +56,30 @@ class TranslatablePropertyNamesFactory
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
             $type = $propertyDefinition['type'] ?? null;
             if (empty($type)) {
+                continue;
+            }
+
+            // Handle repeatable properties
+            if ($this->translateRepeatableFields && $type === 'repeatable') {
+                $subProperties = $propertyDefinition['ui']['inspector']['editorOptions']['properties'] ?? [];
+                $translatableSubProperties = [];
+
+                foreach ($subProperties as $subPropertyName => $subPropertyDefinition) {
+                    $subPropertyType = $subPropertyDefinition['type'] ?? 'string';
+                    if ($subPropertyType !== 'string') {
+                        continue;
+                    }
+                    if (isset($subPropertyDefinition['options']['automaticTranslation']) && !$subPropertyDefinition['options']['automaticTranslation']) {
+                        continue;
+                    }
+                    if ($subPropertyDefinition['options']['automaticTranslation'] ?? false) {
+                        $translatableSubProperties[] = $subPropertyName;
+                    }
+                }
+
+                if (!empty($translatableSubProperties)) {
+                    $translateProperties[] = new TranslatableRepeatablePropertyName($propertyName, $translatableSubProperties);
+                }
                 continue;
             }
 

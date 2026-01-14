@@ -71,6 +71,13 @@ Sitegeist:
       translateInlineEditables: true
 
       #
+      # Enable translation of repeatable field sub-properties.
+      # Sub-properties within repeatable fields must have options.automaticTranslation: true
+      # to be translated. This feature requires the Mireo.RepeatableFields package.
+      #
+      translateRepeatableFields: true
+
+      #
       # The name of the language dimension. Usually needs no modification
       #
       languageDimensionName: 'language'

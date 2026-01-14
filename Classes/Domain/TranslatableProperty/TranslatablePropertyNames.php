@@ -45,6 +45,36 @@ class TranslatablePropertyNames implements \IteratorAggregate
     }
 
     /**
+     * Check if a property is a repeatable property with translatable sub-properties
+     *
+     * @param string $propertyName
+     * @return TranslatableRepeatablePropertyName|null
+     */
+    public function isTranslatableRepeatable(string $propertyName): ?TranslatableRepeatablePropertyName
+    {
+        foreach ($this->translatableProperties as $property) {
+            if ($property->getName() === $propertyName && $property->isRepeatable()) {
+                /** @var TranslatableRepeatablePropertyName $property */
+                return $property;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get all repeatable properties
+     *
+     * @return array<int, TranslatableRepeatablePropertyName>
+     */
+    public function getRepeatableProperties(): array
+    {
+        return array_values(array_filter(
+            $this->translatableProperties,
+            fn($prop) => $prop->isRepeatable()
+        ));
+    }
+
+    /**
      * @return \ArrayIterator<int, TranslatablePropertyName>
      */
     public function getIterator(): \Iterator
