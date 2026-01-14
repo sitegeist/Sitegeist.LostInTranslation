@@ -488,7 +488,7 @@ class NodeTranslationService
      * Normalize a repeatable property value to an array format
      *
      * @param mixed $propertyValue
-     * @return array|null Returns array if successfully normalized, null otherwise
+     * @return array<mixed>|null Returns array if successfully normalized, null otherwise
      */
     protected function normalizeRepeatableValue($propertyValue): ?array
     {
@@ -529,11 +529,11 @@ class NodeTranslationService
     /**
      * Translate translatable sub-properties within a repeatable property
      *
-     * @param array<mixed>|string $repeatableValue
+     * @param array<mixed> $repeatableValue
      * @param array<string> $translatableSubProperties
      * @param string $targetLanguage
      * @param string $sourceLanguage
-     * @return array<mixed>|string
+     * @return array<mixed>
      */
     protected function translateRepeatableProperty(
         array $repeatableValue,

@@ -68,10 +68,12 @@ class TranslatablePropertyNames implements \IteratorAggregate
      */
     public function getRepeatableProperties(): array
     {
-        return array_values(array_filter(
+        /** @var array<int, TranslatableRepeatablePropertyName> $result */
+        $result = array_values(array_filter(
             $this->translatableProperties,
             fn($prop) => $prop->isRepeatable()
         ));
+        return $result;
     }
 
     /**

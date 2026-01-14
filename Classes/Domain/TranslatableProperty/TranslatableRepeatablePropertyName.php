@@ -14,6 +14,10 @@ class TranslatableRepeatablePropertyName extends TranslatablePropertyName
      */
     protected array $translatableSubProperties;
 
+    /**
+     * @param string $name
+     * @param array<string> $translatableSubProperties
+     */
     public function __construct(string $name, array $translatableSubProperties)
     {
         parent::__construct($name);
