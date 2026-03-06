@@ -29,6 +29,7 @@ final readonly class AIAwareFakeAuthProviderFactory implements AuthProviderFacto
         ContentGraphReadModelInterface $contentGraphReadModel
     ): AIAwareContentRepositoryAuthProvider {
         return new AIAwareContentRepositoryAuthProvider(
+            /** @phpstan-ignore class.notFound (requires dev dependencies) */
             baseAuthProvider: new FakeAuthProvider(),
             aiSystemTranslationRuntimeState: $this->aiSystemTranslationRuntimeState,
         );
