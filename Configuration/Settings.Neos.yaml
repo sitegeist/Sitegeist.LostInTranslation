@@ -16,12 +16,9 @@ Neos:
   ContentRepositoryRegistry:
     presets:
       'default':
-#        contentGraphProjection:
-#          catchUpHooks:
-#            'Sitegeist.LostInTranslation:TranslationCatchupHook':
-#              factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CatchUpHook\TranslationCatchupHookFactory
         commandHooks:
           'Sitegeist.LostInTranslation:TranslationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory
-        authProvider:
-          factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory
+        # Activate for content governance mode:
+        #authProvider:
+        #  factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory
