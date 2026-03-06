@@ -15,6 +15,7 @@ use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
+use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -29,6 +30,7 @@ final class TranslationCommandHook implements CommandHookInterface
         private readonly DimensionValueDirectiveFactory $dimensionValueDirectiveFactory,
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
+        private readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
     ) {
     }
 
@@ -43,11 +45,13 @@ final class TranslationCommandHook implements CommandHookInterface
 
     public function onAfterHandle(CommandInterface $command, PublishedEvents $events): Commands
     {
+        $this->aiSystemTranslationRuntimeState->resetActiveAIServiceId();
         if ($this->enabled === false) {
             return Commands::createEmpty();
         }
 
         if ($command instanceof CreateNodeVariant) {
+            $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
             return $this->createNodeVariantCommandWasHandled($command);
         } else {
             return Commands::createEmpty();

@@ -1,0 +1,12 @@
+Neos:
+  ContentRepositoryRegistry:
+    presets:
+      default:
+        authProvider:
+          factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareFakeAuthProviderFactory
+        clock:
+          factoryObjectName: 'Neos\ContentRepository\TestSuite\Fakes\FakeClockFactory'
+        nodeTypeManager:
+          factoryObjectName: 'Neos\ContentRepository\TestSuite\Fakes\FakeNodeTypeManagerFactory'
+        contentDimensionSource:
+          factoryObjectName: 'Neos\ContentRepository\TestSuite\Fakes\FakeContentDimensionSourceFactory'

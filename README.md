@@ -206,6 +206,22 @@ Sitegeist:
       enableCache: false
 ```
 
+### Content Governance Mode
+
+To exactly track what write operations have been performed by human editors or their translation assistant,
+you can enable content governance mode by enabling the respective AuthProvider:
+
+
+```yaml
+Neos:
+  ContentRepositoryRegistry:
+    presets:
+      # or whatever preset you use
+      default:
+        authProvider:
+          factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory
+```
+
 ## Performance
 
 For every translated node, a single request is made to the DeepL API.

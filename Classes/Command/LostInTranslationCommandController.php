@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Command;
 
-use Neos\ContentGraph\DoctrineDbalAdapter\Domain\Repository\ContentSubgraph;
 use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\Feature\Security\Exception\AccessDenied;
 use Neos\ContentRepository\Core\Projection\ContentGraph\AbsoluteNodePath;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
@@ -69,7 +69,7 @@ class LostInTranslationCommandController extends CommandController
             $this->translateNodeRecursive($cr, $start, $originSubgraph, $targetSubgraph);
     }
 
-    public function translateNodeRecursive(ContentRepository $cr, Node $originNode, ContentSubgraph $originSubgraph, ContentSubgraph $targetSubgraph): void
+    public function translateNodeRecursive(ContentRepository $cr, Node $originNode, ContentSubgraphInterface $originSubgraph, ContentSubgraphInterface $targetSubgraph): void
     {
         $targetNode = $targetSubgraph->findNodeById($originNode->aggregateId);
         if ($targetNode === null) {
