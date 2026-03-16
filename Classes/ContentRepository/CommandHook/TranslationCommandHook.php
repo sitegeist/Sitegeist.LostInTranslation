@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository\CommandHook;
 
+use Behat\Transliterator\Transliterator;
 use Neos\ContentRepository\Core\CommandHandler\CommandHookInterface;
 use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
 use Neos\ContentRepository\Core\CommandHandler\Commands;
@@ -120,6 +121,8 @@ final class TranslationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
+        $translatedProperties = $this->handleSpecialProperties($translatedProperties);
+
         $newCommand = SetNodeProperties::create(
             $command->workspaceName,
             $command->nodeAggregateId,
@@ -128,5 +131,18 @@ final class TranslationCommandHook implements CommandHookInterface
         );
 
         return Commands::fromArray([$newCommand]);
+    }
+
+    /**
+     * @param array<string,string> $translatedProperties
+     * @return array<string,string>
+     */
+    private function handleSpecialProperties(array $translatedProperties): array
+    {
+        if (!empty($translatedProperties['uriPathSegment'])) {
+            $translatedProperties['uriPathSegment'] = Transliterator::urlize($translatedProperties['uriPathSegment']);
+        }
+
+        return $translatedProperties;
     }
 }
