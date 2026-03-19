@@ -316,6 +316,8 @@ class NodeTranslationService
             $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateDeflated, $targetLanguage, $sourceLanguage);
             $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
             $properties = array_merge($translatedProperties, $properties);
+        } else {
+            $translatedProperties = [];
         }
 
         foreach ($properties as $propertyName => $propertyValue) {
