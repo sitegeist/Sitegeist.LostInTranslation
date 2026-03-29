@@ -10,6 +10,7 @@ use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\UpdateWorkspaceInfo;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
+use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLFormalityService;
 
 class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
 {
@@ -24,6 +25,12 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
      * @var TranslationServiceInterface
      */
     protected $translationService;
+
+    /**
+     * @Flow\Inject
+     * @var DeepLFormalityService
+     */
+    protected $deepLFormalityService;
 
     public function apply()
     {
@@ -53,7 +60,8 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
                 }
             }
             if (count($propertiesToTranslate) > 0) {
-                $translatedProperties = $this->translationService->translate($propertiesToTranslate, $node->getContext()->getTargetDimensions()[$this->languageDimensionName], $referenceNode->getContext()->getTargetDimensions()[$this->languageDimensionName]);
+                $formality = $this->deepLFormalityService->getFormality($referenceNode, $node);
+                $translatedProperties = $this->translationService->translate($propertiesToTranslate, $node->getContext()->getTargetDimensions()[$this->languageDimensionName], $referenceNode->getContext()->getTargetDimensions()[$this->languageDimensionName], $formality);
                 foreach ($translatedProperties as $propertyName => $propertyValue) {
                     if ($node->getProperty($propertyName) != $propertyValue) {
                         $node->setProperty($propertyName, $propertyValue);
