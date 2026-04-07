@@ -10,3 +10,5 @@ Neos:
         javascript:
           'Sitegeist.LostInTranslation:HostFramePlugin':
             resource: 'resource://Sitegeist.LostInTranslation/Public/Scripts/HostFrame/Plugin.js'
+          'Sitegeist.LostInTranslation:InspectorViewPlugin':
+            resource: 'resource://Sitegeist.LostInTranslation/Public/JavaScript/Plugin.js'

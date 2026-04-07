@@ -106,13 +106,19 @@ class RetranslationService
      */
     public function getContentContext(string $workspaceName, array $coordinates): ContentContext
     {
+        $dimensions = [];
+        foreach ($coordinates as $dimensionName => $dimensionValue) {
+            $dimensions[$dimensionName] = $this->contentDimensionPresetSource->getAllPresets()[$dimensionName]['presets'][$dimensionValue]['values'];
+        }
+        
         /** @var ContentContext $contentContext */
         $contentContext = $this->contentContextFactory->create([
             'workspaceName' => $workspaceName,
-            'dimensions' => $this->contentDimensionPresetSource->findPresetsByTargetValues($coordinates),
+            'dimensions' => $dimensions,
             'targetDimensions' => $coordinates,
             'invisibleContentShown' => true,
         ]);
+        
 
         return $contentContext;
     }
@@ -122,7 +128,7 @@ class RetranslationService
      */
     public function getReferenceContentContext(string $workspaceName, array $coordinates): ContentContext
     {
-        $targetLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName][$coordinates[$this->languageDimensionName]];
+        $targetLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$coordinates[$this->languageDimensionName]];
         $referenceLanguage = $targetLanguagePreset['options']['referenceLanguage'] ?? null;
         if ($referenceLanguage === null) {
             throw new \Exception('No reference language configured for target language ' . $coordinates[$this->languageDimensionName]);

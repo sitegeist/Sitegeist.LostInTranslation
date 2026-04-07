@@ -27,7 +27,7 @@ class RetranslationController extends ActionController
     public function getTranslationMetadataAction(string $nodeAggregateId, string $workspaceName, string $coordinates): string
     {
         $targetCoordinates = \json_decode($coordinates, true);
-        $targetLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName][$targetCoordinates[$this->languageDimensionName]];
+        $targetLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$targetCoordinates[$this->languageDimensionName]];
         $sourceLanguage = $targetLanguagePreset['options']['referenceLanguage'] ?? null;
 
         $targetContentContext = $this->retranslationService->getContentContext($workspaceName, $targetCoordinates);
@@ -42,12 +42,11 @@ class RetranslationController extends ActionController
             $sourceContentContext = $this->retranslationService->getReferenceContentContext($sourceLanguage, $targetCoordinates);
             /** @var ?Node $sourceNode */
             $sourceNode = $sourceContentContext->getNodeByIdentifier($nodeAggregateId);
-            $sourceLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName][$sourceContentContext->getTargetDimensions()[$this->languageDimensionName]];
+            $sourceLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$sourceContentContext->getTargetDimensions()[$this->languageDimensionName]];
         }
 
         return \json_encode(
             [
-                'isDocument' => $targetNode->getNodeType()->isOfType('Neos.Neos:Document') ?: false,
                 'isUpToDate' => !$sourceNode || $sourceNode->getLastModificationDateTime() <= $targetNode->getLastModificationDateTime(),
                 'referenceLanguage' => $sourceLanguage
                     ? [

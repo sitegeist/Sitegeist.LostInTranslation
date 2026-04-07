@@ -1,6 +1,19 @@
 'Neos.Neos:Node':
   options:
     automaticTranslation: true
+  ui:
+    inspector:
+      groups:
+        lostInTranslation:
+          label: 'Lost in Translation'
+          icon: language
+          tab: default
+      views:
+        retranslate:
+          label: 'Retranslate'
+          group: lostInTranslation
+          position: end
+          view: 'Sitegeist.LostInTranslation/Inspector/Views/RetranslateNodeView'
 
 'Neos.Neos:Document':
   properties:
@@ -16,5 +29,16 @@
     metaKeywords:
       options:
         automaticTranslation: true
-
-
+  ui:
+    inspector:
+      groups:
+        lostInTranslation:
+          label: 'Lost in Translation'
+          icon: language
+          tab: default
+      views:
+        retranslate:
+          label: 'Retranslate'
+          group: lostInTranslation
+          position: end
+          view: 'Sitegeist.LostInTranslation/Inspector/Views/RetranslateDocumentView'

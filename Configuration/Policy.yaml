@@ -14,6 +14,9 @@ roles:
       -
         privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
         permission: GRANT
+      -
+        privilegeTarget: 'Sitegeist.LostInTranslation:Retranslation'
+        permission: GRANT
 
   'Neos.Neos:AbstractEditor':
     privileges:

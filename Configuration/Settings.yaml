@@ -104,3 +104,12 @@ Neos:
       routes:
         Sitegeist.LostInTranslation:
           position: "before Neos.Neos"
+    security:
+      authentication:
+        providers:
+          'Neos.Neos:Backend':
+            requestPatterns:
+              'Sitegeist.LostInTranslation:Retranslation':
+                pattern: 'ControllerObjectName'
+                patternOptions:
+                  controllerObjectNamePattern: 'Sitegeist\LostInTranslation\Controller\RetranslationController'
