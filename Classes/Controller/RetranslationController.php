@@ -13,7 +13,7 @@ use Sitegeist\LostInTranslation\ContentRepository\RetranslationService;
 class RetranslationController extends ActionController
 {
     /**
-     * @Flow\Inject(path="nodeTranslation.languageDimensionName")
+     * @Flow\InjectConfiguration(path="nodeTranslation.languageDimensionName")
      * @var string
      */
     protected $languageDimensionName;

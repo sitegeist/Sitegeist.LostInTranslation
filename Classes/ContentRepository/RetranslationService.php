@@ -16,7 +16,7 @@ use Neos\Neos\Domain\Service\ContentDimensionPresetSourceInterface;
 class RetranslationService
 {
     /**
-     * @Flow\Inject(path="nodeTranslation.languageDimensionName")
+     * @Flow\InjectConfiguration(path="nodeTranslation.languageDimensionName")
      * @var string
      */
     protected $languageDimensionName;

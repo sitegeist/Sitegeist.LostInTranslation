@@ -97,3 +97,10 @@ Sitegeist:
       # can be configured to extract and apply translations
       #
       translationConnectors: []
+
+Neos:
+  Flow:
+    mvc:
+      routes:
+        Sitegeist.LostInTranslation:
+          position: "before Neos.Neos"
