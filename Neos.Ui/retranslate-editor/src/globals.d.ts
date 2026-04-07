@@ -1,4 +1,5 @@
 declare module '@neos-project/react-ui-components'
+declare module '@neos-project/neos-ui-i18n'
 declare module '@neos-project/neos-ui-redux-store' {
     type Node = {
         contextPath?: string | null

@@ -1,8 +1,12 @@
 export type RetranslateTarget = 'node' | 'document';
 
 export type ContentInfoResponse = {
-    referenceLang: string | null;
-    lastModification: string | null;
+    isUpToDate: boolean;
+    referenceLanguage: {
+        label: string;
+        lastModification: string;
+    } | null;
+
 };
 
 export type ContentInfoRequest = {
@@ -12,10 +16,14 @@ export type ContentInfoRequest = {
 };
 
 export type TranslateRequest = {
-    nodeId: string;
-    dimensions: Record<string, string | null>;
-    workspace: string;
-    translate: 'nodes' | 'document';
+    nodeAggregateId: string;
+    workspaceName: string;
+    targetCoordinates: string;
+    wholeDocument: boolean;
+};
+
+export type TranslateResponse = {
+    message: string;
 };
 
 const CONTENT_INFO_ENDPOINT = '/lostintranslation/retranslation/getmetadata';
@@ -44,13 +52,17 @@ export const endpoints = () => ({
             })
         );
     },
-    translate: async (payload: TranslateRequest): Promise<void> => {
-        await parseJsonResponse(
+    translate: async (payload: TranslateRequest): Promise<TranslateResponse> => {
+        const appContainer = document.getElementById('appContainer');
+        const {csrfToken} = appContainer?.dataset;
+
+        return parseJsonResponse<TranslateResponse>(
             await fetch(TRANSLATE_ENDPOINT, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-Flow-Csrftoken': csrfToken,
                 },
                 body: JSON.stringify(payload)
             })

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2">
+    <file original="NodeTypes/Document" product-name="Sitegeist.LostInTranslation" source-language="en" target-language="de" datatype="plaintext">
+        <body>
+            <trans-unit id="groups.lostInTranslation">
+                <source>Lost in Translation</source>
+                <target>Lost in Translation</target>
+            </trans-unit>
+            <trans-unit id="views.retranslate">
+                <source>Retranslate</source>
+                <target>Neu übersetzen</target>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>

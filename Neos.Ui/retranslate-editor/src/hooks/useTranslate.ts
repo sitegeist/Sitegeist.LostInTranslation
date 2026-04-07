@@ -8,11 +8,11 @@ type UseTranslateParams = {
 
 export const useTranslate = ({target}: UseTranslateParams) => {
     const nodeInfo = useNodeInfo(target);
-    const { nodeId, dimensions, workspace, translate } = nodeInfo;
+    const { nodeId, dimensions, workspace } = nodeInfo;
 
     return useMutation({
-        mutationKey: ['lost-in-translation', 'translate', nodeId, dimensions, workspace, translate],
-        mutationFn: async () => {
+        mutationKey: ['lost-in-translation', 'translate', nodeId, dimensions, workspace, target],
+        mutationFn: async (translateTarget: RetranslateTarget) => {
             if (!nodeId) {
                 throw new Error('Missing nodeId');
             }
@@ -26,11 +26,12 @@ export const useTranslate = ({target}: UseTranslateParams) => {
             }
 
             return endpoints().translate({
-                nodeId,
-                dimensions,
-                workspace,
-                translate
+                nodeAggregateId: nodeId,
+                workspaceName: workspace,
+                targetCoordinates: JSON.stringify(dimensions),
+                wholeDocument: translateTarget === 'document'
             });
-        }
+        },
+        onSuccess: () => window.location.reload()
     });
 };

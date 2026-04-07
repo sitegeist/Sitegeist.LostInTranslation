@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="en" target-language="de" datatype="plaintext">
+        <body>
+            <trans-unit id="view.upToDate">
+                <source>The translations are up to date.</source>
+                <target>Die Übersetzungen sind up to date.</target>
+            </trans-unit>
+            <trans-unit id="view.outdated">
+                <source>Changes in language {language} from {date} found. Retranslate this content now?</source>
+                <target>Änderungen in der Sprache {language} am {date} gefunden. Diesen Inhalt hier neu übersetzen?</target>
+            </trans-unit>
+            <trans-unit id="view.error">
+                <source>The translation status could not be loaded.</source>
+                <target>Der Übersetzungsstatus konnte nicht geladen werden.</target>
+            </trans-unit>
+            <trans-unit id="view.loading">
+                <source>Loading translation status...</source>
+                <target>Übersetzungsstatus wird geladen...</target>
+            </trans-unit>
+            <trans-unit id="button.translateContents">
+                <source>Retranslate all contents</source>
+                <target>Inhalte neu übersetzen</target>
+            </trans-unit>
+            <trans-unit id="button.translateDocument">
+                <source>Retranslate document properties</source>
+                <target>Dokument neu übersetzen</target>
+            </trans-unit>
+            <trans-unit id="button.translate">
+                <source>Translate</source>
+                <target>Übersetzen</target>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>
