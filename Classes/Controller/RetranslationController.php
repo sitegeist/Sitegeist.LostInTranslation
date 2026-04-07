@@ -45,13 +45,16 @@ class RetranslationController extends ActionController
             $sourceLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$sourceContentContext->getTargetDimensions()[$this->languageDimensionName]];
         }
 
+        /** otherwise, getNodeByIdentifier might register a new object ¯\_(ツ)_/¯ */
+        $this->persistenceManager->clearState();
+
         return \json_encode(
             [
                 'isUpToDate' => !$sourceNode || $sourceNode->getLastModificationDateTime() <= $targetNode->getLastModificationDateTime(),
                 'referenceLanguage' => $sourceLanguage
                     ? [
                         'label' => $sourceLanguagePreset ? $sourceLanguagePreset['label'] : null,
-                        'dateModified' => $sourceNode?->getLastModificationDateTime(),
+                        'dateModified' => $sourceNode?->getLastModificationDateTime()->format(\DateTime::ATOM),
                     ]
                     : null,
             ],
