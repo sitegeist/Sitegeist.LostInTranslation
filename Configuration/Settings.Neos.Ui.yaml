@@ -1,5 +1,11 @@
 Neos:
   Neos:
+    userInterface:
+      translation:
+        autoInclude:
+          'Sitegeist.LostInTranslation':
+            - Main
+            - 'NodeTypes/*'
     Ui:
       changes:
         types:

@@ -17,6 +17,8 @@ export const useContentInfo = (
                 coordinates: dimensions
             });
         },
-        enabled
+        enabled,
+        staleTime: 0,
+        cacheTime: 0
     });
 };

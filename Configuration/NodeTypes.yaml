@@ -5,12 +5,12 @@
     inspector:
       groups:
         lostInTranslation:
-          label: i18n
+          label: 'Sitegeist.LostInTranslation:NodeTypes.Node:groups.lostInTranslation'
           icon: language
           tab: default
       views:
         retranslate:
-          label: i18n
+          label: 'Sitegeist.LostInTranslation:NodeTypes.Node:views.retranslate'
           group: lostInTranslation
           position: end
           view: 'Sitegeist.LostInTranslation/Inspector/Views/RetranslateNodeView'
@@ -33,12 +33,12 @@
     inspector:
       groups:
         lostInTranslation:
-          label: i18n
+          label: 'Sitegeist.LostInTranslation:NodeTypes.Document:groups.lostInTranslation'
           icon: language
           tab: default
       views:
         retranslate:
-          label: i18n
+          label: 'Sitegeist.LostInTranslation:NodeTypes.Document:views.retranslate'
           group: lostInTranslation
           position: end
           view: 'Sitegeist.LostInTranslation/Inspector/Views/RetranslateDocumentView'

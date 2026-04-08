@@ -743,6 +743,7 @@ __metadata:
   dependencies:
     "@neos-project/react-ui-components": ~8.3.0
     "@tanstack/react-query": ^4.36.1
+    date-fns: ^4.1.0
     react: ^17.0.2
     react-dom: ^17.0.2
     react-use: ^17.2.4
@@ -1038,6 +1039,13 @@ __metadata:
   version: 3.2.3
   resolution: "csstype@npm:3.2.3"
   checksum: cb882521b3398958a1ce6ca98c011aec0bde1c77ecaf8a1dd4db3b112a189939beae3b1308243b2fe50fc27eb3edeb0f73a5a4d91d928765dc6d5ecc7bda92ee
+  languageName: node
+  linkType: hard
+
+"date-fns@npm:^4.1.0":
+  version: 4.1.0
+  resolution: "date-fns@npm:4.1.0"
+  checksum: fb681b242cccabed45494468f64282a7d375ea970e0adbcc5dcc92dcb7aba49b2081c2c9739d41bf71ce89ed68dd73bebfe06ca35129490704775d091895710b
   languageName: node
   linkType: hard
 

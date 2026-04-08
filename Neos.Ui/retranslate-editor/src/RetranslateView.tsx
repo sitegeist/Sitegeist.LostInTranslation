@@ -1,4 +1,5 @@
 import React from 'react';
+import { format, parseISO } from 'date-fns';
 import { useI18n } from '@sitegeist/lostintranslation-neos-bridge';
 import { useContentInfo } from './hooks/useContentInfo';
 import { useNodeInfo } from './hooks/useNodeInfo';
@@ -15,16 +16,19 @@ type RetranslateViewProps = {
 export const RetranslateView = ({for: target}: RetranslateViewProps) => {
     const t = useI18n();
     const nodeInfo = useNodeInfo(target);
-    const { data: contentData, isFetching: contentIsFetching } = useContentInfo(nodeInfo.nodeId, nodeInfo.workspace, nodeInfo.dimensions);
+    const { data: contentData, isLoading: contentIsLoading } = useContentInfo(nodeInfo.nodeId, nodeInfo.workspace, nodeInfo.dimensions);
     const { isPending: translationPending, mutate: translate } = useTranslate({target});
+    const formattedReferenceDate = contentData?.referenceLanguage?.dateModified
+        ? format(parseISO(contentData.referenceLanguage.dateModified), 'dd.MM.yyyy')
+        : 'no date';
 
-    if (contentIsFetching) {
+    if (contentIsLoading) {
         return (
             <Container>
                 <LoadingContainer>
                     <Spinner />
                     <Info>
-                        {t('view.loading', 'Loading translation status...', {}, 'Sitegeist.LostInTranslation', 'Main')}
+                        {t('view.loading', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                     </Info>
                 </LoadingContainer>
             </Container>
@@ -35,50 +39,54 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
         return null;
     }
 
-    const handleTranslate = (translateTarget: RetranslateViewTarget) => () => {
-        console.log(translateTarget);
-        translate(translateTarget);
+    const handleTranslate = () => {
+        translate({wholeDocument: false});
     };
 
-    const renderButtonLabel = (label: string) => (
-        <LoadingContainer>
-            {translationPending && <Spinner />}
-            <span>{label}</span>
-        </LoadingContainer>
-    );
+    const handleTranslateWholeDocument = () => {
+        translate({wholeDocument: true});
+    };
 
     return (
         <Container>
             {contentData && contentData.isUpToDate ?
                 <Info>
-                    {t('view.upToDate', 'The translations are up to date.', {}, 'Sitegeist.LostInTranslation', 'Main')}
+                    {t('view.upToDate', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                 </Info>
                 : <Info>
                     {t(
                         'view.outdated',
-                        'Changes in language {language} from {date} found. Retranslate this content now?',
+                        '',
                         {
                             language: contentData?.referenceLanguage?.label ?? '',
-                            date: contentData?.referenceLanguage?.lastModification ?? ''
+                            date: formattedReferenceDate
                         },
                         'Sitegeist.LostInTranslation',
                         'Main'
                     )}
                 </Info>
             }
-            {!contentData.isUpToDate && (
+            {translationPending && (
+                <LoadingContainer>
+                    <Spinner />
+                    <Info>
+                        {t('view.translating', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
+                    </Info>
+                </LoadingContainer>
+            )}
+            {!contentData.isUpToDate && !translationPending && (
                 target === 'document' ? (
                     <ButtonsContainer>
-                        <Button onClick={handleTranslate('node')} isDisabled={translationPending}>
-                            {renderButtonLabel(t('button.translateContents', 'Retranslate all contents', {}, 'Sitegeist.LostInTranslation', 'Main'))}
+                        <Button onClick={handleTranslateWholeDocument}>
+                            {t('button.translateContents', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                         </Button>
-                        <Button onClick={handleTranslate('document')} isDisabled={translationPending}>
-                            {renderButtonLabel(t('button.translateDocument', 'Retranslate document properties', {}, 'Sitegeist.LostInTranslation', 'Main'))}
+                        <Button onClick={handleTranslate}>
+                            {t('button.translateDocument', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                         </Button>
                     </ButtonsContainer>
                 ) : (
-                    <Button onClick={handleTranslate('node')} isDisabled={translationPending}>
-                        {renderButtonLabel(t('button.translate', 'Translate', {}, 'Sitegeist.LostInTranslation', 'Main'))}
+                    <Button onClick={handleTranslate}>
+                        {t('button.translate', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                     </Button>
                 )
             )}

@@ -6,13 +6,17 @@ type UseTranslateParams = {
     target: RetranslateTarget;
 };
 
+type TranslateMutationParams = {
+    wholeDocument?: boolean;
+};
+
 export const useTranslate = ({target}: UseTranslateParams) => {
     const nodeInfo = useNodeInfo(target);
     const { nodeId, dimensions, workspace } = nodeInfo;
 
     return useMutation({
         mutationKey: ['lost-in-translation', 'translate', nodeId, dimensions, workspace, target],
-        mutationFn: async (translateTarget: RetranslateTarget) => {
+        mutationFn: async ({wholeDocument = false}: TranslateMutationParams = {}) => {
             if (!nodeId) {
                 throw new Error('Missing nodeId');
             }
@@ -29,7 +33,7 @@ export const useTranslate = ({target}: UseTranslateParams) => {
                 nodeAggregateId: nodeId,
                 workspaceName: workspace,
                 targetCoordinates: JSON.stringify(dimensions),
-                wholeDocument: translateTarget === 'document'
+                wholeDocument
             });
         },
         onSuccess: () => window.location.reload()

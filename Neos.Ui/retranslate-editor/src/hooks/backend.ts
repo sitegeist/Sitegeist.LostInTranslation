@@ -4,7 +4,7 @@ export type ContentInfoResponse = {
     isUpToDate: boolean;
     referenceLanguage: {
         label: string;
-        lastModification: string;
+        dateModified: string;
     } | null;
 
 };
@@ -53,8 +53,7 @@ export const endpoints = () => ({
         );
     },
     translate: async (payload: TranslateRequest): Promise<TranslateResponse> => {
-        const appContainer = document.getElementById('appContainer');
-        const {csrfToken} = appContainer?.dataset;
+        const csrfToken = document.getElementById('appContainer')!.dataset.csrfToken as string;
 
         return parseJsonResponse<TranslateResponse>(
             await fetch(TRANSLATE_ENDPOINT, {
