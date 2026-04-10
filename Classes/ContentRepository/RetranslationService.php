@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository;
 
+use Neos\ContentRepository\Domain\Model\Node;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\Service\ContentContext;
@@ -28,31 +29,37 @@ class RetranslationService
     ) {
     }
 
-    /**
-     * @param array<string,string> $targetCoordinates
-     */
-    public function retranslateContent(
-        string $nodeAggregateId,
-        string $workspaceName,
-        array $targetCoordinates,
-    ): void {
-        $sourceContentContext = $this->getReferenceContentContext($workspaceName, $targetCoordinates);
-        $sourceNode = $sourceContentContext->getNodeByIdentifier($nodeAggregateId);
-        if (!$sourceNode instanceof NodeInterface) {
-            throw new \Exception('No source node found in workspace and dimension space point');
+    public function findFirstUpdateDateOnNodeOrDescendants(
+        Node $sourceNode,
+        ContentContext $sourceContext,
+        ContentContext $targetContext
+    ): ?\DateTimeInterface {
+        /** @var ?Node $targetNode */
+        $targetNode = $targetContext->getNodeByIdentifier($sourceNode->getIdentifier());
+        $sourceReferenceDate = $sourceNode->getLastModificationDateTime() ?: $sourceNode->getCreationDateTime();
+        if (!$targetNode) {
+            return $sourceReferenceDate;
         }
-        $targetContentContext = $this->getContentContext($workspaceName, $targetCoordinates);
-        $targetNode = $targetContentContext->getNodeByIdentifier($nodeAggregateId);
-        if (!$targetNode instanceof NodeInterface) {
-            $targetNode = $targetContentContext->adoptNode($sourceNode);
+        $targetReferenceDate = $targetNode->getLastModificationDateTime() ?: $targetNode->getCreationDateTime();
+        if ($targetReferenceDate < $sourceReferenceDate) {
+            return $sourceReferenceDate;
         }
-        $this->nodeTranslationService->translateNode($sourceNode, $targetNode, $targetContentContext);
+
+        foreach ($sourceNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $sourceChildNode) {
+            /** @var ?Node $sourceChildNode */
+            $updateDate = $this->findFirstUpdateDateOnNodeOrDescendants($sourceChildNode, $sourceContext, $targetContext);
+            if ($updateDate) {
+                return $updateDate;
+            }
+        }
+
+        return null;
     }
 
     /**
      * @param array<string,string> $targetCoordinates
      */
-    public function retranslateDocument(
+    public function retranslateNode(
         string $nodeAggregateId,
         string $workspaceName,
         array $targetCoordinates,
@@ -67,26 +74,13 @@ class RetranslationService
             throw new \Exception('Given node is not a document');
         }
 
-        $targetContentContext = $this->getContentContext($workspaceName, $targetCoordinates);
+        $targetContentContext = $this->getContentContext($workspaceName, $targetCoordinates, true);
         $targetNode = $targetContentContext->getNodeByIdentifier($nodeAggregateId);
         if (!$targetNode) {
             $targetContentContext->adoptNode($sourceNode);
-        } else {
-            $this->removeUntetheredDescendants($targetNode);
         }
 
         $this->translateDescendants($sourceNode, $targetContentContext);
-    }
-
-    private function removeUntetheredDescendants(NodeInterface $node): void
-    {
-        foreach ($node->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $childNode) {
-            if (!$childNode->isAutoCreated()) {
-                $childNode->remove();
-            } else {
-                $this->removeUntetheredDescendants($childNode);
-            }
-        }
     }
 
     private function translateDescendants(NodeInterface $node, ContentContext $targetContentContext): void
@@ -104,21 +98,21 @@ class RetranslationService
     /**
      * @param array<string,string> $coordinates
      */
-    public function getContentContext(string $workspaceName, array $coordinates): ContentContext
+    public function getContentContext(string $workspaceName, array $coordinates, bool $withRemoved): ContentContext
     {
         $dimensions = [];
         foreach ($coordinates as $dimensionName => $dimensionValue) {
             $dimensions[$dimensionName] = $this->contentDimensionPresetSource->getAllPresets()[$dimensionName]['presets'][$dimensionValue]['values'];
         }
-        
+
         /** @var ContentContext $contentContext */
         $contentContext = $this->contentContextFactory->create([
             'workspaceName' => $workspaceName,
             'dimensions' => $dimensions,
             'targetDimensions' => $coordinates,
             'invisibleContentShown' => true,
+            'removedContentShown' => $withRemoved,
         ]);
-        
 
         return $contentContext;
     }
@@ -136,6 +130,6 @@ class RetranslationService
         $referenceCoordinates = $coordinates;
         $referenceCoordinates[$this->languageDimensionName] = $referenceLanguage;
 
-        return $this->getContentContext($workspaceName, $referenceCoordinates);
+        return $this->getContentContext($workspaceName, $referenceCoordinates, false);
     }
 }
