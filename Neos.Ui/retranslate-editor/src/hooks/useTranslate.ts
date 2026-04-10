@@ -1,4 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { actions } from '@neos-project/neos-ui-redux-store';
+import { useStore } from 'react-redux';
 import { endpoints, type RetranslateTarget } from './backend';
 import { useNodeInfo } from './useNodeInfo';
 
@@ -6,17 +8,15 @@ type UseTranslateParams = {
     target: RetranslateTarget;
 };
 
-type TranslateMutationParams = {
-    wholeDocument?: boolean;
-};
-
 export const useTranslate = ({target}: UseTranslateParams) => {
+    const store = useStore<any>();
+    const queryClient = useQueryClient();
     const nodeInfo = useNodeInfo(target);
     const { nodeId, dimensions, workspace } = nodeInfo;
 
     return useMutation({
         mutationKey: ['lost-in-translation', 'translate', nodeId, dimensions, workspace, target],
-        mutationFn: async ({wholeDocument = false}: TranslateMutationParams = {}) => {
+        mutationFn: async () => {
             if (!nodeId) {
                 throw new Error('Missing nodeId');
             }
@@ -32,10 +32,15 @@ export const useTranslate = ({target}: UseTranslateParams) => {
             return endpoints().translate({
                 nodeAggregateId: nodeId,
                 workspaceName: workspace,
-                targetCoordinates: JSON.stringify(dimensions),
-                wholeDocument
+                targetCoordinates: JSON.stringify(dimensions)
             });
         },
-        onSuccess: () => window.location.reload()
+        onSuccess: () => {
+            const contentCanvasSrc = store.getState()?.ui?.contentCanvas?.src as string | undefined;
+            queryClient.invalidateQueries({
+                queryKey: ['lost-in-translation', 'content-info', nodeId, workspace, dimensions]
+            });
+            store.dispatch(actions.UI.ContentCanvas.reload(contentCanvasSrc));
+        }
     });
 };

@@ -22,14 +22,6 @@
                 <source>Translating...</source>
                 <target state="translated">Wird übersetzt...</target>
             </trans-unit>
-            <trans-unit id="button.translateContents" xml:space="preserve" approved="yes">
-                <source>Retranslate all contents</source>
-                <target state="translated">Inhalte neu übersetzen</target>
-            </trans-unit>
-            <trans-unit id="button.translateDocument" xml:space="preserve" approved="yes">
-                <source>Retranslate document properties</source>
-                <target state="translated">Dokument neu übersetzen</target>
-            </trans-unit>
             <trans-unit id="button.translate" xml:space="preserve" approved="yes">
                 <source>Retranslate</source>
                 <target state="translated">Neu Übersetzen</target>

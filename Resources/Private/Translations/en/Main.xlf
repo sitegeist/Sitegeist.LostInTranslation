@@ -17,12 +17,6 @@
             <trans-unit id="view.translating">
                 <source>Translating...</source>
             </trans-unit>
-            <trans-unit id="button.translateContents">
-                <source>Retranslate all contents</source>
-            </trans-unit>
-            <trans-unit id="button.translateDocument">
-                <source>Retranslate document properties</source>
-            </trans-unit>
             <trans-unit id="button.translate">
                 <source>Retranslate</source>
             </trans-unit>

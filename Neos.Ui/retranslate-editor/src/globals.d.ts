@@ -1,6 +1,11 @@
 declare module '@neos-project/react-ui-components'
 declare module '@neos-project/neos-ui-i18n'
 declare module '@neos-project/neos-ui-redux-store' {
+    type Action = {
+        type: string
+        payload?: unknown
+    }
+
     type Node = {
         contextPath?: string | null
         identifier?: string | null
@@ -23,5 +28,14 @@ declare module '@neos-project/neos-ui-redux-store' {
         }
     }
 
+    type Actions = {
+        UI: {
+            ContentCanvas: {
+                reload: (uri?: string) => Action
+            }
+        }
+    }
+
     export const selectors: Selectors
+    export const actions: Actions
 }

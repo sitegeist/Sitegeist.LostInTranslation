@@ -70,9 +70,6 @@ class RetranslationService
         if (!$sourceNode) {
             throw new \Exception('No source node found in workspace and dimension space point');
         }
-        if (!$sourceNode->getNodeType()->isOfType('Neos.Neos:Document')) {
-            throw new \Exception('Given node is not a document');
-        }
 
         $targetContentContext = $this->getContentContext($workspaceName, $targetCoordinates, true);
         $targetNode = $targetContentContext->getNodeByIdentifier($nodeAggregateId);

@@ -5,7 +5,7 @@ import { useContentInfo } from './hooks/useContentInfo';
 import { useNodeInfo } from './hooks/useNodeInfo';
 import { useTranslate } from './hooks/useTranslate';
 import { Button } from '@neos-project/react-ui-components'
-import { ButtonsContainer, Container, Info, LoadingContainer, Spinner } from './components';
+import { Container, Info, LoadingContainer, Spinner } from './components';
 
 type RetranslateViewTarget = 'node' | 'document';
 
@@ -39,12 +39,12 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
         return null;
     }
 
-    const handleTranslate = () => {
-        translate({wholeDocument: false});
-    };
+    if (!contentData.referenceLanguage) {
+        return null;
+    }
 
-    const handleTranslateWholeDocument = () => {
-        translate({wholeDocument: true});
+    const handleTranslate = () => {
+        translate();
     };
 
     return (
@@ -75,20 +75,9 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
                 </LoadingContainer>
             )}
             {!contentData.isUpToDate && !translationPending && (
-                target === 'document' ? (
-                    <ButtonsContainer>
-                        <Button onClick={handleTranslateWholeDocument}>
-                            {t('button.translateContents', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
-                        </Button>
-                        <Button onClick={handleTranslate}>
-                            {t('button.translateDocument', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
-                        </Button>
-                    </ButtonsContainer>
-                ) : (
-                    <Button onClick={handleTranslate}>
-                        {t('button.translate', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
-                    </Button>
-                )
+                <Button onClick={handleTranslate}>
+                    {t('button.translate', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
+                </Button>
             )}
         </Container>
     );
