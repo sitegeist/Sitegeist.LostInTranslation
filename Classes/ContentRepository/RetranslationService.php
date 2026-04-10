@@ -88,6 +88,7 @@ class RetranslationService
             // translation will be done implicitly here
             $targetContentContext->adoptNode($node);
         } else {
+            /** @var Node $node */
             /** @var Node $targetNode */
             if ($targetNode->getLastModificationDateTime() < $node->getLastModificationDateTime()) {
                 $this->nodeTranslationService->translateNode($node, $targetNode, $targetContentContext);
