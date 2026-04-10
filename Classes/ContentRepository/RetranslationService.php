@@ -36,17 +36,17 @@ class RetranslationService
     ): ?\DateTimeInterface {
         /** @var ?Node $targetNode */
         $targetNode = $targetContext->getNodeByIdentifier($sourceNode->getIdentifier());
-        $sourceReferenceDate = $sourceNode->getLastModificationDateTime() ?: $sourceNode->getCreationDateTime();
+        $sourceReferenceDate = $sourceNode->getLastModificationDateTime();
         if (!$targetNode) {
             return $sourceReferenceDate;
         }
-        $targetReferenceDate = $targetNode->getLastModificationDateTime() ?: $targetNode->getCreationDateTime();
+        $targetReferenceDate = $targetNode->getLastModificationDateTime();
         if ($targetReferenceDate < $sourceReferenceDate) {
             return $sourceReferenceDate;
         }
 
         foreach ($sourceNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $sourceChildNode) {
-            /** @var ?Node $sourceChildNode */
+            /** @var Node $sourceChildNode */
             $updateDate = $this->findFirstUpdateDateOnNodeOrDescendants($sourceChildNode, $sourceContext, $targetContext);
             if ($updateDate) {
                 return $updateDate;
