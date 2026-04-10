@@ -77,6 +77,7 @@ class RetranslationService
         $targetContentContext = $this->getContentContext($workspaceName, $targetCoordinates, true);
         $targetNode = $targetContentContext->getNodeByIdentifier($nodeAggregateId);
         if (!$targetNode) {
+            // translation will be done implicitly here
             $targetContentContext->adoptNode($sourceNode);
         }
 
@@ -87,9 +88,14 @@ class RetranslationService
     {
         $targetNode = $targetContentContext->getNodeByIdentifier($node->getIdentifier());
         if (!$targetNode) {
-            $targetNode = $targetContentContext->adoptNode($node);
+            // translation will be done implicitly here
+            $targetContentContext->adoptNode($node);
+        } else {
+            /** @var Node $targetNode */
+            if ($targetNode->getLastModificationDateTime() < $node->getLastModificationDateTime()) {
+                $this->nodeTranslationService->translateNode($node, $targetNode, $targetContentContext);
+            }
         }
-        $this->nodeTranslationService->translateNode($node, $targetNode, $targetContentContext);
         foreach ($node->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $sourceChildNode) {
             $this->translateDescendants($sourceChildNode, $targetContentContext);
         }
