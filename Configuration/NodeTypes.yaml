@@ -7,7 +7,7 @@
         lostInTranslation:
           label: 'Sitegeist.LostInTranslation:NodeTypes.Node:groups.lostInTranslation'
           icon: language
-          tab: default
+          tab: meta
       views:
         retranslate:
           label: 'Sitegeist.LostInTranslation:NodeTypes.Node:views.retranslate'
@@ -35,7 +35,7 @@
         lostInTranslation:
           label: 'Sitegeist.LostInTranslation:NodeTypes.Document:groups.lostInTranslation'
           icon: language
-          tab: default
+          tab: meta
       views:
         retranslate:
           label: 'Sitegeist.LostInTranslation:NodeTypes.Document:views.retranslate'
