@@ -11,6 +11,9 @@
             <trans-unit id="view.error">
                 <source>The translation status could not be loaded.</source>
             </trans-unit>
+            <trans-unit id="view.noReferenceLanguage">
+                <source>No reference language is available for this language.</source>
+            </trans-unit>
             <trans-unit id="view.loading">
                 <source>Loading translation status...</source>
             </trans-unit>

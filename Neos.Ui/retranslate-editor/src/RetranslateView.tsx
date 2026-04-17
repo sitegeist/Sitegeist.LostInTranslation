@@ -40,7 +40,13 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
     }
 
     if (!contentData.referenceLanguage) {
-        return null;
+        return (
+            <Container>
+                <Info>
+                    {t('view.noReferenceLanguage', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
+                </Info>
+            </Container>
+        );
     }
 
     const handleTranslate = () => {

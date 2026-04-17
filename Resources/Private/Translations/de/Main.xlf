@@ -10,6 +10,10 @@
                 <source>Changes in language "{language}" from "{date}" found. Retranslate this content now?</source>
                 <target state="translated">Änderungen in der Sprache "{language}" mit Stand "{date}" gefunden. Diesen Inhalt hier neu übersetzen?</target>
             </trans-unit>
+            <trans-unit id="view.noReferenceLanguage" xml:space="preserve" approved="yes">
+                <source>No reference language is available for this language.</source>
+                <target state="translated">Für diese Sprache ist keine Referenzsprache verfügbar.</target>
+            </trans-unit>
             <trans-unit id="view.error" xml:space="preserve" approved="yes">
                 <source>The translation status could not be loaded.</source>
                 <target state="translated">Der Übersetzungsstatus konnte nicht geladen werden.</target>

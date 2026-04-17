@@ -10,7 +10,7 @@
           tab: meta
       views:
         retranslate:
-          label: 'Sitegeist.LostInTranslation:NodeTypes.Node:views.retranslate'
+          label: ''
           group: lostInTranslation
           position: end
           view: 'Sitegeist.LostInTranslation/Inspector/Views/RetranslateNodeView'
@@ -38,7 +38,7 @@
           tab: meta
       views:
         retranslate:
-          label: 'Sitegeist.LostInTranslation:NodeTypes.Document:views.retranslate'
+          label: ''
           group: lostInTranslation
           position: end
           view: 'Sitegeist.LostInTranslation/Inspector/Views/RetranslateDocumentView'
