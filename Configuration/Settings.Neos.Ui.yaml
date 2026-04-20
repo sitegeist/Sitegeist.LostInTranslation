@@ -1,5 +1,11 @@
 Neos:
   Neos:
+    userInterface:
+      translation:
+        autoInclude:
+          'Sitegeist.LostInTranslation':
+            - Main
+            - 'NodeTypes/*'
     Ui:
       changes:
         types:
@@ -10,3 +16,5 @@ Neos:
         javascript:
           'Sitegeist.LostInTranslation:HostFramePlugin':
             resource: 'resource://Sitegeist.LostInTranslation/Public/Scripts/HostFrame/Plugin.js'
+          'Sitegeist.LostInTranslation:InspectorViewPlugin':
+            resource: 'resource://Sitegeist.LostInTranslation/Public/JavaScript/Plugin.js'
