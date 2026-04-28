@@ -22,7 +22,7 @@ class DeepLAuthenticationKeyFactoryTest extends UnitTestCase
         $this->customKeyService->method('get')->willReturn('cachedKey');
 
 
-        $authenticationKey = $this->getFactory()->create();
+        $authenticationKey = $this->getFactory()->createDeepLAuthenticationKey();
 
 
         $this->assertEquals('cachedKey', $authenticationKey->__toString());
@@ -34,7 +34,7 @@ class DeepLAuthenticationKeyFactoryTest extends UnitTestCase
         $this->customKeyService->method('get')->willReturn(null);
 
 
-        $authenticationKey = $this->getFactory()->create();
+        $authenticationKey = $this->getFactory()->createDeepLAuthenticationKey();
 
 
         $this->assertEquals('configuredKey', $authenticationKey->__toString());

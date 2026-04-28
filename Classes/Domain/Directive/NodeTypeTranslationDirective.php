@@ -10,7 +10,7 @@ class NodeTypeTranslationDirective
 {
     public function __construct(
         public readonly bool $enabled,
-        public readonly PropertyNames $translatablePropertyNames,
+        public readonly TranslatablePropertyNames $translatablePropertyNames,
     ) {
     }
 }

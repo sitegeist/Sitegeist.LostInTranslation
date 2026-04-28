@@ -5,6 +5,7 @@
     "license": "GPL-3.0-or-later",
     "require": {
         "php": ">=8.2.0",
+        "deeplcom/deepl-php": "~1.11.0",
         "neos/neos": "^9.0.0",
         "neos/contentrepository-core": "^9.0.0",
         "neos/http-factories": "^9.0.0"
@@ -33,6 +34,9 @@
     },
     "scripts": {
         "fix:style": "phpcbf --colors --standard=PSR12 Classes",
+        "fix": [
+            "@fix:style"
+        ],
         "test:style": "phpcs --colors -n --standard=PSR12 Classes",
         "test:stan": "phpstan analyse Classes",
         "test:unit": "bin/phpunit --bootstrap Tests/UnitTestBootstrap.php --configuration Tests/UnitTests.xml",
@@ -40,13 +44,13 @@
         "test:behavior": "export FLOW_CONTEXT=Testing/Behat && behat -c Tests/Behavior/behat.yml.dist",
         "cc": "phpstan clear cache",
         "test": [
-            "composer install",
-            "composer test:style" ,
-            "composer test:stan",
-            "composer test:unit"
+            "@test:style",
+            "@test:stan",
+            "@test:unit"
         ],
-        "fix": [
-            "conposer fix:style"
+        "lint": [
+            "@test:style",
+            "@test:stan"
         ]
     },
     "extra": {
@@ -58,7 +62,8 @@
         "bin-dir": "bin",
         "vendor-dir": "Packages/Libraries",
         "allow-plugins": {
-            "neos/composer-plugin": true
+            "neos/composer-plugin": true,
+            "php-http/discovery": false
         }
     },
     "archive": {

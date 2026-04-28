@@ -3,4 +3,10 @@ include: resource://Neos.Fusion.Form/Private/Fusion/Root.fusion
 include: **/*.fusion
 
 Sitegeist.LostInTranslation.LostInTranslationModuleController.index = Sitegeist.LostInTranslation:Views.Index
+Sitegeist.LostInTranslation.LostInTranslationModuleController.showStatus = Sitegeist.LostInTranslation:Views.ShowStatus
 Sitegeist.LostInTranslation.LostInTranslationModuleController.setCustomKey = Sitegeist.LostInTranslation:Views.SetCustomKey
+Sitegeist.LostInTranslation.LostInTranslationModuleController.createGlossary = Sitegeist.LostInTranslation:Views.CreateGlossary
+Sitegeist.LostInTranslation.LostInTranslationModuleController.showGlossary = Sitegeist.LostInTranslation:Views.ShowGlossary
+Sitegeist.LostInTranslation.LostInTranslationModuleController.createGlossaryEntry = Sitegeist.LostInTranslation:Views.CreateGlossaryEntry
+Sitegeist.LostInTranslation.LostInTranslationModuleController.editGlossaryEntry = Sitegeist.LostInTranslation:Views.EditGlossaryEntry
+

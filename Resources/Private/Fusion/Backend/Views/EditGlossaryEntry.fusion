@@ -1,0 +1,32 @@
+
+prototype(Sitegeist.LostInTranslation:Views.EditGlossaryEntry) < prototype(Neos.Fusion:Component) {
+    renderer = afx`
+    <legend>Edit entry to Glossary {glossary.label}</legend>
+
+    <Neos.Fusion.Form:Form
+      form.target.action="updateGlossaryEntry"
+    >
+      <Neos.Fusion.Form:Hidden field.name="entry" field.value={entry} />
+
+      <div class="neos-control-group">
+        <label class="neos-control-label" for="key">Source Text - {glossary.sourceLanguageKey}</label>
+        <div class="neos-controls neos-controls-row">
+          <Neos.Fusion.Form:Input field.name="sourceText" field.value={entry.sourceText} attributes.class="neos-span12" />
+        </div>
+      </div>
+      <div class="neos-control-group">
+
+        <label class="neos-control-label" for="key">Target Text - {glossary.targetLanguageKey}</label>
+        <div class="neos-controls neos-controls-row">
+          <Neos.Fusion.Form:Input field.name="targetText" field.value={entry.targetText} attributes.class="neos-span12"/>
+        </div>
+      </div>
+
+      <div class="neos-footer">
+        <Neos.Fusion:Link.Action href.action="showGlossary" href.arguments.glossary={glossary} class="neos-button">Back</Neos.Fusion:Link.Action>
+        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">Save Glossary</Neos.Fusion.Form:Button>
+      </div>
+
+    </Neos.Fusion.Form:Form>
+  `
+}
