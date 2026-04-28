@@ -93,3 +93,9 @@ Sitegeist:
       # can be configured to extract and apply translations
       #
       translationConnectors: []
+
+      #
+      # Apply html_entity_decode to translated strings.
+      # !!! this is experimental and may be removed in future !!!
+      #
+      experimental-applyHtmlEntityDecodeAfterTranslation: false

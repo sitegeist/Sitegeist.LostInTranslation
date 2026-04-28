@@ -25,6 +25,9 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
     #[Flow\InjectConfiguration(path:'nodeTranslation.languageDimensionName')]
     public string $languageDimensionName;
 
+    #[Flow\InjectConfiguration(path:'nodeTranslation.experimental-applyHtmlEntityDecodeAfterTranslation')]
+    public bool $experimentalApplyHtmlEntityDecodeAfterTranslation;
+
     public function __construct(
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         protected readonly NodeTypeTranslationDirectiveFactory $translatablePropertyNamesFactory,
@@ -51,6 +54,7 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
                 $languageDimension,
                 $this->aiSystemTranslationRuntimeState,
                 $this->nodeUriPathSegmentGenerator,
+                $this->experimentalApplyHtmlEntityDecodeAfterTranslation,
             );
         } else {
             throw new \Exception(sprintf('Lamguage dimension %s was nou found in content repository %s', $this->languageDimensionName, $commandHooksFactoryDependencies->contentRepositoryId->value));
