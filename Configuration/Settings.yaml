@@ -8,8 +8,19 @@ Sitegeist:
       #
       authenticationKey: ''
 
-      baseUri: 'https://api.deepl.com/v2/'
-      baseUriFree: 'https://api-free.deepl.com/v2/'
+      #
+      # Glossary management
+      #
+      glossary:
+        #
+        # The label prefix can be used to prevent different instances overwriting or deleting each others
+        # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
+        #
+        labelPrefix: '%env:FLOW_CONTEXT%'
+        #
+        # The number of outdated remote glossaries to keep to reduce problems when systems are cloned
+        #
+        keepNumber: 10
 
       defaultOptions:
         tag_handling: 'xml'
@@ -64,5 +75,16 @@ Sitegeist:
       #
       languageDimensionName: 'language'
 
+      #
+      # Translate all object properties that have a translationConnector configured
+      # if this is set to false each property must be enabled via options.automaticTranslation
+      #
+      translateTypesWithConnectors: true
 
-
+      #
+      # Connectors to translate value object properties
+      #
+      # for each value object type a clas implementing the TranslationConnectorInterface
+      # can be configured to extract and apply translations
+      #
+      translationConnectors: []
