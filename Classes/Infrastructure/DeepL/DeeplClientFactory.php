@@ -4,22 +4,23 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
+use Neos\Flow\Annotations as Flow;
 use DeepL\DeepLClient;
 use DeepL\TranslatorOptions;
 use Psr\Http\Client\ClientInterface;
 
 class DeeplClientFactory
 {
+    #[Flow\Inject]
+    protected ClientInterface $httpClient;
+
+    #[Flow\Inject]
+    protected DeepLAuthenticationKeyFactory $authenticationKeyFactory;
+
     /**
      * @var mixed[]
      */
     protected array $settings;
-
-    public function __construct(
-        private readonly ClientInterface $httpClient,
-        private readonly DeepLAuthenticationKeyFactory $authenticationKeyFactory
-    ) {
-    }
 
     /**
      * @param mixed[] $settings
@@ -30,7 +31,7 @@ class DeeplClientFactory
          $this->settings = $settings['DeepLApi'];
     }
 
-    public function createDeepLClient(): DeeplClient
+    public function createDeepLClient(): DeepLClient
     {
         $key = $this->authenticationKeyFactory->createDeepLAuthenticationKey();
 

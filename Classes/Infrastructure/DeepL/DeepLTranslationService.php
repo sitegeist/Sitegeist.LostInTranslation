@@ -173,7 +173,7 @@ class DeepLTranslationService implements TranslationServiceInterface
         try {
             $client = $this->deeplClientFactory->createDeepLClient();
             $usage = $client->getUsage();
-            return new ApiStatus(true, $usage->character?->count ?? 0, $usage->character?->limit ?? 0, $key->isSettingKey, $key->isCustomKey, $key->isFree);
+            return new ApiStatus(true, $usage->character->count ?? 0, $usage->character->limit ?? 0, $key->isSettingKey, $key->isCustomKey, $key->isFree);
         } catch (DeepLException) {
             return new ApiStatus(false, 0, 0, $key->isSettingKey, $key->isCustomKey, $key->isFree);
         }

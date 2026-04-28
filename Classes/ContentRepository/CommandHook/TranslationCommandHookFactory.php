@@ -11,6 +11,7 @@ use Neos\ContentRepository\Core\Factory\CommandHookFactoryInterface;
 use Neos\ContentRepository\Core\Factory\CommandHooksFactoryDependencies;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
@@ -29,6 +30,7 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
         protected readonly NodeTypeTranslationDirectiveFactory $translatablePropertyNamesFactory,
         protected readonly TranslationServiceInterface $translationService,
         protected readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
+        protected readonly NodeUriPathSegmentGenerator $nodeUriPathSegmentGenerator,
     ) {
     }
 
@@ -48,6 +50,7 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
                 $this->translationService,
                 $languageDimension,
                 $this->aiSystemTranslationRuntimeState,
+                $this->nodeUriPathSegmentGenerator,
             );
         } else {
             throw new \Exception(sprintf('Lamguage dimension %s was nou found in content repository %s', $this->languageDimensionName, $commandHooksFactoryDependencies->contentRepositoryId->value));

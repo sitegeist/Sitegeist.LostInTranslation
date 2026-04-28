@@ -47,6 +47,10 @@
             "@test:style",
             "@test:stan",
             "@test:unit"
+        ],
+        "lint": [
+            "@test:style",
+            "@test:stan"
         ]
     },
     "extra": {

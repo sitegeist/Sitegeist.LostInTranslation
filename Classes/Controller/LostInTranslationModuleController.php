@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Controller;
 
 use DeepL\GlossaryInfo;
+use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
+use Neos\ContentRepository\Core\Dimension\Exception\ContentDimensionIdIsInvalid;
+use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Error\Messages\Message;
 use Neos\Fusion\View\FusionView;
 use Neos\Neos\Controller\Module\AbstractModuleController;
@@ -20,53 +24,32 @@ use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
 class LostInTranslationModuleController extends AbstractModuleController
 {
-    /**
-     * @var DeepLTranslationService
-     * @Flow\Inject
-     */
-    protected $translationService;
+    #[Flow\Inject]
+    protected DeepLTranslationService $translationService;
 
-    /**
-     * @var DeepLCacheService
-     * @Flow\Inject
-     */
-    protected $cacheService;
+    #[Flow\Inject]
+    protected DeepLCacheService $cacheService;
 
-    /**
-     * @var DeepLGlossaryService
-     * @Flow\Inject
-     */
-    protected $glossaryService;
+    #[Flow\Inject]
+    protected DeepLGlossaryService $glossaryService;
 
-    /**
-     * @var GlossaryRepository
-     * @Flow\Inject
-     */
-    protected $glossaryRepository;
+    #[Flow\Inject]
+    protected GlossaryRepository $glossaryRepository;
 
-    /**
-     * @var GlossaryEntryRepository
-     * @Flow\Inject
-     */
-    protected $glossaryEntryRepository;
+    #[Flow\Inject]
+    protected GlossaryEntryRepository $glossaryEntryRepository;
 
-    /**
-     * @Flow\Inject
-     * @var DeepLCustomAuthenticationKeyService
-     */
-    protected $customAuthenticationKeyService;
+    #[Flow\Inject]
+    protected DeepLCustomAuthenticationKeyService $customAuthenticationKeyService;
 
-    /**
-     * @Flow\InjectConfiguration(path="nodeTranslation.languageDimensionName")
-     * @var string
-     */
-    protected $languageDimensionName;
+    #[Flow\Inject]
+    protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
-    /**
-     * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="contentDimensions")
-     * @var array<string,array{'default': string, 'defaultPreset': string, 'presets': array<string,mixed> }>
-     */
-    protected $contentDimensionConfiguration;
+    #[Flow\InjectConfiguration(path: "nodeTranslation.contentRepositoryIdentifier")]
+    protected string $contentRepositoryIdentifier;
+
+    #[Flow\InjectConfiguration(path: "nodeTranslation.languageDimensionName")]
+    protected string $languageDimensionName;
 
     /**
      * @var FusionView
@@ -111,9 +94,11 @@ class LostInTranslationModuleController extends AbstractModuleController
     public function createGlossaryAction(): void
     {
         $languageKeysOfInterest = [];
-        $languagePresets = $this->contentDimensionConfiguration[$this->languageDimensionName]['presets'];
-        foreach ($languagePresets as $key => $languagePreset) {
-            $deeplLanguage = $languagePreset['options']['deeplLanguage'] ?? null;
+        $contentRepository = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($this->contentRepositoryIdentifier));
+        $languageDimension = $contentRepository->getContentDimensionSource()->getDimension(new ContentDimensionId($this->languageDimensionName));
+        $languageDimensionValues = $languageDimension?->getRootValues() ?? [];
+        foreach ($languageDimensionValues as $languageDimensionValue) {
+            $deeplLanguage = $languageDimensionValue->getConfigurationValue('options.deeplLanguage');
             if ($deeplLanguage) {
                 $deeplLanguagesParts = explode(':', $deeplLanguage);
                 foreach ($deeplLanguagesParts as $deeplLanguagesPart) {
@@ -121,7 +106,7 @@ class LostInTranslationModuleController extends AbstractModuleController
                     $languageKeysOfInterest[] = strtolower($keyParts[0]);
                 }
             } else {
-                $keyParts = explode('-', $key);
+                $keyParts = explode('-', $languageDimensionValue->value);
                 $languageKeysOfInterest[] = strtolower($keyParts[0]);
             }
         }

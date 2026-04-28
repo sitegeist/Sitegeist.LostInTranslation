@@ -71,6 +71,11 @@ Sitegeist:
       translateInlineEditables: true
 
       #
+      # The name of the content repository to fetch dimension configurations from
+      #
+      contentRepositoryIdentifier: 'default'
+
+      #
       # The name of the language dimension. Usually needs no modification
       #
       languageDimensionName: 'language'
