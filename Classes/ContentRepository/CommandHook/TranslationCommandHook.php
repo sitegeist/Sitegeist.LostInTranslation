@@ -35,6 +35,7 @@ final class TranslationCommandHook implements CommandHookInterface
         private readonly ContentDimension $languageDimension,
         private readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
         private readonly NodeUriPathSegmentGenerator $nodeUriPathSegmentGenerator,
+        private readonly bool $experimentalApplyHtmlEntityDecodeAfterTranslation,
     ) {
     }
 
@@ -130,6 +131,12 @@ final class TranslationCommandHook implements CommandHookInterface
                 $targetDeeplLanguage,
                 $sourceDeeplLanguage,
             );
+            if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
+                $translatedPropertiesDeflated = array_map(
+                    fn(string $value): string => html_entity_decode($value),
+                    $translatedPropertiesDeflated
+                );
+            }
             $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
         } else {
             $translatedProperties = [];
