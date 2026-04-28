@@ -175,6 +175,9 @@ class LostInTranslationModuleController extends AbstractModuleController
 
     public function deleteGlossaryAction(Glossary $glossary): void
     {
+        foreach ($glossary->entries as $entry) {
+            $this->glossaryEntryRepository->remove($entry);
+        }
         $this->glossaryRepository->remove($glossary);
         $this->addFlashMessage('Glossary deleted');
         $this->forward('index');
