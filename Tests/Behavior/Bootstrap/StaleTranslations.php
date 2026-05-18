@@ -3,6 +3,7 @@
 use Behat\Gherkin\Node\TableNode;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
@@ -37,14 +38,14 @@ trait StaleTranslations
     }
 
     /**
-     * @When /^I retranslate node "([^"]*)" in dimension space point (.*)$/
+     * @When /^I retranslate node "([^"]*)" in workspace "([^"]*)" and dimension space point (.*)$/
      * @throws Exception
      */
-    public function iRetranslateNode(string $nodeAggregateId, string $dimensionSpacePoint): void
+    public function iRetranslateNode(string $nodeAggregateId, string $workspaceName, string $dimensionSpacePoint): void
     {
         $this->getObject(Retranslator::class)->retranslateNode(
             contentRepositoryId: $this->currentContentRepository->id,
-            workspaceName: $this->currentWorkspaceName,
+            workspaceName: WorkspaceName::fromString($workspaceName),
             nodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
         );

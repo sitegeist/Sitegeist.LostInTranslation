@@ -25,8 +25,10 @@ use Neos\ContentRepository\Core\Feature\WorkspaceCreation\Event\WorkspaceWasCrea
 use Neos\ContentRepository\Core\Feature\WorkspaceModification\Event\WorkspaceBaseWorkspaceWasChanged;
 use Neos\ContentRepository\Core\Feature\WorkspaceModification\Event\WorkspaceWasRemoved;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasDiscarded;
+use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPartiallyDiscarded;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Event\WorkspaceWasRebased;
+use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ProjectionInterface;
 use Neos\ContentRepository\Core\Projection\ProjectionStatus;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
@@ -36,6 +38,7 @@ use Neos\ContentRepository\Dbal\DbalSchemaDiff;
 use Neos\ContentRepository\Dbal\DbalSchemaFactory;
 use Neos\EventStore\Model\EventEnvelope;
 use Neos\Flow\Annotations as Flow;
+use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\ReferenceDimensionSpacePointResolver;
 
 /**
@@ -55,6 +58,8 @@ class StaleTranslationProjection implements ProjectionInterface
         private readonly Connection $dbal,
         private readonly string $tableNamePrefix,
         private readonly ReferenceDimensionSpacePointResolver $referenceDimensionSpacePointResolver,
+        private readonly NodeTypeTranslationDirectiveFactory $nodeTypeTranslationDirectiveFactory,
+        private readonly NodeTypeManager $nodeTypeManager,
     ) {
         $this->itemTableName = $this->tableNamePrefix;
         $this->workspaceHierarchyTableName = $this->tableNamePrefix . '_ws_hierarchy';
@@ -106,6 +111,7 @@ class StaleTranslationProjection implements ProjectionInterface
             DbalSchemaFactory::columnForDimensionSpacePoint('originDimensionSpacePoint', $platform)->setNotnull(false),
             DbalSchemaFactory::columnForDimensionSpacePointHash('originDimensionSpacePointHash', $platform)->setNotnull(true),
             (new Column('propertyNames', Type::getType(Types::JSON)))->setNotnull(true),
+            DbalSchemaFactory::columnForNodeTypeName('nodeTypeName', $platform)->setNotnull(true),
         ]);
         $staleTranslationTable->setPrimaryKey([
             'workspaceName',
@@ -143,7 +149,8 @@ class StaleTranslationProjection implements ProjectionInterface
             //NodeGeneralizationVariantWasCreated::class => $this->whenNodeGeneralizationVariantWasCreated($event),
             //NodePeerVariantWasCreated::class => $this->whenNodePeerVariantWasCreated($event),
             NodePropertiesWereSet::class => $this->whenNodePropertiesWereSet($event),
-            NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
+            // @todo reference properties are still missing generally
+            #NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
             NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
             NodeAggregateTypeWasChanged::class => $this->whenNodeAggregateTypeWasChanged($event),
 
@@ -185,6 +192,13 @@ class StaleTranslationProjection implements ProjectionInterface
             $event->originDimensionSpacePoint->toDimensionSpacePoint()
         );
 
+        $nodeType = $this->nodeTypeManager->getNodeType($event->nodeTypeName);
+        if (!$nodeType) {
+            return;
+        }
+        $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
+            ->getPropertyNames();
+
         if ($targetDimensionSpacePoint) {
             $this->dbal->insert(
                 $this->itemTableName,
@@ -193,7 +207,11 @@ class StaleTranslationProjection implements ProjectionInterface
                     'nodeAggregateId' => $event->nodeAggregateId->value,
                     'originDimensionSpacePoint' => $targetDimensionSpacePoint->toJson(),
                     'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
-                    'propertyNames' => \json_encode(array_keys($event->initialPropertyValues->values)),
+                    'propertyNames' => \json_encode(array_map(
+                        fn (PropertyName $propertyName): string => $propertyName->value,
+                        iterator_to_array($translatablePropertyNames),
+                    )),
+                    'nodeTypeName' => $event->nodeTypeName,
                 ],
             );
         }
@@ -214,8 +232,8 @@ class StaleTranslationProjection implements ProjectionInterface
     private function whenNodePropertiesWereSet(NodePropertiesWereSet $event): void
     {
         $this->dbal->transactional(function () use ($event) {
-            $item = $this->dbal->executeQuery(
-                'SELECT propertyNames FROM ' . $this->itemTableName
+            $record = $this->dbal->executeQuery(
+                'SELECT propertyNames, nodeTypeName FROM ' . $this->itemTableName
                     . ' WHERE workspaceName = :workspaceName
                     AND nodeAggregateId = :nodeAggregateId
                     AND originDimensionSpacePointHash = :originDimensionSpacePointHash',
@@ -224,40 +242,48 @@ class StaleTranslationProjection implements ProjectionInterface
                     'nodeAggregateId' => $event->nodeAggregateId->value,
                     'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
                 ],
-            )->fetchOne();
+            )->fetchAssociative();
 
-            if ($item) {
-                $propertyNames = \json_decode($item['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
-                $updatedPropertyNames = array_merge(
-                    array_keys($event->propertyValues->values),
-                    array_map(
-                        fn (PropertyName $propertyName): string => $propertyName->value,
-                        iterator_to_array($event->propertiesToUnset),
+            if ($record) {
+                $nodeType = $this->nodeTypeManager->getNodeType($record['nodeTypeName']);
+                if ($nodeType) {
+                    $currentPropertyNames = \json_decode($record['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
+                    $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType(
+                        $nodeType
                     )
-                );
+                        ->getPropertyNames();
+                    $updatedPropertyNames = array_merge(
+                        array_keys($event->propertyValues->values),
+                        $this->convertPropertyNamesToStringArray($event->propertiesToUnset),
+                    );
+                    $remainingPropertyNames = array_diff($currentPropertyNames, $updatedPropertyNames);
+                    $remainingPropertyNames = array_intersect(
+                        $remainingPropertyNames,
+                        $this->convertPropertyNamesToStringArray($translatablePropertyNames)
+                    );
 
-                $remainingPropertyNames = array_diff($propertyNames, $updatedPropertyNames);
-                if ($remainingPropertyNames === []) {
-                    $this->dbal->delete(
-                        $this->itemTableName,
-                        [
-                            'workspaceName' => $event->workspaceName->value,
-                            'nodeAggregateId' => $event->nodeAggregateId->value,
-                            'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
-                        ]
-                    );
-                } else {
-                    $this->dbal->update(
-                        $this->itemTableName,
-                        [
-                            'propertyNames' => \json_encode($remainingPropertyNames),
-                        ],
-                        [
-                            'workspaceName' => $event->workspaceName->value,
-                            'nodeAggregateId' => $event->nodeAggregateId->value,
-                            'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
-                        ]
-                    );
+                    if ($remainingPropertyNames === []) {
+                        $this->dbal->delete(
+                            $this->itemTableName,
+                            [
+                                'workspaceName' => $event->workspaceName->value,
+                                'nodeAggregateId' => $event->nodeAggregateId->value,
+                                'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
+                            ]
+                        );
+                    } else {
+                        $this->dbal->update(
+                            $this->itemTableName,
+                            [
+                                'propertyNames' => \json_encode($remainingPropertyNames),
+                            ],
+                            [
+                                'workspaceName' => $event->workspaceName->value,
+                                'nodeAggregateId' => $event->nodeAggregateId->value,
+                                'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
+                            ]
+                        );
+                    }
                 }
             }
         });
@@ -274,6 +300,8 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void
     {
+        // @todo thin out properties
+        // @todo update node type in item table
     }
 
     private function whenWorkspaceWasCreated(WorkspaceWasCreated $event): void
@@ -368,13 +396,15 @@ class StaleTranslationProjection implements ProjectionInterface
                 originDimensionSpacePoint,
                 originDimensionSpacePointHash,
                 propertyNames,
+                nodeTypeName,
             )
             SELECT
                 "{$workspaceName->value}" AS workspaceName,
                 i.nodeAggregateId,
                 i.originDimensionSpacePoint,
                 i.originDimensionSpacePointHash,
-                i.propertyNames
+                i.propertyNames,
+                i.nodeTypeName
             FROM
                 {$this->itemTableName} i
                 WHERE i.workspaceName = :baseWorkspaceName
@@ -384,6 +414,17 @@ class StaleTranslationProjection implements ProjectionInterface
             [
                 'baseWorkspaceName' => $baseWorkspaceName->value,
             ]
+        );
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function convertPropertyNamesToStringArray(PropertyNames $propertyNames): array
+    {
+        return array_map(
+            fn (PropertyName $propertyName): string => $propertyName->value,
+            iterator_to_array($propertyNames),
         );
     }
 }

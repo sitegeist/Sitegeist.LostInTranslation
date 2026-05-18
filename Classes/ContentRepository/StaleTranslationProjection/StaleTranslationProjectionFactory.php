@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\Factory\SubscriberFactoryDependencies;
 use Neos\ContentRepository\Core\Projection\ProjectionFactoryInterface;
+use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\ReferenceDimensionSpacePointResolver;
 
 /**
@@ -18,6 +19,7 @@ class StaleTranslationProjectionFactory implements ProjectionFactoryInterface
     public function __construct(
         private readonly Connection $dbal,
         private readonly string $languageDimensionId,
+        private readonly NodeTypeTranslationDirectiveFactory $nodeTypeTranslationDirectiveFactory,
     ) {
     }
 
@@ -35,7 +37,9 @@ class StaleTranslationProjectionFactory implements ProjectionFactoryInterface
                 allowedDimensionSubspace: $projectionFactoryDependencies->interDimensionalVariationGraph->getDimensionSpacePoints(),
                 contentDimensionSource: $projectionFactoryDependencies->contentDimensionSource,
                 languageDimensionId: new ContentDimensionId($this->languageDimensionId),
-            )
+            ),
+            nodeTypeTranslationDirectiveFactory: $this->nodeTypeTranslationDirectiveFactory,
+            nodeTypeManager: $projectionFactoryDependencies->nodeTypeManager,
         );
     }
 }
