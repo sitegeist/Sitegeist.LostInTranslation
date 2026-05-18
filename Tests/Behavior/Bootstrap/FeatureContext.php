@@ -19,6 +19,7 @@ class FeatureContext implements Context
     use FlowEntitiesTrait;
     use CRTestSuiteTrait;
     use CRBehavioralTestsSubjectProvider;
+    use StaleTranslations;
 
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
