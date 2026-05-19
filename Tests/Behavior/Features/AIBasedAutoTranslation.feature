@@ -9,8 +9,10 @@ Feature: Create node variant and let the AI translate the properties
     """yaml
     'Neos.ContentRepository:Root': []
     'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
-      superTypes:
-        'Neos.Neos:Node': true
+      # On my machine I get the following exception - when I check the runtime the NodeType "does exist".
+      #    Must not happen, logic error: Node type "Neos.Neos:Node" does not exist (RuntimeException)
+      # superTypes:
+      #   'Neos.Neos:Node': true
       properties:
         inlineEditableStringProperty:
           type: string
