@@ -120,19 +120,19 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | baseWorkspaceName | "user-workspace"       |
         Then I expect exactly the following stale translations:
             | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-            | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | other-user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | other-user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command ChangeBaseWorkspace is executed with payload:
             | Key               | Value                  |
             | workspaceName     | "other-user-workspace" |
             | baseWorkspaceName | "live"                 |
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId          | propertyNames                                                     |
-            | user-workspace | {"language":"de"}         | "sir-david-nodenborough" | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | "nody-mc-nodeface"       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Publish workspace
         When the command PublishWorkspace is executed with payload:
@@ -140,35 +140,33 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName      | "user-workspace" |
             | newContentStreamId | "new-user-cs-id" |
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId          | propertyNames                                                     |
-            | user-workspace | {"language":"de"}         | "sir-david-nodenborough" | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | "nody-mc-nodeface"       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | live           | {"language":"de"}         | "sir-david-nodenborough" | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | live           | {"language":"de"}         | "nody-mc-nodeface"       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase other workspace
         When the command RebaseWorkspace is executed with payload:
             | Key           | Value                  |
             | workspaceName | "other-user-workspace" |
         Then I expect exactly the following stale translations:
-            | workspaceName        | originDimensionSpacePoint | nodeAggregateId          | propertyNames                                                     |
-            | user-workspace       | {"language":"de"}         | "sir-david-nodenborough" | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace       | {"language":"de"}         | "nody-mc-nodeface"       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | live                 | {"language":"de"}         | "sir-david-nodenborough" | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | live                 | {"language":"de"}         | "nody-mc-nodeface"       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | other-user-workspace | {"language":"de"}         | "sir-david-nodenborough" | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | other-user-workspace | {"language":"de"}         | "nody-mc-nodeface"       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live                 | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Retranslate in other workspace
         When I retranslate node "sir-david-nodenborough" in workspace "other-user-workspace" and dimension space point {"language":"en"}
         Then I expect exactly the following stale translations:
-            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
-        Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId          | propertyNames                                                      |
-            | user-workspace | {"language": "en"}        | "sir-david-nodenborough" | ["inlineEditableStringProperty", "autoTranslatableStringProperty"] |
-            | user-workspace | {"language": "en"}        | "nody-mc-nodeface"       | ["inlineEditableStringProperty", "autoTranslatableStringProperty"] |
-            | live           | {"language": "en"}        | "sir-david-nodenborough" | ["inlineEditableStringProperty", "autoTranslatableStringProperty"] |
-            | live           | {"language": "en"}        | "nody-mc-nodeface"       | ["inlineEditableStringProperty", "autoTranslatableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         And I expect exactly 11 events to be published on stream "ContentStream:user-cs-id"
         And event at index 9 is of type "NodePropertiesWereSet" with payload:
             | Key                                                 | Expected                            |
@@ -191,9 +189,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName      | "other-user-workspace" |
             | newContentStreamId | "new-other-user-cs-id" |
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId          | propertyNames                                                      |
-            | user-workspace | {"language": "en"}        | "sir-david-nodenborough" | ["inlineEditableStringProperty", "autoTranslatableStringProperty"] |
-            | user-workspace | {"language": "en"}        | "nody-mc-nodeface"       | ["inlineEditableStringProperty", "autoTranslatableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase workspace
         When the command RebaseWorkspace is executed with payload:

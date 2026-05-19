@@ -134,12 +134,12 @@ class StaleTranslationProjection implements ProjectionInterface
         $nodeAggregateTypeTable = new Table(
             $this->nodeAggregateTypeTableName,
             [
+                DbalSchemaFactory::columnForWorkspaceName('workspaceName', $platform)->setNotNull(true),
                 DbalSchemaFactory::columnForNodeAggregateId('nodeAggregateId', $platform)->setNotnull(true),
                 DbalSchemaFactory::columnForNodeTypeName('nodeTypeName', $platform)->setNotNull(true),
-                DbalSchemaFactory::columnForWorkspaceName('workspaceName', $platform)->setNotNull(true),
             ]
         );
-        $nodeAggregateTypeTable->setPrimaryKey(['nodeAggregateId']);
+        $nodeAggregateTypeTable->setPrimaryKey(['workspaceName', 'nodeAggregateId']);
 
         $schema = DbalSchemaFactory::createSchemaWithTables($connection, [$staleTranslationTable, $workspaceHierarchyTable, $nodeAggregateTypeTable]);
         $statements = DbalSchemaDiff::determineRequiredSqlStatements($connection, $schema);
@@ -292,8 +292,6 @@ class StaleTranslationProjection implements ProjectionInterface
                     $this->convertPropertyNamesToStringArray($translatablePropertyNames)
                 );
 
-                \Neos\Flow\var_dump($remainingPropertyNames, 'remaining');
-
                 if ($remainingPropertyNames === []) {
                     $this->dbal->delete(
                         $this->itemTableName,
@@ -444,6 +442,8 @@ class StaleTranslationProjection implements ProjectionInterface
                 'child_workspace_name' => $event->workspaceName->value,
             ]
         );
+
+        $this->replaceWorkspaceEntries($event->workspaceName, $event->baseWorkspaceName);
     }
 
     private function whenWorkspaceWasRemoved(WorkspaceWasRemoved $event): void
@@ -479,19 +479,19 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenDimensionSpacePointWasMoved(DimensionSpacePointWasMoved $event): void
     {
-
     }
 
     private function replaceWorkspaceEntries(WorkspaceName $workspaceName, WorkspaceName $baseWorkspaceName): void
     {
-        $this->dbal->executeStatement(
-            'DELETE FROM ' . $this->itemTableName . ' WHERE workspace_name = :workspaceName',
-            [
-                'workspaceName' => $workspaceName->value,
-            ]
-        );
+        $this->dbal->transactional(function () use ($workspaceName, $baseWorkspaceName) {
+            $this->dbal->executeStatement(
+                'DELETE FROM ' . $this->itemTableName . ' WHERE workspaceName = :workspaceName',
+                [
+                    'workspaceName' => $workspaceName->value,
+                ]
+            );
 
-        $copyStatement = <<<SQL
+            $copyStatement = <<<SQL
             INSERT INTO {$this->itemTableName} (
                 workspaceName,
                 nodeAggregateId,
@@ -500,7 +500,7 @@ class StaleTranslationProjection implements ProjectionInterface
                 propertyNames
             )
             SELECT
-                "{$workspaceName->value}" AS workspaceName,
+                :workspaceName AS workspaceName,
                 i.nodeAggregateId,
                 i.originDimensionSpacePoint,
                 i.originDimensionSpacePointHash,
@@ -509,12 +509,14 @@ class StaleTranslationProjection implements ProjectionInterface
                 {$this->itemTableName} i
                 WHERE i.workspaceName = :baseWorkspaceName
         SQL;
-        $this->dbal->executeStatement(
-            $copyStatement,
-            [
-                'baseWorkspaceName' => $baseWorkspaceName->value,
-            ]
-        );
+            $this->dbal->executeStatement(
+                $copyStatement,
+                [
+                    'workspaceName' => $workspaceName->value,
+                    'baseWorkspaceName' => $baseWorkspaceName->value,
+                ]
+            );
+        });
     }
 
     /**
