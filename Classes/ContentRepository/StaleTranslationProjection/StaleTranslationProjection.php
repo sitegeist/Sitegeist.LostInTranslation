@@ -196,8 +196,15 @@ class StaleTranslationProjection implements ProjectionInterface
         if (!$nodeType) {
             return;
         }
+        $staleTranslations = [];
         $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
             ->getPropertyNames();
+        foreach ($translatablePropertyNames as $translatablePropertyName) {
+            $initialPropertyValue = $event->initialPropertyValues->getProperty($translatablePropertyName->value);
+            if ($initialPropertyValue !== null && $initialPropertyValue->value !== '') {
+                $staleTranslations[] = $translatablePropertyName->value;
+            }
+        }
 
         if ($targetDimensionSpacePoint) {
             $this->dbal->insert(
@@ -207,10 +214,7 @@ class StaleTranslationProjection implements ProjectionInterface
                     'nodeAggregateId' => $event->nodeAggregateId->value,
                     'originDimensionSpacePoint' => $targetDimensionSpacePoint->toJson(),
                     'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
-                    'propertyNames' => \json_encode(array_map(
-                        fn (PropertyName $propertyName): string => $propertyName->value,
-                        iterator_to_array($translatablePropertyNames),
-                    )),
+                    'propertyNames' => \json_encode($staleTranslations),
                     'nodeTypeName' => $event->nodeTypeName,
                 ],
             );
@@ -250,8 +254,7 @@ class StaleTranslationProjection implements ProjectionInterface
                     $currentPropertyNames = \json_decode($record['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
                     $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType(
                         $nodeType
-                    )
-                        ->getPropertyNames();
+                    )->getPropertyNames();
                     $updatedPropertyNames = array_merge(
                         array_keys($event->propertyValues->values),
                         $this->convertPropertyNamesToStringArray($event->propertiesToUnset),

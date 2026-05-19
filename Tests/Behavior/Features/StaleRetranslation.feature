@@ -40,6 +40,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
           type: string
         autoTranslatableStringProperty:
           type: string
+          defaultValue: "autoTranslateMe"
           options:
             automaticTranslation: true
       options:
@@ -77,7 +78,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             # ordered by node aggregate id by default
-            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command CreateNodeVariant is executed with payload:
@@ -87,7 +88,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | targetOrigin    | {"language":"de"}        |
 
         # 1x ContentStreamWasForked, 2x NodeAggregateWithNodeWasCreated, 2x NodeVariantWasCreated, 2x NodePropertiesWereSet via autotranslation
-        # @todo LostInTranslation does not seem to notice the creation of the tethered child, this must be changed
         Then I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
         And I expect exactly the following stale translations:
             | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
