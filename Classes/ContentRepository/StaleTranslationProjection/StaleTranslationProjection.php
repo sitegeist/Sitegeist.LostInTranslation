@@ -25,7 +25,6 @@ use Neos\ContentRepository\Core\Feature\WorkspaceCreation\Event\WorkspaceWasCrea
 use Neos\ContentRepository\Core\Feature\WorkspaceModification\Event\WorkspaceBaseWorkspaceWasChanged;
 use Neos\ContentRepository\Core\Feature\WorkspaceModification\Event\WorkspaceWasRemoved;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasDiscarded;
-use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPartiallyDiscarded;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Event\WorkspaceWasRebased;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
@@ -383,7 +382,7 @@ class StaleTranslationProjection implements ProjectionInterface
     private function replaceWorkspaceEntries(WorkspaceName $workspaceName, WorkspaceName $baseWorkspaceName): void
     {
         $this->dbal->executeStatement(
-            'DELETE FROM ' . $this->itemTableName . ' WHERE workspace_name = :workspaceName',
+            'DELETE FROM ' . $this->itemTableName . ' WHERE workspaceName = :workspaceName',
             [
                 'workspaceName' => $workspaceName->value,
             ]
@@ -396,7 +395,7 @@ class StaleTranslationProjection implements ProjectionInterface
                 originDimensionSpacePoint,
                 originDimensionSpacePointHash,
                 propertyNames,
-                nodeTypeName,
+                nodeTypeName
             )
             SELECT
                 "{$workspaceName->value}" AS workspaceName,

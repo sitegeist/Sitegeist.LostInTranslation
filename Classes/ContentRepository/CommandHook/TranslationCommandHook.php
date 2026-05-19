@@ -75,7 +75,7 @@ final class TranslationCommandHook implements CommandHookInterface
         );
 
         $sourceDeeplLanguage = $sourceLanguageDirective?->deeplSourceId;
-        $targetDeeplLanguage =  $targetLanguageDirective?->deeplTargetId;
+        $targetDeeplLanguage = $targetLanguageDirective?->deeplTargetId;
 
         if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
             return Commands::createEmpty();
