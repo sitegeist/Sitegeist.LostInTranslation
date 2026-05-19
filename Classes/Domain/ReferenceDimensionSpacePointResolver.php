@@ -33,7 +33,7 @@ final readonly class ReferenceDimensionSpacePointResolver
         }
 
         foreach ($languageDimension->values as $language) {
-            if ($language->configuration['referenceLanguage'] ?? null === $languageValue) {
+            if (($language->configuration['referenceLanguage'] ?? null) === $languageValue) {
                 $coordinates = $dimensionSpacePoint->coordinates;
                 $coordinates[$this->languageDimensionId->value] = $language->value;
                 $targetDimensionSpacePoint = DimensionSpacePoint::fromArray($coordinates);
