@@ -57,7 +57,7 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
                 $this->experimentalApplyHtmlEntityDecodeAfterTranslation,
             );
         } else {
-            throw new \Exception(sprintf('Lamguage dimension %s was nou found in content repository %s', $this->languageDimensionName, $commandHooksFactoryDependencies->contentRepositoryId->value));
+            throw new \Exception(sprintf('Language dimension %s was not found in content repository %s', $this->languageDimensionName, $commandHooksFactoryDependencies->contentRepositoryId->value));
         }
     }
 }
