@@ -27,8 +27,8 @@ use Neos\ContentRepository\Core\Feature\WorkspaceModification\Event\WorkspaceWas
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasDiscarded;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Event\WorkspaceWasRebased;
-use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
+use Neos\ContentRepository\Core\NodeType\NodeTypeName;
 use Neos\ContentRepository\Core\Projection\ProjectionInterface;
 use Neos\ContentRepository\Core\Projection\ProjectionStatus;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
@@ -49,7 +49,7 @@ use Sitegeist\LostInTranslation\Domain\ReferenceDimensionSpacePointResolver;
 #[Flow\Proxy(false)]
 class StaleTranslationProjection implements ProjectionInterface
 {
-    private StaleTranslationFinder $staleTranslationFinder;
+    private StaleTranslationReadModel $readModel;
 
     private string $itemTableName;
 
@@ -67,7 +67,18 @@ class StaleTranslationProjection implements ProjectionInterface
         $this->itemTableName = $this->tableNamePrefix;
         $this->workspaceHierarchyTableName = $this->tableNamePrefix . '_ws_hierarchy';
         $this->nodeAggregateTypeTableName = $this->tableNamePrefix . '_nodeaggregate_type';
-        $this->staleTranslationFinder = new StaleTranslationFinder($this->dbal, $this->itemTableName);
+        $this->readModel = new StaleTranslationReadModel(
+            staleTranslationFinder: new StaleTranslationFinder(
+                dbal: $this->dbal,
+                tableName: $this->itemTableName,
+            ),
+            nodeTypeResolver: new NodeTypeResolver(
+                dbal: $this->dbal,
+                tableName: $this->nodeAggregateTypeTableName,
+                workspaceHierarchyTableName: $this->workspaceHierarchyTableName,
+                nodeTypeManager: $nodeTypeManager,
+            )
+        );
     }
 
     /**
@@ -140,6 +151,7 @@ class StaleTranslationProjection implements ProjectionInterface
             ]
         );
         $nodeAggregateTypeTable->setPrimaryKey(['workspaceName', 'nodeAggregateId']);
+        $nodeAggregateTypeTable->addIndex(['workspaceName'], 'workspaceName');
 
         $schema = DbalSchemaFactory::createSchemaWithTables($connection, [$staleTranslationTable, $workspaceHierarchyTable, $nodeAggregateTypeTable]);
         $statements = DbalSchemaDiff::determineRequiredSqlStatements($connection, $schema);
@@ -199,9 +211,9 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
-    public function getState(): StaleTranslationFinder
+    public function getState(): StaleTranslationReadModel
     {
-        return $this->staleTranslationFinder;
+        return $this->readModel;
     }
 
     private function whenNodeAggregateWithNodeWasCreated(NodeAggregateWithNodeWasCreated $event): void
@@ -209,14 +221,10 @@ class StaleTranslationProjection implements ProjectionInterface
         $targetDimensionSpacePoint = $this->referenceDimensionSpacePointResolver->tryResolveTargetDimensionSpacePoint(
             $event->originDimensionSpacePoint->toDimensionSpacePoint()
         );
-
-        $this->dbal->insert(
-            table: $this->nodeAggregateTypeTableName,
-            data: [
-                'workspaceName' => $event->workspaceName->value,
-                'nodeAggregateId' => $event->nodeAggregateId->value,
-                'nodeTypeName' => $event->nodeTypeName->value,
-            ],
+        $this->memorizeNodeTypeName(
+            nodeAggregateId: $event->nodeAggregateId,
+            nodeTypeName: $event->nodeTypeName,
+            workspaceName: $event->workspaceName,
         );
 
         $nodeType = $this->nodeTypeManager->getNodeType($event->nodeTypeName);
@@ -261,7 +269,10 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodePropertiesWereSet(NodePropertiesWereSet $event): void
     {
-        $nodeType = $this->findNodeType($event->nodeAggregateId, $event->workspaceName);
+        $nodeType = $this->readModel->nodeTypeResolver->resolveByNodeAggregateId(
+            nodeAggregateId: $event->nodeAggregateId,
+            workspaceName: $event->workspaceName
+        );
         if (!$nodeType) {
             return;
         }
@@ -401,7 +412,11 @@ class StaleTranslationProjection implements ProjectionInterface
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void
     {
         // @todo thin out properties
-        // @todo update node type in aggregate type table
+        $this->memorizeNodeTypeName(
+            nodeAggregateId: $event->nodeAggregateId,
+            nodeTypeName: $event->newNodeTypeName,
+            workspaceName: $event->workspaceName,
+        );
     }
 
     private function whenWorkspaceWasCreated(WorkspaceWasCreated $event): void
@@ -429,6 +444,7 @@ class StaleTranslationProjection implements ProjectionInterface
         }
 
         $this->replaceWorkspaceEntries($event->workspaceName, WorkspaceName::fromString($workspaceHierarchyRecord['parent_workspace_name']));
+        $this->clearNodeTypeMemory($event->workspaceName);
     }
 
     private function whenWorkspaceBaseWorkspaceWasChanged(WorkspaceBaseWorkspaceWasChanged $event): void
@@ -444,6 +460,7 @@ class StaleTranslationProjection implements ProjectionInterface
         );
 
         $this->replaceWorkspaceEntries($event->workspaceName, $event->baseWorkspaceName);
+        $this->clearNodeTypeMemory($event->workspaceName);
     }
 
     private function whenWorkspaceWasRemoved(WorkspaceWasRemoved $event): void
@@ -454,11 +471,13 @@ class StaleTranslationProjection implements ProjectionInterface
                 'child_workspace_name' => $event->workspaceName->value,
             ]
         );
+        $this->clearNodeTypeMemory($event->workspaceName);
     }
 
     private function whenWorkspaceWasPublished(WorkspaceWasPublished $event): void
     {
         $this->replaceWorkspaceEntries($event->sourceWorkspaceName, $event->targetWorkspaceName);
+        $this->clearNodeTypeMemory($event->sourceWorkspaceName);
     }
 
     private function whenWorkspaceWasDiscarded(WorkspaceWasDiscarded $event): void
@@ -475,6 +494,7 @@ class StaleTranslationProjection implements ProjectionInterface
         }
 
         $this->replaceWorkspaceEntries($event->workspaceName, WorkspaceName::fromString($workspaceHierarchyRecord['parent_workspace_name']));
+        $this->clearNodeTypeMemory($event->workspaceName);
     }
 
     private function whenDimensionSpacePointWasMoved(DimensionSpacePointWasMoved $event): void
@@ -530,16 +550,48 @@ class StaleTranslationProjection implements ProjectionInterface
         );
     }
 
-    private function findNodeType(NodeAggregateId $nodeAggregateId, WorkspaceName $workspaceName): ?NodeType
-    {
-        $nodeTypeName = $this->dbal->executeQuery(
-            'SELECT nodeTypeName FROM ' . $this->nodeAggregateTypeTableName . ' WHERE nodeAggregateId = :nodeAggregateId AND workspaceName = :workspaceName',
+    private function memorizeNodeTypeName(
+        NodeAggregateId $nodeAggregateId,
+        NodeTypeName $nodeTypeName,
+        WorkspaceName $workspaceName,
+    ): void {
+        $record = $this->dbal->fetchAssociative(
+            'SELECT * FROM ' . $this->nodeAggregateTypeTableName . ' WHERE workspaceName = :workspaceName AND nodeAggregateId = :nodeAggregateId',
             [
+                'workspaceName' => $workspaceName->value,
                 'nodeAggregateId' => $nodeAggregateId->value,
+            ],
+        );
+        if ($record) {
+            $this->dbal->update(
+                table: $this->nodeAggregateTypeTableName,
+                data: [
+                    'nodeTypeName' => $nodeTypeName->value,
+                ],
+                criteria: [
+                    'workspaceName' => $workspaceName->value,
+                    'nodeAggregateId' => $nodeAggregateId->value,
+                ],
+            );
+        } else {
+            $this->dbal->insert(
+                table: $this->nodeAggregateTypeTableName,
+                data: [
+                    'workspaceName' => $workspaceName->value,
+                    'nodeAggregateId' => $nodeAggregateId->value,
+                    'nodeTypeName' => $nodeTypeName->value,
+                ],
+            );
+        }
+    }
+
+    private function clearNodeTypeMemory(WorkspaceName $workspaceName): void
+    {
+        $this->dbal->executeStatement(
+            'DELETE FROM ' . $this->nodeAggregateTypeTableName . ' WHERE workspaceName = :workspaceName',
+            [
                 'workspaceName' => $workspaceName->value,
             ],
-        )->fetchOne();
-
-        return $nodeTypeName ? $this->nodeTypeManager->getNodeType($nodeTypeName) : null;
+        );
     }
 }

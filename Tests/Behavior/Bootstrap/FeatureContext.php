@@ -20,6 +20,7 @@ class FeatureContext implements Context
     use CRTestSuiteTrait;
     use CRBehavioralTestsSubjectProvider;
     use StaleTranslations;
+    use NodeTypeResolution;
 
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
