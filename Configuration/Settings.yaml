@@ -13,7 +13,7 @@ Sitegeist:
       #
       glossary:
         #
-        # The label prefix can be used to prevent different instances overwriting or deleting each others
+        # The label prefix can be used to prevent different instances overwriting or deleting each other
         # glossaries. The default value is the FLOW_CONTEXT but this may need adjustment based on your use case
         #
         labelPrefix: '%env:FLOW_CONTEXT%'
@@ -65,8 +65,8 @@ Sitegeist:
       #
       # Translate all inline editable fields without further configuration.
       #
-      # If this is disabled iline editables can be configured for translation by setting
-      # `options.translateOnAdoption: true` for each property seperatly
+      # If this is disabled inline editables can be configured for translation by setting
+      # `options.translateOnAdoption: true` for each property separately
       #
       translateInlineEditables: true
 
@@ -89,7 +89,7 @@ Sitegeist:
       #
       # Connectors to translate value object properties
       #
-      # for each value object type a clas implementing the TranslationConnectorInterface
+      # for each value object type a class implementing the TranslationConnectorInterface
       # can be configured to extract and apply translations
       #
       translationConnectors: []

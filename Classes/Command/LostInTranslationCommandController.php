@@ -15,12 +15,14 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFil
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
+use Sitegeist\LostInTranslation\Domain\Retranslator;
 
 class LostInTranslationCommandController extends CommandController
 {
@@ -32,6 +34,9 @@ class LostInTranslationCommandController extends CommandController
 
     #[Flow\Inject]
     public Context $securityContext;
+
+    #[Flow\Inject]
+    public Retranslator $retranslator;
 
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
@@ -83,5 +88,29 @@ class LostInTranslationCommandController extends CommandController
         foreach ($originSubgraph->findChildNodes($originNode->aggregateId, FindChildNodesFilter::create())->getIterator() as $childNode) {
             $this->translateNodeRecursive($cr, $childNode, $originSubgraph, $targetSubgraph);
         }
+    }
+
+    /**
+     * Retranslate (stale properties + missing variants) below the given node into the target language dimension.
+     *
+     * @param string $nodeAggregateId
+     * @param string $target
+     * @param string $contentRepository
+     * @param string $workspace
+     * @return void
+     */
+    public function retranslateNodeCommand(
+        string $nodeAggregateId,
+        string $target,
+        string $contentRepository = 'default',
+        string $workspace = 'live',
+    ): void {
+        $this->retranslator->retranslateNode(
+            ContentRepositoryId::fromString($contentRepository),
+            WorkspaceName::fromString($workspace),
+            NodeAggregateId::fromString($nodeAggregateId),
+            DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]),
+        );
+        $this->outputLine('Retranslation finished for node %s -> %s', [$nodeAggregateId, $target]);
     }
 }

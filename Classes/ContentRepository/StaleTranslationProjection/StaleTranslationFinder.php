@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection;
 
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\Projection\ProjectionStateInterface;
@@ -48,6 +49,9 @@ final class StaleTranslationFinder implements ProjectionStateInterface
                 'workspaceName' => $subtree->node->workspaceName->value,
                 'nodeAggregateIds' => $this->mapSubtreeToNodeAggregateIds($subtree)->toStringArray(),
                 'originDimensionSpacePointHash' => $subtree->node->originDimensionSpacePoint->hash,
+            ],
+            [
+                'nodeAggregateIds' => ArrayParameterType::STRING,
             ]
         )->fetchAllAssociative();
 
