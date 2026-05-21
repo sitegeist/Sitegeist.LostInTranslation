@@ -44,7 +44,7 @@ use Sitegeist\LostInTranslation\Domain\ReferenceDimensionSpacePointResolver;
 
 /**
  * @internal Only for consumption inside LostInTranslation.
- * @implements ProjectionInterface<StaleTranslationFinder>
+ * @implements ProjectionInterface<StaleTranslationReadModel>
  */
 #[Flow\Proxy(false)]
 class StaleTranslationProjection implements ProjectionInterface
@@ -168,47 +168,43 @@ class StaleTranslationProjection implements ProjectionInterface
 
     public function apply(EventInterface $event, EventEnvelope $eventEnvelope): void
     {
-        try {
-            match ($event::class) {
-                NodeAggregateWithNodeWasCreated::class => $this->whenNodeAggregateWithNodeWasCreated($event),
-                // variation does not (yet) contain properties and thus is uneffective
-                //NodeSpecializationVariantWasCreated::class => $this->whenNodeSpecializationVariantWasCreated($event),
-                //NodeGeneralizationVariantWasCreated::class => $this->whenNodeGeneralizationVariantWasCreated($event),
-                //NodePeerVariantWasCreated::class => $this->whenNodePeerVariantWasCreated($event),
-                NodePropertiesWereSet::class => $this->whenNodePropertiesWereSet($event),
-                // @todo reference properties are still missing generally
-                #NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
-                NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
-                NodeAggregateTypeWasChanged::class => $this->whenNodeAggregateTypeWasChanged($event),
+        match ($event::class) {
+            NodeAggregateWithNodeWasCreated::class => $this->whenNodeAggregateWithNodeWasCreated($event),
+            // variation does not (yet) contain properties and thus is uneffective
+            //NodeSpecializationVariantWasCreated::class => $this->whenNodeSpecializationVariantWasCreated($event),
+            //NodeGeneralizationVariantWasCreated::class => $this->whenNodeGeneralizationVariantWasCreated($event),
+            //NodePeerVariantWasCreated::class => $this->whenNodePeerVariantWasCreated($event),
+            NodePropertiesWereSet::class => $this->whenNodePropertiesWereSet($event),
+            // @todo reference properties are still missing generally
+            #NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
+            NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
+            NodeAggregateTypeWasChanged::class => $this->whenNodeAggregateTypeWasChanged($event),
 
-                WorkspaceWasCreated::class => $this->whenWorkspaceWasCreated($event),
-                WorkspaceBaseWorkspaceWasChanged::class => $this->whenWorkspaceBaseWorkspaceWasChanged($event),
-                WorkspaceWasRebased::class => $this->whenWorkspaceWasRebased($event),
-                WorkspaceWasPublished::class => $this->whenWorkspaceWasPublished($event),
-                WorkspaceWasDiscarded::class => $this->whenWorkspaceWasDiscarded($event),
-                WorkspaceWasRemoved::class => $this->whenWorkspaceWasRemoved($event),
+            WorkspaceWasCreated::class => $this->whenWorkspaceWasCreated($event),
+            WorkspaceBaseWorkspaceWasChanged::class => $this->whenWorkspaceBaseWorkspaceWasChanged($event),
+            WorkspaceWasRebased::class => $this->whenWorkspaceWasRebased($event),
+            WorkspaceWasPublished::class => $this->whenWorkspaceWasPublished($event),
+            WorkspaceWasDiscarded::class => $this->whenWorkspaceWasDiscarded($event),
+            WorkspaceWasRemoved::class => $this->whenWorkspaceWasRemoved($event),
 
-                DimensionSpacePointWasMoved::class => $this->whenDimensionSpacePointWasMoved($event),
+            DimensionSpacePointWasMoved::class => $this->whenDimensionSpacePointWasMoved($event),
 
-                // we only need to handle events that actually affect properties; pure edge operations are irrelevant
-                // RootNodeAggregateWithNodeWasCreated is explicitly unhandled
-                // SubtreeWasTagged is explicitly unhandled
-                // SubtreeWasUntagged is explicitly unhandled
-                // NodeAggregateWasMoved is explicitly unhandled
-                // NodeAggregateNameWasChanged is explicitly unhandled
+            // we only need to handle events that actually affect properties; pure edge operations are irrelevant
+            // RootNodeAggregateWithNodeWasCreated is explicitly unhandled
+            // SubtreeWasTagged is explicitly unhandled
+            // SubtreeWasUntagged is explicitly unhandled
+            // NodeAggregateWasMoved is explicitly unhandled
+            // NodeAggregateNameWasChanged is explicitly unhandled
 
-                // we also only care about workspaces, not content streams
-                // ContentStreamWasCreated is explicitly unhandled
-                // ContentStreamWasForked is explicitly unhandled
-                // ContentStreamWasClosed is explicitly unhandled
-                // ContentStreamWasReopened is explicitly unhandled
-                // ContentStreamWasRemoved is explicitly unhandled
+            // we also only care about workspaces, not content streams
+            // ContentStreamWasCreated is explicitly unhandled
+            // ContentStreamWasForked is explicitly unhandled
+            // ContentStreamWasClosed is explicitly unhandled
+            // ContentStreamWasReopened is explicitly unhandled
+            // ContentStreamWasRemoved is explicitly unhandled
 
-                default => null,
-            };
-        } catch (\Throwable $exception) {
-            \Neos\Flow\var_dump($exception->getMessage());
-        }
+            default => null,
+        };
     }
 
     public function getState(): StaleTranslationReadModel

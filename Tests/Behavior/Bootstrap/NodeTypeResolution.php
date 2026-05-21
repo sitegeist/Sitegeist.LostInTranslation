@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 use Behat\Gherkin\Node\TableNode;
-use Neos\ContentRepository\Core\Feature\NodeRenaming\Command\ChangeNodeAggregateName;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;

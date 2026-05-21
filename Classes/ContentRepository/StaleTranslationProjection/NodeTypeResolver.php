@@ -74,6 +74,7 @@ final readonly class NodeTypeResolver implements ProjectionStateInterface
      */
     public function findAll(): array
     {
+        /** @phpstan-ignore return.type (array shape declares database schema) */
         return $this->dbal->executeQuery('SELECT * FROM ' . $this->tableName)
             ->fetchAllAssociative();
     }

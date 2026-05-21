@@ -41,7 +41,6 @@ final readonly class ReferenceDimensionSpacePointResolver
                 return $this->allowedDimensionSubspace->contains($targetDimensionSpacePoint)
                     ? $targetDimensionSpacePoint
                     : null;
-
             }
         }
 

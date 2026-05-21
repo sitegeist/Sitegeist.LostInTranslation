@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Behat\Gherkin\Node\TableNode;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
@@ -11,7 +13,6 @@ use Sitegeist\LostInTranslation\Domain\Retranslator;
 
 trait StaleTranslations
 {
-
     /**
      * @Then /^I expect exactly the following stale translations:$/
      * @param TableNode $payloadTable
