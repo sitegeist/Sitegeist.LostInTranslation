@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Sitegeist\LostInTranslation\Tests\Behavior\Bootstrap;
+
 use Behat\Gherkin\Node\TableNode;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;

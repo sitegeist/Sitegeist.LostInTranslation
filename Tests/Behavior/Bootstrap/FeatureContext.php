@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Sitegeist\LostInTranslation\Tests\Behavior\Bootstrap;
+
 use Behat\Behat\Context\Context;
 use Neos\Behat\FlowBootstrapTrait;
 use Neos\Behat\FlowEntitiesTrait;

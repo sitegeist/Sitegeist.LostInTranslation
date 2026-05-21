@@ -1,4 +1,5 @@
 <?php
+
 namespace Neos\Flow\Build;
 
 /*
@@ -12,7 +13,7 @@ namespace Neos\Flow\Build;
  */
 
 $composerAutoloader = __DIR__ . '/../Packages/Libraries/autoload.php';
-if(!file_exists($composerAutoloader)) {
+if (!file_exists($composerAutoloader)) {
     exit(PHP_EOL . 'Neos Flow Bootstrap Error: The unit test bootstrap requires the autoloader file created at install time by Composer. Looked for "' . $composerAutoloader . '" without success.');
 }
 require_once($composerAutoloader);
@@ -34,18 +35,15 @@ require_once(FLOW_PATH_FLOW . 'Classes/Error/Debugger.php');
 /**
  * A simple class loader that deals with the Framework classes and is intended
  * for use with unit tests executed by PHPUnit.
- *
- * @param string $className
- * @return void
  */
-function loadClassForTesting($className) {
+function loadClassForTesting(string $className): void
+{
     $classNameParts = explode('\\', $className);
-    if (!is_array($classNameParts)) {
-        return;
-    }
 
     foreach (new \DirectoryIterator(__DIR__ . '/../Packages') as $fileInfo) {
-        if (!$fileInfo->isDir() || $fileInfo->isDot() || $fileInfo->getFilename() === 'Libraries') continue;
+        if (!$fileInfo->isDir() || $fileInfo->isDot() || $fileInfo->getFilename() === 'Libraries') {
+            continue;
+        }
 
         $classFilePathAndName = $fileInfo->getPathname() . '/';
         foreach ($classNameParts as $index => $classNamePart) {
