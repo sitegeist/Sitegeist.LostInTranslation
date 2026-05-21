@@ -185,14 +185,14 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # out before any stale lookup / variant emission considers them.
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                          | initialPropertyValues                              |
-            | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation  | {"autoTranslatableStringProperty": "Parent Text"}  |
-            | child-doc       | parent-doc             | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation  | {"autoTranslatableStringProperty": "Child Text"}   |
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                             |
+            | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Parent Text"} |
+            | child-doc       | parent-doc             | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Child Text"}  |
         # Both Documents are translatable, so each gets a stale entry at the target language.
         And I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                        |
-            | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"]   |
-            | user-workspace | {"language":"de"}         | parent-doc      | ["autoTranslatableStringProperty"]   |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
+            | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | parent-doc      | ["autoTranslatableStringProperty"] |
 
         When I retranslate node "parent-doc" in workspace "user-workspace" and dimension space point {"language":"de"}
 
@@ -201,8 +201,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # clears parent-doc's stale entry. child-doc is a Document descendant and is excluded from
         # the walk; its stale entry must remain untouched.
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                        |
-            | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"]   |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
+            | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
 
     Scenario: Retranslating into the source language is a no-op
         # Only `de` has `referenceLanguage: en` in the Background's dimension configuration. Asking
@@ -311,10 +311,13 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        # Rebase other workspace
+        # Rebase other workspace. Pin the rebased content stream to a stable name so we can assert
+        # against it below — without `rebasedContentStreamId`, the CR generates a fresh UUID each
+        # run and event-index assertions cannot be written.
         When the command RebaseWorkspace is executed with payload:
-            | Key           | Value                  |
-            | workspaceName | "other-user-workspace" |
+            | Key                    | Value                      |
+            | workspaceName          | "other-user-workspace"     |
+            | rebasedContentStreamId | "rebased-other-user-cs-id" |
         Then I expect exactly the following stale translations:
             | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | live                 | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
@@ -332,21 +335,40 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-        And I expect exactly 11 events to be published on stream "ContentStream:user-cs-id"
-        And event at index 7 is of type "NodePropertiesWereSet" with payload:
+        # Retranslate fires its commands against the workspace's CURRENT content stream, which after
+        # the rebase above is the freshly-forked `rebased-other-user-cs-id` stream — NOT the
+        # original `user-cs-id` (that one is frozen since the user-workspace publish). The rebased
+        # stream contains exactly the fork event + the 3 retranslate-cascade events.
+        And I expect exactly 4 events to be published on stream "ContentStream:rebased-other-user-cs-id"
+        # Stale-property fix-up for sir-david: emitted directly by the Retranslator before the
+        # variant pass, while the AI runtime state is active.
+        And event at index 1 is of type "NodePropertiesWereSet" with payload:
             | Key                                                 | Expected                            |
-            | contentStreamId                                     | "user-cs-id"                        |
+            | workspaceName                                       | "other-user-workspace"              |
+            | contentStreamId                                     | "rebased-other-user-cs-id"          |
             | nodeAggregateId                                     | "sir-david-nodenborough"            |
             | originDimensionSpacePoint                           | {"language": "de"}                  |
-            | propertyValues.inlineEditableStringProperty.value   | "My adjusted child Text translated" |
-            | propertyValues.autoTranslatableStringProperty.value | "My adjusted child Text translated" |
-        And event at index 8 is of type "NodeAggregateWithNodeWasCreated" with payload:
-            | Key                                                 | Expected                            |
-            | contentStreamId                                     | "user-cs-id"                        |
-            | nodeAggregateId                                     | "nody-mc-nodeface"                  |
-            | originDimensionSpacePoint                           | {"language": "de"}                  |
-            | propertyValues.inlineEditableStringProperty.value   | "My adjusted child Text translated" |
-            | propertyValues.autoTranslatableStringProperty.value | "My adjusted child Text translated" |
+            | propertyValues.inlineEditableStringProperty.value   | "My adjusted Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "My adjusted Other Text translated" |
+        # nody-mc-nodeface had no `de` variant yet, so the Retranslator emits CreateNodeVariant.
+        # The CR materialises that as a NodePeerVariantWasCreated event (not NodeAggregateWithNodeWasCreated — variants reuse the aggregate id, no new aggregate).
+        And event at index 2 is of type "NodePeerVariantWasCreated" with payload:
+            | Key             | Expected                   |
+            | workspaceName   | "other-user-workspace"     |
+            | contentStreamId | "rebased-other-user-cs-id" |
+            | nodeAggregateId | "nody-mc-nodeface"         |
+            | sourceOrigin    | {"language": "en"}         |
+            | peerOrigin      | {"language": "de"}         |
+        # …and the TranslationCommandHook then cascades the translated property values into the
+        # newly-created variant via a follow-up SetNodeProperties → NodePropertiesWereSet.
+        And event at index 3 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                              |
+            | workspaceName                                       | "other-user-workspace"                |
+            | contentStreamId                                     | "rebased-other-user-cs-id"            |
+            | nodeAggregateId                                     | "nody-mc-nodeface"                    |
+            | originDimensionSpacePoint                           | {"language": "de"}                    |
+            | propertyValues.inlineEditableStringProperty.value   | "My Grandchild Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "My Other Grandchild Text translated" |
 
         # Publish other workspace
         When the command PublishWorkspace is executed with payload:
@@ -355,8 +377,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | newContentStreamId | "new-other-user-cs-id" |
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase workspace
         When the command RebaseWorkspace is executed with payload:
