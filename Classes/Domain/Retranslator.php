@@ -342,8 +342,15 @@ class Retranslator
     }
 
     /**
-     * Walk the source subtree and emit a `CreateNodeVariant` command for every node not yet present
-     * in the target subgraph.
+     * Walk the source subtree and emit a `CreateNodeVariant` command for every NON-TETHERED node
+     * not yet present in the target subgraph.
+     *
+     * Tethered nodes are deliberately skipped: when a regular (non-tethered) ancestor variant is
+     * created, the CR auto-creates all of its structurally-required tethered descendants as part of
+     * the same operation. Emitting an explicit `CreateNodeVariant` for a tethered node would either
+     * be redundant (the auto-create has already happened) or be rejected by the CR (tethered nodes
+     * are not eligible to be created via the variation flow). The hook's tethered-children cascade
+     * then handles property translation for those auto-created tethered nodes.
      *
      * Crucially, we use `$sourceNode->originDimensionSpacePoint` as the `sourceOrigin` of the variant
      * command — NOT a freshly built OriginDSP from `$targetDimensionSpacePoint`'s sibling-source. The
@@ -367,7 +374,14 @@ class Retranslator
     ): array {
         $commands = [];
         $sourceNode = $subtree->node;
-        if ($targetSubgraph->findNodeById($sourceNode->aggregateId) === null) {
+        // Only emit a CreateNodeVariant for non-tethered nodes — the CR creates tethered children
+        // automatically as part of their non-tethered parent's variant creation. The recursion below
+        // still descends into a tethered node's children, because a tethered subtree may contain
+        // regular (non-tethered) descendants that need their own command.
+        if (
+            !$sourceNode->classification->isTethered()
+            && $targetSubgraph->findNodeById($sourceNode->aggregateId) === null
+        ) {
             $commands[] = CreateNodeVariant::create(
                 $workspaceName,
                 $sourceNode->aggregateId,

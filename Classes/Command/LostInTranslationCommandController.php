@@ -110,9 +110,10 @@ class LostInTranslationCommandController extends CommandController
     public function retranslateNodeCommand(
         string $nodeAggregateId,
         string $target,
-        string $contentRepository = 'default',
-        string $workspace = 'live',
+        string $contentRepository,
+        string $workspace,
     ): void {
+        $this->outputLine('Starting retranslation for node "%s" -> "%s" in workspace "%s"...', [$nodeAggregateId, $target, $workspace]);
         $result = $this->retranslator->retranslateNode(
             ContentRepositoryId::fromString($contentRepository),
             WorkspaceName::fromString($workspace),
@@ -124,15 +125,15 @@ class LostInTranslationCommandController extends CommandController
         // a silent no-op skip path (e.g. invoking retranslate on the source language itself, or with
         // DeepL disabled for one of the presets), which made misconfiguration invisible from the CLI.
         if ($result->skippedReason !== null) {
-            $this->outputLine('Retranslation for node %s -> %s skipped: %s', [$nodeAggregateId, $target, $result->skippedReason]);
+            $this->outputLine('Retranslation for node "%s" -> "%s" skipped: %s', [$nodeAggregateId, $target, $result->skippedReason]);
             return;
         }
         if ($result->isNoOp()) {
-            $this->outputLine('Retranslation for node %s -> %s: nothing to do (no stale properties, no missing variants).', [$nodeAggregateId, $target]);
+            $this->outputLine('Retranslation for node "%s" -> "%s": nothing to do (no stale properties, no missing variants).', [$nodeAggregateId, $target]);
             return;
         }
         $this->outputLine(
-            'Retranslation for node %s -> %s: dispatched %d stale property update(s) and %d variant creation(s).',
+            'Retranslation for node "%s" -> "%s": dispatched %d stale property update(s) and %d variant creation(s).',
             [$nodeAggregateId, $target, $result->stalePropertyCommandsDispatched, $result->variantCommandsDispatched],
         );
     }
