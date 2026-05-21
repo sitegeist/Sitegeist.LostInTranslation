@@ -33,7 +33,7 @@ use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
 /**
  * Driver that brings a target-language dimension subtree back in sync with its source (reference)
- * language, by emitting:
+ * language, by dispatching:
  *
  *  - `SetNodeProperties` for existing target variants whose translated properties are stale
  *    (per {@see \Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationProjection}).
@@ -96,8 +96,6 @@ class Retranslator
             ));
         }
 
-        // ReferenceDimensionSpacePointResolver is #[Flow\Proxy(false)] and per-CR, so it's
-        // constructed inline — matches StaleTranslationProjectionFactory's construction.
         $resolver = new ReferenceDimensionSpacePointResolver(
             allowedDimensionSubspace: $cr->getVariationGraph()->getDimensionSpacePoints(),
             contentDimensionSource: $cr->getContentDimensionSource(),
@@ -120,7 +118,6 @@ class Retranslator
             $languageDimension,
             OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
         )?->deeplTargetId;
-        // A null DeepL id means the preset explicitly disables translation (`deeplLanguage: false`).
         if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
             return RetranslationResult::skipped(sprintf(
                 'DeepL language not resolvable for source %s or target %s',
@@ -133,8 +130,8 @@ class Retranslator
         $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
         $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
 
-        // Scope to the current document: nested Documents are out of scope for a retranslation run.
-        // The entry node itself is always returned by `findSubtree`, so a Document entry still gets its own properties retranslated.
+        // Scope to the current document: nested documents are out of scope for a retranslation run.
+        // The entry node itself is always returned by `findSubtree`, so a document entry still gets its own properties retranslated.
         $sourceSubtree = $sourceSubgraph->findSubtree(
             $nodeAggregateId,
             FindSubtreeFilter::create(
@@ -258,7 +255,7 @@ class Retranslator
         /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
         $propertiesToTranslate = [];
         foreach ($stalePropertyNames as $propertyName) {
-            if (!$sourceNode->hasProperty($propertyName)) {
+            if (!$nodeType->hasProperty($propertyName->value)) {
                 continue;
             }
             $sourceValue = $sourceNode->getProperty($propertyName);
