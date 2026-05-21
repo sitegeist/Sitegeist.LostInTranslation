@@ -1,5 +1,8 @@
 @contentrepository
 Feature: Track the staleness state of translations and run retranslation on stale translations
+    # Note: We deliberately ignore hierarchy due to complexity reasons until depending projections are implemented.
+    # If this becomes a performance issue due to lots of orphaned stale translation records, we might need an additional
+    # cleanup mechanism like comparing the projection with the graph projection.
 
     Background:
         Given using the following content dimensions yaml configuration:
@@ -54,6 +57,23 @@ Feature: Track the staleness state of translations and run retranslation on stal
         autoTranslatableStringProperty:
           type: string
           defaultValue: "autoTranslateMe"
+          options:
+            automaticTranslation: true
+      options:
+        automaticTranslation: true
+    'Sitegeist.LostInTranslation.Testing:OtherLeafNodeWithAutomaticTranslation':
+      superTypes:
+        'Neos.Neos:Content': true
+      properties:
+        inlineEditableStringProperty:
+          type: string
+          ui:
+            inlineEditable: true
+        stringProperty:
+          type: string
+        replacementAutoTranslatableStringProperty:
+          type: string
+          defaultValue: "replacementAutoTranslateMe"
           options:
             automaticTranslation: true
       options:
@@ -242,7 +262,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
 
     Scenario: Complete retranslation cycle: Create a node, translate it, change the original, publish, rebase on another workspace, retranslate there and publish/rebase it back to its origin
-        # @todo missing steps: removal, node type change, partial publish, discard, partial discard, workspace removed, dimension space point moved
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
             | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                                                        | tetheredDescendantNodeAggregateIds |
@@ -393,3 +412,36 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName | "user-workspace" |
         Then I expect exactly the following stale translations:
             | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+    # @todo missing steps: partial publish, discard, partial discard, workspace removed, dimension space point moved
+    Scenario: Node Type Change
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                                                        |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When the command ChangeNodeAggregateType is executed with payload:
+            | Key             | Value                                                                       |
+            | nodeAggregateId | "sir-david-nodenborough"                                                    |
+            | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:OtherLeafNodeWithAutomaticTranslation" |
+            | strategy        | "happypath"                                                                 |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
+
+        When the command PublishWorkspace is executed with payload:
+            | Key                | Value            |
+            | workspaceName      | "user-workspace" |
+            | newContentStreamId | "new-user-cs-id" |
+        And the command ChangeNodeAggregateType is executed with payload:
+            | Key             | Value                                                                  |
+            | nodeAggregateId | "sir-david-nodenborough"                                               |
+            | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation" |
+            | strategy        | "happypath"                                                            |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |

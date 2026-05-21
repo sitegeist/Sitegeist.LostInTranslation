@@ -177,7 +177,8 @@ class StaleTranslationProjection implements ProjectionInterface
             NodePropertiesWereSet::class => $this->whenNodePropertiesWereSet($event),
             // @todo reference properties are still missing generally
             #NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
-            NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
+            // We deliberately ignore hierarchy due to complexity reasons until depending projections are implemented.
+            #NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
             NodeAggregateTypeWasChanged::class => $this->whenNodeAggregateTypeWasChanged($event),
 
             WorkspaceWasCreated::class => $this->whenWorkspaceWasCreated($event),
@@ -407,7 +408,54 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void
     {
-        // @todo thin out properties
+        /** @var array<int,array{workspaceName: string, nodeAggregateId: string, propertyNames: string}> $affectedRecords */
+        $affectedRecords = $this->dbal->executeQuery(
+            'SELECT * FROM ' . $this->itemTableName . ' WHERE nodeAggregateId = :nodeAggregateId AND workspaceName = :workspaceName',
+            [
+                'nodeAggregateId' => $event->nodeAggregateId->value,
+                'workspaceName' => $event->workspaceName->value,
+            ],
+        )->fetchAllAssociative();
+        $nodeType = $this->nodeTypeManager->getNodeType($event->newNodeTypeName);
+        if (!$nodeType) {
+            return;
+        }
+
+        $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
+            ->getPropertyNames();
+        $propertiesWithDefaultValue = [];
+        foreach ($nodeType->getDefaultValuesForProperties() as $propertyName => $defaultValue) {
+            /** @todo implement default value translation for objects */
+            if (is_string($defaultValue)) {
+                $propertiesWithDefaultValue[] = $propertyName;
+            }
+        }
+
+        foreach ($affectedRecords as $affectedRecord) {
+            $currentStaleProperties = \json_decode($affectedRecord['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
+            $newStaleProperties = array_merge($currentStaleProperties, $propertiesWithDefaultValue);
+            $newStaleProperties = array_intersect(
+                $newStaleProperties,
+                array_map(
+                    fn (PropertyName $propertyName): string => $propertyName->value,
+                    iterator_to_array($translatablePropertyNames),
+                )
+            );
+            if ($newStaleProperties != $currentStaleProperties) {
+                $this->dbal->update(
+                    $this->itemTableName,
+                    [
+                        'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
+                    ],
+                    [
+                        'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                        'workspaceName' => $affectedRecord['workspaceName'],
+                        'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                    ],
+                );
+            }
+        }
+
         $this->memorizeNodeTypeName(
             nodeAggregateId: $event->nodeAggregateId,
             nodeTypeName: $event->newNodeTypeName,
