@@ -13,7 +13,18 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And using the following node types:
     """yaml
     'Neos.ContentRepository:Root': []
+    # Minimal stand-ins for the production Neos.Neos mixins. We declare them inline because the
+    # Retranslator's filter (and the Document-filter scenario) names them by their canonical types,
+    # and pulling in the real mixin configuration would drag in unrelated constraints/properties.
+    'Neos.Neos:Content':
+      abstract: true
+    'Neos.Neos:ContentCollection':
+      abstract: true
+    'Neos.Neos:Document':
+      abstract: true
     'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
+      superTypes:
+        'Neos.Neos:Content': true
       childNodes:
         tethered:
           type: 'Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation'
@@ -31,6 +42,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
       options:
         automaticTranslation: true
     'Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation':
+      superTypes:
+        'Neos.Neos:Content': true
       properties:
         inlineEditableStringProperty:
           type: string
@@ -45,12 +58,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
             automaticTranslation: true
       options:
         automaticTranslation: true
-    # Minimal stand-in for the production Neos.Neos:Document mixin. We declare it inline here so the
-    # Document-filter scenario can extend it; the Retranslator's filter uses the same name. We do
-    # NOT pull in Neos.Neos:Document's real configuration (constraints, properties) because we only
-    # need the type identity for the filter to match.
-    'Neos.Neos:Document':
-      abstract: true
     'Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation':
       superTypes:
         'Neos.Neos:Document': true

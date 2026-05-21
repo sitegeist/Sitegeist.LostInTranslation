@@ -14,11 +14,9 @@ use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWri
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\NodeType\NodeTypeNames;
-use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
-use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
@@ -135,15 +133,13 @@ class Retranslator
         $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
         $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
 
-        // Scope to the current document: nested Documents are separate translation scopes and would
-        // get retranslated by their own call. `NodeTypeCriteria` deny rules are sub-type-aware, so
-        // denying `Neos.Neos:Document` also denies its subtypes. The entry node itself is always
-        // returned by `findSubtree`, so a Document entry still gets its own properties retranslated.
+        // Scope to the current document: nested Documents are out of scope for a retranslation run.
+        // The entry node itself is always returned by `findSubtree`, so a Document entry still gets its own properties retranslated.
         $sourceSubtree = $sourceSubgraph->findSubtree(
             $nodeAggregateId,
             FindSubtreeFilter::create(
-                nodeTypes: NodeTypeCriteria::createWithDisallowedNodeTypeNames(
-                    NodeTypeNames::fromStringArray(['Neos.Neos:Document']),
+                nodeTypes: NodeTypeCriteria::createWithAllowedNodeTypeNames(
+                    NodeTypeNames::fromStringArray(['Neos.Neos:ContentCollection', 'Neos.Neos:Content'])
                 ),
             ),
         );
@@ -167,33 +163,57 @@ class Retranslator
             $staleByNodeAggregateId[$staleTranslation->nodeAggregateId->value] = $staleTranslation;
         }
 
-        // One depth-first walk emits both buckets.
-        // TODO: maybe without passing references to command arrays?
+        // Iterative depth-first pre-order walk over the source subtree. For each node:
+        //   - Emit SetNodeProperties if a stale record exists AND the target variant already exists.
+        //     (Missing target → defer to CreateNodeVariant + hook cascade.)
+        //   - Emit CreateNodeVariant if the target variant is missing AND the node is non-tethered.
+        //     Tethered descendants come along automatically with their ancestor variant.
+        //
+        // Children are pushed onto the stack in reverse so they pop in declaration order
+        // (preserves pre-order; matches event-index assertions in the Behat tests).
+        $nodeTypeManager = $cr->getNodeTypeManager();
         $stalePropertyCommands = [];
         $variantCommands = [];
-        $this->collectCommands(
-            subtree: $sourceSubtree,
-            targetSubgraph: $targetSubgraph,
-            staleByNodeAggregateId: $staleByNodeAggregateId,
-            sourceDeeplLanguage: $sourceDeeplLanguage,
-            targetDeeplLanguage: $targetDeeplLanguage,
-            nodeTypeManager: $cr->getNodeTypeManager(),
-            stalePropertyCommands: $stalePropertyCommands,
-            variantCommands: $variantCommands,
-        );
+        $stack = [$sourceSubtree];
+        while ($stack !== []) {
+            $currentSubtree = array_pop($stack);
+            $sourceNode = $currentSubtree->node;
+            $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
-        // Dispatch order:
-        //   * Stale fix-ups first (cheap, one DeepL call each). A mid-flight failure leaves variants
-        //     missing rather than half-created with wrong content.
-        //   * Variants second (each can fan out into multiple hook-cascade events).
-        //
-        // AI attribution: wrap direct `SetNodeProperties` dispatches via `dispatchAsAi` — the hook
-        // does not fire for these. Variants are NOT wrapped; the hook's `onAfterHandle` sets the AI
-        // id itself for its cascaded SetNodeProperties.
-        //
-        // Partial failure: `$cr->handle()` is sync and may throw; commands already dispatched stay
-        // committed. This driver is best-effort.
+            $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
+            if ($stale !== null && $existsInTarget) {
+                $command = $this->tryBuildSetNodeProperties(
+                    nodeTypeManager: $nodeTypeManager,
+                    sourceNode: $sourceNode,
+                    stalePropertyNames: $stale->propertyNames,
+                    // Use the OriginDimensionSpacePoint from the stale record, not a freshly built
+                    // one — it reflects where the variant actually lives (matters for spec/gen
+                    // variants).
+                    targetOrigin: $stale->originDimensionSpacePoint,
+                    sourceDeeplLanguage: $sourceDeeplLanguage,
+                    targetDeeplLanguage: $targetDeeplLanguage,
+                );
+                if ($command !== null) {
+                    $stalePropertyCommands[] = $command;
+                }
+            }
+
+            if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
+                $variantCommands[] = CreateNodeVariant::create(
+                    $sourceNode->workspaceName,
+                    $sourceNode->aggregateId,
+                    $sourceNode->originDimensionSpacePoint,
+                    OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
+                );
+            }
+
+            foreach (array_reverse([...$currentSubtree->children]) as $childSubtree) {
+                $stack[] = $childSubtree;
+            }
+        }
+
         foreach ($stalePropertyCommands as $command) {
+            // Mark commands as "triggered by AI"
             $this->dispatchAsAi($cr, $command);
         }
         foreach ($variantCommands as $command) {
@@ -204,82 +224,6 @@ class Retranslator
             stalePropertyCommandsDispatched: count($stalePropertyCommands),
             variantCommandsDispatched: count($variantCommands),
         );
-    }
-
-    /**
-     * Depth-first pre-order walk of the source subtree. For each node:
-     *
-     *   - Emit `SetNodeProperties` if a stale record exists AND the target variant exists.
-     *   - Emit `CreateNodeVariant` if the target variant is missing AND the node is non-tethered.
-     *
-     * Tethered nodes are skipped for variant creation — the CR auto-creates them with their
-     * non-tethered ancestor, and the hook handles their property translation. We still recurse into
-     * tethered subtrees in case they contain non-tethered descendants.
-     *
-     * The variant `sourceOrigin` is `$sourceNode->originDimensionSpacePoint` (where the node
-     * actually lives), not the requested source DSP — the source may have fallen back via
-     * generalisation, and the CR rejects mismatched origins.
-     *
-     * Workspace and target DSP are derived from the subgraphs / nodes rather than passed in.
-     * `NodeTypeManager` is threaded through because it's per-CR (not a globally-injectable service).
-     *
-     * @param array<string, \Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation> $staleByNodeAggregateId
-     * @param list<SetNodeProperties> $stalePropertyCommands  Mutated; appended to in walk order.
-     * @param list<CreateNodeVariant> $variantCommands        Mutated; appended to in walk order.
-     */
-    private function collectCommands(
-        Subtree $subtree,
-        ContentSubgraphInterface $targetSubgraph,
-        array $staleByNodeAggregateId,
-        string $sourceDeeplLanguage,
-        string $targetDeeplLanguage,
-        NodeTypeManager $nodeTypeManager,
-        array &$stalePropertyCommands,
-        array &$variantCommands,
-    ): void {
-        $sourceNode = $subtree->node;
-        $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
-
-        // Only emit SetNodeProperties when the target variant exists; otherwise the
-        // CreateNodeVariant below + hook cascade handles initial translation.
-        $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
-        if ($stale !== null && $existsInTarget) {
-            $command = $this->tryBuildSetNodeProperties(
-                nodeTypeManager: $nodeTypeManager,
-                sourceNode: $sourceNode,
-                stalePropertyNames: $stale->propertyNames,
-                // Use the OriginDimensionSpacePoint from the stale record, not a freshly built one
-                // — it reflects where the variant actually lives (matters for spec/gen variants).
-                targetOrigin: $stale->originDimensionSpacePoint,
-                sourceDeeplLanguage: $sourceDeeplLanguage,
-                targetDeeplLanguage: $targetDeeplLanguage,
-            );
-            if ($command !== null) {
-                $stalePropertyCommands[] = $command;
-            }
-        }
-
-        if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
-            $variantCommands[] = CreateNodeVariant::create(
-                $sourceNode->workspaceName,
-                $sourceNode->aggregateId,
-                $sourceNode->originDimensionSpacePoint,
-                OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
-            );
-        }
-
-        foreach ($subtree->children as $childSubtree) {
-            $this->collectCommands(
-                subtree: $childSubtree,
-                targetSubgraph: $targetSubgraph,
-                staleByNodeAggregateId: $staleByNodeAggregateId,
-                sourceDeeplLanguage: $sourceDeeplLanguage,
-                targetDeeplLanguage: $targetDeeplLanguage,
-                nodeTypeManager: $nodeTypeManager,
-                stalePropertyCommands: $stalePropertyCommands,
-                variantCommands: $variantCommands,
-            );
-        }
     }
 
     /**
