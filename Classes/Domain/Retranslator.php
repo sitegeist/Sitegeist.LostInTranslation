@@ -12,8 +12,10 @@ use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
 use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
+use Neos\ContentRepository\Core\NodeType\NodeTypeNames;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
@@ -182,10 +184,24 @@ class Retranslator
         $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
         $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
 
-        // `findSubtree` with an empty filter walks the entire subtree below `$nodeAggregateId`. We use
-        // it (rather than recursive `findChildNodes`) so the same `Subtree` object can be fed to
-        // `StaleTranslationFinder::findBySubtree` later when querying for stale records.
-        $sourceSubtree = $sourceSubgraph->findSubtree($nodeAggregateId, FindSubtreeFilter::create());
+        // Walk the entry node's subtree but stop at nested Documents. Retranslating one document
+        // should not bleed into its child pages — each child Document is its own translation scope
+        // and would otherwise be picked up by a separate retranslate call. The
+        // `NodeTypeCriteria::createWithDisallowedNodeTypeNames` contract is sub-type-aware (see
+        // `Packages/Libraries/neos/contentrepository-core/.../NodeTypeCriteria.php`): denying
+        // `Neos.Neos:Document` also denies every NodeType inheriting from it.
+        //
+        // The entry node itself is always returned by `findSubtree` even if it is a Document —
+        // only descendants are filtered. That's the intended behaviour: the entry Document's own
+        // properties (title, uriPathSegment, …) still get retranslated.
+        $sourceSubtree = $sourceSubgraph->findSubtree(
+            $nodeAggregateId,
+            FindSubtreeFilter::create(
+                nodeTypes: NodeTypeCriteria::createWithDisallowedNodeTypeNames(
+                    NodeTypeNames::fromStringArray(['Neos.Neos:Document']),
+                ),
+            ),
+        );
         if ($sourceSubtree === null) {
             $reason = sprintf(
                 'source node %s not found in DSP %s',
@@ -199,29 +215,41 @@ class Retranslator
         // -----------------------------------------------------------------------------------------
         // Command collection phase
         //
-        // We collect ALL commands before dispatching ANY. Rationale:
+        // We collect ALL commands before dispatching ANY, in one depth-first walk of the source
+        // subtree. Rationale:
         //   * The stale-translation projection (and the content graph) only updates after each
-        //     `$cr->handle()` returns. If we dispatched stale-fix commands during collection of
-        //     variant commands, the variant walk would observe a partially-updated graph.
-        //   * Collecting first also makes the order of dispatch (stale → variant) explicit and easy
-        //     to reason about, regardless of how many of each we end up with.
+        //     `$cr->handle()` returns. Collecting up-front guarantees we never observe a
+        //     partially-updated state.
+        //   * One walk emits both buckets, so they end up in matching subtree order. The dispatch
+        //     loop preserves that order, which keeps the resulting event stream hierarchical —
+        //     important for the Behat event-index assertions and easier to reason about overall.
         // -----------------------------------------------------------------------------------------
 
-        $stalePropertyCommands = $this->collectStalePropertyCommands(
-            cr: $cr,
-            workspaceName: $workspaceName,
-            nodeAggregateId: $nodeAggregateId,
-            sourceSubgraph: $sourceSubgraph,
-            targetSubgraph: $targetSubgraph,
-            sourceDeeplLanguage: $sourceDeeplLanguage,
-            targetDeeplLanguage: $targetDeeplLanguage,
-        );
+        // Pre-fetch all stale records under the source subtree at the target origin, keyed by
+        // node aggregate id value for O(1) lookup during the walk. The finder takes the
+        // *source* subtree (for the node id list it covers) but filters by the *target* origin
+        // dsp hash — that's where stale records live.
+        $staleByNodeAggregateId = [];
+        $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
+        $staleTranslations = $cr->projectionState(StaleTranslationFinder::class)
+            ->findBySubtree($sourceSubtree, $targetOrigin);
+        foreach ($staleTranslations as $staleTranslation) {
+            $staleByNodeAggregateId[$staleTranslation->nodeAggregateId->value] = $staleTranslation;
+        }
 
-        $variantCommands = $this->collectMissingVariantCommands(
+        $stalePropertyCommands = [];
+        $variantCommands = [];
+        $this->collectCommands(
             subtree: $sourceSubtree,
             targetSubgraph: $targetSubgraph,
+            staleByNodeAggregateId: $staleByNodeAggregateId,
             workspaceName: $workspaceName,
             targetDimensionSpacePoint: $targetDimensionSpacePoint,
+            sourceDeeplLanguage: $sourceDeeplLanguage,
+            targetDeeplLanguage: $targetDeeplLanguage,
+            cr: $cr,
+            stalePropertyCommands: $stalePropertyCommands,
+            variantCommands: $variantCommands,
         );
 
         // -----------------------------------------------------------------------------------------
@@ -267,143 +295,92 @@ class Retranslator
     }
 
     /**
-     * Build one `SetNodeProperties` command per stale-translation record under the target subtree.
+     * Depth-first pre-order walk of the source subtree. For each visited source node:
      *
-     * Key design decision — feed the **target** subtree (not the source) into
-     * `StaleTranslationFinder::findBySubtree`. The finder filters by
-     * `subtree.node.originDimensionSpacePoint.hash`, which on the target side is the target DSP. The
-     * source subtree's origin would obviously not match any target-language stale records.
+     *   * If a stale record exists for it at the target origin, build a translated
+     *     `SetNodeProperties` and append to `$stalePropertyCommands`.
+     *   * If it has no variant in the target subgraph AND it is non-tethered, build a
+     *     `CreateNodeVariant` and append to `$variantCommands`.
      *
-     * If the target root node does not exist yet (typical first retranslation: the user creates a
-     * page in `en`, never translates it to `de`, then asks us to retranslate `de`), this branch
-     * short-circuits. The companion {@see collectMissingVariantCommands()} pass will create the
-     * variant; the {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
-     * then cascades the translation, so no work is missed.
+     * Tethered nodes are skipped for variant creation: the CR auto-creates structurally-required
+     * tethered descendants as part of their non-tethered parent's variant creation, and the
+     * {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
+     * cascades property translation for those auto-created tethered nodes. Emitting an explicit
+     * `CreateNodeVariant` for a tethered node would be redundant or rejected. We still recurse into
+     * tethered subtrees, because their descendants may include non-tethered nodes that need their
+     * own command.
      *
-     * @return list<SetNodeProperties>
+     * Variant `sourceOrigin` uses `$sourceNode->originDimensionSpacePoint` (where the source node
+     * actually lives), not a freshly built OriginDSP from `$targetDimensionSpacePoint`. The CR
+     * rejects `CreateNodeVariant` commands whose `sourceOrigin` doesn't match where the node
+     * actually lives — important when the source has fallen back via generalisation.
+     *
+     * @param array<string, \Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation> $staleByNodeAggregateId
+     * @param list<SetNodeProperties> $stalePropertyCommands  Mutated in place; appended to in walk order.
+     * @param list<CreateNodeVariant> $variantCommands        Mutated in place; appended to in walk order.
      */
-    private function collectStalePropertyCommands(
-        ContentRepository $cr,
-        WorkspaceName $workspaceName,
-        NodeAggregateId $nodeAggregateId,
-        ContentSubgraphInterface $sourceSubgraph,
+    private function collectCommands(
+        Subtree $subtree,
         ContentSubgraphInterface $targetSubgraph,
+        array $staleByNodeAggregateId,
+        WorkspaceName $workspaceName,
+        DimensionSpacePoint $targetDimensionSpacePoint,
         string $sourceDeeplLanguage,
         string $targetDeeplLanguage,
-    ): array {
-        // No target node yet → nothing exists to fix-up; defer the whole subtree to the
-        // missing-variant pass + hook cascade.
-        if ($targetSubgraph->findNodeById($nodeAggregateId) === null) {
-            return [];
-        }
-        $targetSubtree = $targetSubgraph->findSubtree($nodeAggregateId, FindSubtreeFilter::create());
-        if ($targetSubtree === null) {
-            return [];
-        }
+        ContentRepository $cr,
+        array &$stalePropertyCommands,
+        array &$variantCommands,
+    ): void {
+        $sourceNode = $subtree->node;
+        $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
-        // Projection state is accessed by interface class name. This returns the
-        // `StaleTranslationFinder` instance built per-CR by the projection factory.
-        $finder = $cr->projectionState(StaleTranslationFinder::class);
-        $staleTranslations = $finder->findBySubtree($targetSubtree);
-
-        $commands = [];
-        foreach ($staleTranslations as $staleTranslation) {
-            $sourceNode = $sourceSubgraph->findNodeById($staleTranslation->nodeAggregateId);
-            if ($sourceNode === null) {
-                // The stale record references a node that no longer exists in the source dimension —
-                // typically because the source node was removed after the stale record was written.
-                // Skipping is safe: a subsequent `NodeAggregateWasRemoved` projection handler (TODO
-                // in StaleTranslationProjection) is the proper place to clean this up.
-                $this->logger?->debug(sprintf(
-                    'Retranslator: stale node %s missing in source DSP; skipping.',
-                    $staleTranslation->nodeAggregateId->value,
-                ));
-                continue;
-            }
+        // Only emit SetNodeProperties when the target variant already exists. If it doesn't, we
+        // fall through to CreateNodeVariant below; the hook's translation cascade then writes the
+        // initial translated properties and clears the matching stale record via the projection's
+        // NodePropertiesWereSet handler. Emitting SetNodeProperties against a non-existent target
+        // origin would be rejected by the CR.
+        $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
+        if ($stale !== null && $existsInTarget) {
             $command = $this->tryBuildSetNodeProperties(
                 cr: $cr,
                 sourceNode: $sourceNode,
-                stalePropertyNames: $staleTranslation->propertyNames,
+                stalePropertyNames: $stale->propertyNames,
                 workspaceName: $workspaceName,
-                // Use the OriginDimensionSpacePoint from the stale record, not a freshly built one
-                // from `$targetDimensionSpacePoint`. The stale record's origin already reflects where
-                // the target variant actually lives in this workspace — important when the variant
-                // was created by specialisation/generalisation and may not match the requested target
-                // DSP exactly.
-                targetOrigin: $staleTranslation->originDimensionSpacePoint,
+                // The stale record's origin already reflects where the target variant actually
+                // lives in this workspace — important when the variant was created by
+                // specialisation/generalisation and may not match the requested target DSP exactly.
+                targetOrigin: $stale->originDimensionSpacePoint,
                 sourceDeeplLanguage: $sourceDeeplLanguage,
                 targetDeeplLanguage: $targetDeeplLanguage,
             );
             if ($command !== null) {
-                $commands[] = $command;
+                $stalePropertyCommands[] = $command;
             }
         }
-        return $commands;
-    }
 
-    /**
-     * Walk the source subtree and emit a `CreateNodeVariant` command for every NON-TETHERED node
-     * not yet present in the target subgraph.
-     *
-     * Tethered nodes are deliberately skipped: when a regular (non-tethered) ancestor variant is
-     * created, the CR auto-creates all of its structurally-required tethered descendants as part of
-     * the same operation. Emitting an explicit `CreateNodeVariant` for a tethered node would either
-     * be redundant (the auto-create has already happened) or be rejected by the CR (tethered nodes
-     * are not eligible to be created via the variation flow). The hook's tethered-children cascade
-     * then handles property translation for those auto-created tethered nodes.
-     *
-     * Crucially, we use `$sourceNode->originDimensionSpacePoint` as the `sourceOrigin` of the variant
-     * command — NOT a freshly built OriginDSP from `$targetDimensionSpacePoint`'s sibling-source. The
-     * source node may have originated in a generalisation/specialisation of the requested source DSP
-     * (i.e. fall back behaviour), and the CR rejects `CreateNodeVariant` commands whose `sourceOrigin`
-     * doesn't match where the node actually lives.
-     *
-     * We do NOT emit a follow-up `SetNodeProperties` here for the freshly-created variant — the
-     * existing {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
-     * intercepts `CreateNodeVariant` events and emits the translated SetNodeProperties cascade
-     * itself (including for tethered descendants). Duplicating that work here would cause double
-     * translation and conflicting events.
-     *
-     * @return list<CreateNodeVariant>
-     */
-    private function collectMissingVariantCommands(
-        Subtree $subtree,
-        ContentSubgraphInterface $targetSubgraph,
-        WorkspaceName $workspaceName,
-        DimensionSpacePoint $targetDimensionSpacePoint,
-    ): array {
-        $commands = [];
-        $sourceNode = $subtree->node;
-        // Only emit a CreateNodeVariant for non-tethered nodes — the CR creates tethered children
-        // automatically as part of their non-tethered parent's variant creation. The recursion below
-        // still descends into a tethered node's children, because a tethered subtree may contain
-        // regular (non-tethered) descendants that need their own command.
-        if (
-            !$sourceNode->classification->isTethered()
-            && $targetSubgraph->findNodeById($sourceNode->aggregateId) === null
-        ) {
-            $commands[] = CreateNodeVariant::create(
+        if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
+            $variantCommands[] = CreateNodeVariant::create(
                 $workspaceName,
                 $sourceNode->aggregateId,
                 $sourceNode->originDimensionSpacePoint,
                 OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
             );
         }
-        // Recursive walk — `Subtree::$children` is a `Subtrees` IteratorAggregate of further `Subtree`
-        // instances, so the recursion bottoms out naturally at leaf nodes (empty children).
+
         foreach ($subtree->children as $childSubtree) {
-            foreach (
-                $this->collectMissingVariantCommands(
-                    $childSubtree,
-                    $targetSubgraph,
-                    $workspaceName,
-                    $targetDimensionSpacePoint,
-                ) as $childCommand
-            ) {
-                $commands[] = $childCommand;
-            }
+            $this->collectCommands(
+                subtree: $childSubtree,
+                targetSubgraph: $targetSubgraph,
+                staleByNodeAggregateId: $staleByNodeAggregateId,
+                workspaceName: $workspaceName,
+                targetDimensionSpacePoint: $targetDimensionSpacePoint,
+                sourceDeeplLanguage: $sourceDeeplLanguage,
+                targetDeeplLanguage: $targetDeeplLanguage,
+                cr: $cr,
+                stalePropertyCommands: $stalePropertyCommands,
+                variantCommands: $variantCommands,
+            );
         }
-        return $commands;
     }
 
     /**
@@ -429,6 +406,18 @@ class Retranslator
      * would require either a synthetic command or a refactor of the hook — both of which were
      * judged worse than ~40 lines of duplication for now.
      */
+    /**
+     * Trust contract: `StaleTranslationProjection` only writes stale records for node aggregates
+     * whose NodeType is translation-enabled AND whose listed properties are translatable at the
+     * time of writing. So we no longer guard against `null` NodeType, disabled directive, or
+     * `findByName === null` — if a record exists, those invariants held. The `StaleTranslationProjection`
+     * is also expected to update its own rows when translation config changes (e.g. on replay), so
+     * post-write drift is handled there, not here.
+     *
+     * The remaining per-property guards (`hasProperty` + empty-value) still matter: an editor can
+     * blank out the source property between the stale record being written and this dispatch, and
+     * we should silently skip rather than emit a no-op or wrong translation.
+     */
     private function tryBuildSetNodeProperties(
         ContentRepository $cr,
         Node $sourceNode,
@@ -439,28 +428,17 @@ class Retranslator
         string $targetDeeplLanguage,
     ): ?SetNodeProperties {
         $nodeType = $cr->getNodeTypeManager()->getNodeType($sourceNode->nodeTypeName);
+        // Defensive: the projection guarantees the node type existed when the stale record was
+        // written. If it has been removed from the schema since, there is no way to identify the
+        // connector for non-string properties — skip rather than throw.
         if ($nodeType === null) {
-            // Node type was removed from the schema since the stale record was written.
-            // Without a node type we cannot determine which properties are translatable or which
-            // connector to use, so we cannot safely build a command.
             return null;
         }
         $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
-        if ($directive->enabled === false) {
-            // Node type opted out of automatic translation after the stale record was written.
-            return null;
-        }
 
         /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
         $propertiesToTranslate = [];
         foreach ($stalePropertyNames as $propertyName) {
-            $translatable = $directive->translatablePropertyNames->findByName($propertyName);
-            if ($translatable === null) {
-                // Property is no longer translatable per the current node type definition — skip.
-                // This is an edge case (integrator removed `automaticTranslation: true` from a
-                // property).
-                continue;
-            }
             if (!$sourceNode->hasProperty($propertyName)) {
                 continue;
             }
@@ -470,16 +448,16 @@ class Retranslator
                 continue;
             }
 
-            // Property does not exist anymore?
             $name = $propertyName->value;
             assert($name !== '');
 
-            if (is_object($sourceValue) && ($connector = $translatable->translationConnector) !== null) {
+            $translatable = $directive->translatablePropertyNames->findByName($propertyName);
+            if (is_object($sourceValue) && $translatable?->translationConnector !== null) {
                 // Non-string property type → use its registered TranslationConnector to extract the
-                // translatable string fragments (returns an associative array<string, string>). These
-                // get enflated/deflated through `ArrayFlatteningUtility` below so DeepL sees a flat
-                // string→string map.
-                $propertiesToTranslate[$name] = $connector->extractTranslations($sourceValue);
+                // translatable string fragments (returns an associative array<string, string>).
+                // These get enflated/deflated through `ArrayFlatteningUtility` below so DeepL sees
+                // a flat string→string map.
+                $propertiesToTranslate[$name] = $translatable->translationConnector->extractTranslations($sourceValue);
             } elseif (is_string($sourceValue)) {
                 $propertiesToTranslate[$name] = $sourceValue;
             }

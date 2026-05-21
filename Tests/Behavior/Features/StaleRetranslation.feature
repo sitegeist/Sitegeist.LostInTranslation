@@ -45,6 +45,22 @@ Feature: Track the staleness state of translations and run retranslation on stal
             automaticTranslation: true
       options:
         automaticTranslation: true
+    # Minimal stand-in for the production Neos.Neos:Document mixin. We declare it inline here so the
+    # Document-filter scenario can extend it; the Retranslator's filter uses the same name. We do
+    # NOT pull in Neos.Neos:Document's real configuration (constraints, properties) because we only
+    # need the type identity for the filter to match.
+    'Neos.Neos:Document':
+      abstract: true
+    'Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation':
+      superTypes:
+        'Neos.Neos:Document': true
+      properties:
+        autoTranslatableStringProperty:
+          type: string
+          options:
+            automaticTranslation: true
+      options:
+        automaticTranslation: true
     """
         And using identifier "default", I define a content repository
         And I am in content repository "default"
@@ -125,15 +141,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
         And I expect exactly 14 events to be published on stream "ContentStream:user-cs-id"
-        # 2 NodePropertiesWereSet for translations of "sir-david-nodenborough" and it's tethered node "nodewyn-tetherton"
+        # 2 NodePropertiesWereSet for translations of "sir-david-nodenborough" and its tethered child "nodewyn-tetherton".
+        # The Retranslator emits these in depth-first pre-order of the source subtree, so the parent
+        # ("sir-david-nodenborough") fires before its child ("nodewyn-tetherton").
         And event at index 10 is of type "NodePropertiesWereSet" with payload:
-            | Key                                                 | Expected                               |
-            | workspaceName                                       | "user-workspace"                       |
-            | contentStreamId                                     | "user-cs-id"                           |
-            | nodeAggregateId                                     | "nodewyn-tetherton"                    |
-            | originDimensionSpacePoint                           | {"language": "de"}                     |
-            | propertyValues.autoTranslatableStringProperty.value | "My adjusted tethered Text translated" |
-        And event at index 11 is of type "NodePropertiesWereSet" with payload:
             | Key                                                 | Expected                            |
             | workspaceName                                       | "user-workspace"                    |
             | contentStreamId                                     | "user-cs-id"                        |
@@ -141,6 +152,13 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | originDimensionSpacePoint                           | {"language": "de"}                  |
             | propertyValues.inlineEditableStringProperty.value   | "My adjusted Text translated"       |
             | propertyValues.autoTranslatableStringProperty.value | "My adjusted Other Text translated" |
+        And event at index 11 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                               |
+            | workspaceName                                       | "user-workspace"                       |
+            | contentStreamId                                     | "user-cs-id"                           |
+            | nodeAggregateId                                     | "nodewyn-tetherton"                    |
+            | originDimensionSpacePoint                           | {"language": "de"}                     |
+            | propertyValues.autoTranslatableStringProperty.value | "My adjusted tethered Text translated" |
         # 1 Node Created for missing node in target dimension space point: "nody-mc-nodeface" in {"language": "de"}
         And event at index 12 is of type "NodePeerVariantWasCreated" with payload:
             | Key                    | Expected                                                           |
@@ -158,6 +176,33 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | originDimensionSpacePoint                           | {"language": "de"}                    |
             | propertyValues.inlineEditableStringProperty.value   | "My Grandchild Text translated"       |
             | propertyValues.autoTranslatableStringProperty.value | "My Other Grandchild Text translated" |
+
+    Scenario: Retranslate skips nested Document subtrees
+        # Retranslating a Document must NOT bleed into child Documents (separate pages, separate
+        # translation scope). The Retranslator's source-subtree walk is scoped via
+        # `NodeTypeCriteria::createWithDisallowedNodeTypeNames(['Neos.Neos:Document'])`, so
+        # descendants of the entry Document that are themselves Documents (or subtypes) get filtered
+        # out before any stale lookup / variant emission considers them.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                          | initialPropertyValues                              |
+            | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation  | {"autoTranslatableStringProperty": "Parent Text"}  |
+            | child-doc       | parent-doc             | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation  | {"autoTranslatableStringProperty": "Child Text"}   |
+        # Both Documents are translatable, so each gets a stale entry at the target language.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                        |
+            | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"]   |
+            | user-workspace | {"language":"de"}         | parent-doc      | ["autoTranslatableStringProperty"]   |
+
+        When I retranslate node "parent-doc" in workspace "user-workspace" and dimension space point {"language":"de"}
+
+        # parent-doc was the entry node, so the filter still includes it: a `de` variant gets created
+        # via CreateNodeVariant → TranslationCommandHook cascades a NodePropertiesWereSet → projection
+        # clears parent-doc's stale entry. child-doc is a Document descendant and is excluded from
+        # the walk; its stale entry must remain untouched.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                        |
+            | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"]   |
 
     Scenario: Retranslating into the source language is a no-op
         # Only `de` has `referenceLanguage: en` in the Background's dimension configuration. Asking
@@ -288,14 +333,14 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         And I expect exactly 11 events to be published on stream "ContentStream:user-cs-id"
-        And event at index 9 is of type "NodePropertiesWereSet" with payload:
+        And event at index 7 is of type "NodePropertiesWereSet" with payload:
             | Key                                                 | Expected                            |
             | contentStreamId                                     | "user-cs-id"                        |
             | nodeAggregateId                                     | "sir-david-nodenborough"            |
             | originDimensionSpacePoint                           | {"language": "de"}                  |
             | propertyValues.inlineEditableStringProperty.value   | "My adjusted child Text translated" |
             | propertyValues.autoTranslatableStringProperty.value | "My adjusted child Text translated" |
-        And event at index 10 is of type "NodeAggregateWithNodeWasCreated" with payload:
+        And event at index 8 is of type "NodeAggregateWithNodeWasCreated" with payload:
             | Key                                                 | Expected                            |
             | contentStreamId                                     | "user-cs-id"                        |
             | nodeAggregateId                                     | "nody-mc-nodeface"                  |
