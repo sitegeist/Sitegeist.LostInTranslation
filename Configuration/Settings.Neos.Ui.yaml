@@ -1,0 +1,13 @@
+Neos:
+  Neos:
+    userInterface:
+      translation:
+        autoInclude:
+          'Sitegeist.LostInTranslation':
+            - Main
+            - 'NodeTypes/*'
+    Ui:
+      resources:
+        javascript:
+          'Sitegeist.LostInTranslation:InspectorViewPlugin':
+            resource: 'resource://Sitegeist.LostInTranslation/Public/JavaScript/Plugin.js'

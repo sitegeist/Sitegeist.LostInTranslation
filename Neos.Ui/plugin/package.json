@@ -1,0 +1,13 @@
+{
+    "name": "@sitegeist/lostintranslation-plugin",
+    "license": "MIT",
+    "version": "0.0.0",
+    "scripts": {
+        "build": "node esbuild.js",
+        "watch": "node esbuild.js --watch"
+    },
+    "dependencies": {
+        "@neos-project/neos-ui-extensibility": "~9.0.8",
+        "@sitegeist/lostintranslation-retranslate-editor": "workspace:*"
+    }
+}

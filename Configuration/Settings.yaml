@@ -99,3 +99,22 @@ Sitegeist:
       # !!! this is experimental and may be removed in future !!!
       #
       experimental-applyHtmlEntityDecodeAfterTranslation: false
+
+Neos:
+  Flow:
+    mvc:
+      routes:
+        # Enable Configuration/Routes.yaml so the Inspector "Retranslate" view can
+        # reach RetranslationController.
+        'Sitegeist.LostInTranslation': true
+    security:
+      authentication:
+        providers:
+          # Protect the retranslation endpoints with the standard Neos backend
+          # authentication. Without this, anyone could POST to retranslateNode.
+          'Neos.Neos:Backend':
+            requestPatterns:
+              'Sitegeist.LostInTranslation:Retranslation':
+                pattern: 'ControllerObjectName'
+                patternOptions:
+                  controllerObjectNamePattern: 'Sitegeist\LostInTranslation\Controller\RetranslationController'
