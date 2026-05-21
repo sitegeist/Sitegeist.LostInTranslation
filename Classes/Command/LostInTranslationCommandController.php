@@ -93,6 +93,14 @@ class LostInTranslationCommandController extends CommandController
     /**
      * Retranslate (stale properties + missing variants) below the given node into the target language dimension.
      *
+     * Thin shell-friendly wrapper around {@see Retranslator::retranslateNode()}. Exists so the same
+     * driver that powers the Behat `iRetranslateNode` step can also be exercised manually against a
+     * real DeepL key in a Neos distribution. Keeps all real logic in `Retranslator` — this method
+     * intentionally adds no behaviour beyond argument parsing and a confirmation line.
+     *
+     * `$target` is the **target** dimension value (where translations land). The source is derived
+     * from the target preset's `referenceLanguage` option by the Retranslator itself.
+     *
      * @param string $nodeAggregateId
      * @param string $target
      * @param string $contentRepository
@@ -105,12 +113,27 @@ class LostInTranslationCommandController extends CommandController
         string $contentRepository = 'default',
         string $workspace = 'live',
     ): void {
-        $this->retranslator->retranslateNode(
+        $result = $this->retranslator->retranslateNode(
             ContentRepositoryId::fromString($contentRepository),
             WorkspaceName::fromString($workspace),
             NodeAggregateId::fromString($nodeAggregateId),
             DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]),
         );
-        $this->outputLine('Retranslation finished for node %s -> %s', [$nodeAggregateId, $target]);
+
+        // Tell the operator what actually happened. The previous version printed "finished" even on
+        // a silent no-op skip path (e.g. invoking retranslate on the source language itself, or with
+        // DeepL disabled for one of the presets), which made misconfiguration invisible from the CLI.
+        if ($result->skippedReason !== null) {
+            $this->outputLine('Retranslation for node %s -> %s skipped: %s', [$nodeAggregateId, $target, $result->skippedReason]);
+            return;
+        }
+        if ($result->isNoOp()) {
+            $this->outputLine('Retranslation for node %s -> %s: nothing to do (no stale properties, no missing variants).', [$nodeAggregateId, $target]);
+            return;
+        }
+        $this->outputLine(
+            'Retranslation for node %s -> %s: dispatched %d stale property update(s) and %d variant creation(s).',
+            [$nodeAggregateId, $target, $result->stalePropertyCommandsDispatched, $result->variantCommandsDispatched],
+        );
     }
 }

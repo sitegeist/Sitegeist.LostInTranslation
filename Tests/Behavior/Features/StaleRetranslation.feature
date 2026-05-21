@@ -159,6 +159,36 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | propertyValues.inlineEditableStringProperty.value   | "My Grandchild Text translated"       |
             | propertyValues.autoTranslatableStringProperty.value | "My Other Grandchild Text translated" |
 
+    Scenario: Retranslating into the source language is a no-op
+        # Only `de` has `referenceLanguage: en` in the Background's dimension configuration. Asking
+        # the Retranslator to retranslate INTO `en` therefore has no defined source dimension and
+        # must not touch the stale-translation projection or emit any new events. This is the skip
+        # path a bulk-retranslate-all-languages loop would hit when it reaches the source itself.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                                                        | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} | {"tethered": "nodewyn-tetherton"}  |
+        # Setup stale state we expect to remain untouched after the no-op retranslate.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        # Snapshot event count BEFORE the no-op so we can assert it doesn't change.
+        # 1x ContentStreamWasForked (CreateWorkspace user-workspace) + 2x NodeAggregateWithNodeWasCreated
+        # (sir-david + tethered nodewyn-tetherton) = 3 events on the user-workspace stream.
+        And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
+
+        When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"en"}
+
+        # Stale state untouched.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+        # Event count untouched.
+        And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
+
     Scenario: Complete retranslation cycle: Create a node, translate it, change the original, publish, rebase on another workspace, retranslate there and publish/rebase it back to its origin
         # @todo missing steps: removal, node type change, partial publish, discard, partial discard, workspace removed, dimension space point moved
         When I am in workspace "user-workspace"

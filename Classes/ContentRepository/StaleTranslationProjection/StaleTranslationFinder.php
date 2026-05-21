@@ -36,6 +36,17 @@ final class StaleTranslationFinder implements ProjectionStateInterface
         return StaleTranslations::fromDatabaseRows($staleTranslationRows);
     }
 
+    /**
+     * Find all stale-translation records whose node aggregate lives inside the given subtree, in
+     * that subtree's workspace, with its origin DSP.
+     *
+     * Important: this filters by `$subtree->node->originDimensionSpacePoint->hash` — so callers must
+     * pass the **target-language** subtree (the one whose stale entries they want), NOT the
+     * source-language subtree. Feeding the source subtree would never match anything because stale
+     * records are written at the *target* origin.
+     *
+     * TODO: is this assumption correct?
+     */
     public function findBySubtree(Subtree $subtree): StaleTranslations
     {
         $staleTranslationRows = $this->dbal->executeQuery(
@@ -51,6 +62,12 @@ final class StaleTranslationFinder implements ProjectionStateInterface
                 'originDimensionSpacePointHash' => $subtree->node->originDimensionSpacePoint->hash,
             ],
             [
+                // `ArrayParameterType::STRING` is REQUIRED for `IN (:placeholder)` expansion. Without
+                // it, DBAL binds the value as a single parameter, the PDO driver coerces the array
+                // to the literal string "Array" (with a PHP warning), and the IN clause matches
+                // nothing. Discovered while wiring up the Retranslator: the finder was silently
+                // returning empty results for every call.
+                // TODO: Validate that assumption
                 'nodeAggregateIds' => ArrayParameterType::STRING,
             ]
         )->fetchAllAssociative();
