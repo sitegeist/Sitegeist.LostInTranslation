@@ -6,7 +6,7 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
-use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
+use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 
 trait StaleTranslations
@@ -20,7 +20,8 @@ trait StaleTranslations
     public function IExpectExactlyTheFollowingStaleTranslations(TableNode $payloadTable): void
     {
         $staleTranslationFinder = $this->contentRepositoryRegistry->get($this->currentContentRepository->id)
-            ->projectionState(StaleTranslationFinder::class);
+            ->projectionState(StaleTranslationReadModel::class)
+            ->staleTranslationFinder;
 
         $expectedStaleTranslations = $payloadTable->getColumnsHash();
 

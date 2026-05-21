@@ -28,7 +28,7 @@ use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
-use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
+use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
@@ -231,7 +231,8 @@ class Retranslator
         // dsp hash — that's where stale records live.
         $staleByNodeAggregateId = [];
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
-        $staleTranslations = $cr->projectionState(StaleTranslationFinder::class)
+        $staleTranslations = $cr->projectionState(StaleTranslationReadModel::class)
+            ->staleTranslationFinder
             ->findBySubtree($sourceSubtree, $targetOrigin);
         foreach ($staleTranslations as $staleTranslation) {
             $staleByNodeAggregateId[$staleTranslation->nodeAggregateId->value] = $staleTranslation;
