@@ -1,0 +1,20 @@
+Neos:
+  Neos:
+    userInterface:
+      translation:
+        autoInclude:
+          'Sitegeist.LostInTranslation':
+            - Main
+            - 'NodeTypes/*'
+    Ui:
+      changes:
+        types:
+          'Sitegeist.LostInTranslation:AddMissingTranslations': Sitegeist\LostInTranslation\Ui\Changes\AddMissingTranslations
+          'Sitegeist.LostInTranslation:UpdateOutdatedTranslations': Sitegeist\LostInTranslation\Ui\Changes\UpdateOutdatedTranslations
+
+      resources:
+        javascript:
+          'Sitegeist.LostInTranslation:HostFramePlugin':
+            resource: 'resource://Sitegeist.LostInTranslation/Public/Scripts/HostFrame/Plugin.js'
+          'Sitegeist.LostInTranslation:InspectorViewPlugin':
+            resource: 'resource://Sitegeist.LostInTranslation/Public/JavaScript/Plugin.js'

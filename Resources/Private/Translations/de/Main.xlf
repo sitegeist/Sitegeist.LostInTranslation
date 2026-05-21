@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="en" target-language="de" datatype="plaintext">
+        <body>
+            <trans-unit id="view.upToDate" xml:space="preserve" approved="yes">
+                <source>The translations are up to date.</source>
+                <target state="translated">Die Übersetzungen sind up to date.</target>
+            </trans-unit>
+            <trans-unit id="view.outdated" xml:space="preserve" approved="yes">
+                <source>Changes in language "{language}" from "{date}" found. Retranslate this content now?</source>
+                <target state="translated">Änderungen in der Sprache "{language}" mit Stand "{date}" gefunden. Diesen Inhalt hier neu übersetzen?</target>
+            </trans-unit>
+            <trans-unit id="view.noReferenceLanguage" xml:space="preserve" approved="yes">
+                <source>No reference language is available for this language.</source>
+                <target state="translated">Für diese Sprache ist keine Referenzsprache verfügbar.</target>
+            </trans-unit>
+            <trans-unit id="view.error" xml:space="preserve" approved="yes">
+                <source>The translation status could not be loaded.</source>
+                <target state="translated">Der Übersetzungsstatus konnte nicht geladen werden.</target>
+            </trans-unit>
+            <trans-unit id="view.loading" xml:space="preserve" approved="yes">
+                <source>Loading translation status...</source>
+                <target state="translated">Übersetzungsstatus wird geladen...</target>
+            </trans-unit>
+            <trans-unit id="view.translating" xml:space="preserve" approved="yes">
+                <source>Translating...</source>
+                <target state="translated">Wird übersetzt...</target>
+            </trans-unit>
+            <trans-unit id="button.translate" xml:space="preserve" approved="yes">
+                <source>Retranslate</source>
+                <target state="translated">Neu Übersetzen</target>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>
