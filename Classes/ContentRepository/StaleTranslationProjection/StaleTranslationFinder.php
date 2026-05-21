@@ -21,9 +21,8 @@ final class StaleTranslationFinder implements ProjectionStateInterface
 {
     public function __construct(
         private readonly Connection $dbal,
-        private readonly string     $tableName,
-    )
-    {
+        private readonly string $tableName,
+    ) {
     }
 
     public function findAll(): StaleTranslations
@@ -38,24 +37,9 @@ final class StaleTranslationFinder implements ProjectionStateInterface
     }
 
     /**
-     * Find all stale-translation records for nodes covered by the given **source-language** subtree,
-     * in the subtree's workspace, at the **target-language** origin.
-     *
-     * Two-dimension lookup:
-     *   - The subtree is read on the *source* side (because that's the tree the caller has at hand:
-     *     it's the document content being retranslated).
-     *   - The records being read live at the *target* origin (because stale records are written at
-     *     the dimension where translations land).
-     *
-     * Both subgraphs share the same workspace, so `$subtree->node->workspaceName` is also the right
-     * workspace for the target-side records.
-     *
-     * Results are returned in the order of {@see mapSubtreeToNodeAggregateIds()} — depth-first
-     * pre-order of the source subtree. The SQL itself is unordered (a single `IN (...)` SELECT);
-     * the ordering is reconstructed in PHP via `usort` against an aggregate-id → position map.
-     * Hierarchical order matters at the call site: when the Retranslator dispatches
-     * `SetNodeProperties` commands in this order, the resulting event-stream order also follows the
-     * subtree, which keeps the Behat event-index assertions stable.
+     * Find stale-translation records for nodes in the given **source-language** subtree at the
+     * **target-language** origin (where stale records live). Results are returned in depth-first
+     * pre-order of the subtree so callers can dispatch commands in hierarchical order.
      */
     public function findBySubtree(Subtree $subtree, OriginDimensionSpacePoint $targetOriginSpacePoint): StaleTranslations
     {
@@ -77,19 +61,13 @@ final class StaleTranslationFinder implements ProjectionStateInterface
                 'originDimensionSpacePointHash' => $targetOriginSpacePoint->hash,
             ],
             [
-                // `ArrayParameterType::STRING` is REQUIRED for `IN (:placeholder)` expansion. Without
-                // it, DBAL binds the value as a single parameter, the PDO driver coerces the array
-                // to the literal string "Array" (with a PHP warning), and the IN clause matches
-                // nothing. Discovered while wiring up the Retranslator: the finder was silently
-                // returning empty results for every call.
-                // TODO: Validate that assumption
+                // Required for `IN (:placeholder)` expansion — otherwise DBAL binds the array as a
+                // single parameter and PDO coerces it to the literal string "Array".
                 'nodeAggregateIds' => ArrayParameterType::STRING,
             ]
         )->fetchAllAssociative();
 
-        // Reorder rows to match the depth-first walk order of the source subtree. The SQL above
-        // makes no order guarantee — we'd otherwise get DB-page or PK order, which has no
-        // correspondence to tree structure.
+        // SQL makes no order guarantee — reorder in PHP to match the source subtree walk.
         $orderIndex = array_flip($orderedIds);
         usort(
             $staleTranslationRows,
@@ -100,14 +78,8 @@ final class StaleTranslationFinder implements ProjectionStateInterface
     }
 
     /**
-     * Flatten the subtree into the list of its node aggregate id values, in depth-first pre-order
-     * (entry node first, then each child's subtree recursively).
-     *
-     * Returns a plain `list<string>` rather than `NodeAggregateIds` because the order matters here:
-     * `NodeAggregateIds` is a set-style collection — its iteration order is not part of its contract,
-     * and `merge()` does not promise to preserve insertion order across merges. Callers (and this
-     * class's own ordering logic) rely on the depth-first sequence, so an ordered array is the right
-     * shape.
+     * Flatten the subtree into depth-first pre-order ids. Returns `list<string>` (not
+     * `NodeAggregateIds`) because the iteration order is part of the contract here.
      *
      * @return list<string>
      */

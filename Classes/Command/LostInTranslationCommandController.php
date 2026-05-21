@@ -93,19 +93,7 @@ class LostInTranslationCommandController extends CommandController
     /**
      * Retranslate (stale properties + missing variants) below the given node into the target language dimension.
      *
-     * Thin shell-friendly wrapper around {@see Retranslator::retranslateNode()}. Exists so the same
-     * driver that powers the Behat `iRetranslateNode` step can also be exercised manually against a
-     * real DeepL key in a Neos distribution. Keeps all real logic in `Retranslator` — this method
-     * intentionally adds no behaviour beyond argument parsing and a confirmation line.
-     *
-     * `$target` is the **target** dimension value (where translations land). The source is derived
-     * from the target preset's `referenceLanguage` option by the Retranslator itself.
-     *
-     * @param string $nodeAggregateId
-     * @param string $target
-     * @param string $contentRepository
-     * @param string $workspace
-     * @return void
+     * `$target` is the target dimension value; the source is derived from its `referenceLanguage` preset.
      */
     public function retranslateNodeCommand(
         string $nodeAggregateId,
@@ -121,9 +109,7 @@ class LostInTranslationCommandController extends CommandController
             DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]),
         );
 
-        // Tell the operator what actually happened. The previous version printed "finished" even on
-        // a silent no-op skip path (e.g. invoking retranslate on the source language itself, or with
-        // DeepL disabled for one of the presets), which made misconfiguration invisible from the CLI.
+        // Distinct messages for skip / no-op / dispatched so misconfiguration is visible from CLI.
         if ($result->skippedReason !== null) {
             $this->outputLine('Retranslation for node "%s" -> "%s" skipped: %s', [$nodeAggregateId, $target, $result->skippedReason]);
             return;
