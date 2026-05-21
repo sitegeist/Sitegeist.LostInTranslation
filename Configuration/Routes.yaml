@@ -1,0 +1,17 @@
+-
+  name:  'LostInTranslation - Translation Metadata'
+  uriPattern: 'lostintranslation/retranslation/getmetadata'
+  defaults:
+    '@package': 'Sitegeist.LostInTranslation'
+    '@controller': 'Retranslation'
+    '@action': 'getTranslationMetadata'
+  httpMethods: ['GET']
+
+-
+  name:  'LostInTranslation - Retranslation'
+  uriPattern: 'lostintranslation/retranslation/retranslatenode'
+  defaults:
+    '@package': 'Sitegeist.LostInTranslation'
+    '@controller': 'Retranslation'
+    '@action': 'retranslateNode'
+  httpMethods: ['POST']
