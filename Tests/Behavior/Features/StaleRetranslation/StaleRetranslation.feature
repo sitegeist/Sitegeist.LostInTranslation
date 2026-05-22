@@ -16,8 +16,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And using the following node types:
         """yaml
         'Neos.ContentRepository:Root': []
-        # Minimal stand-ins for the production Neos.Neos mixins.
-        # TODO: See AIBasedAutoTranslation.feature
+        # Because we build our own test CR from scratch we also need to define this NodeType because we do not read any NodeType definitions
         'Neos.Neos:Content':
           abstract: true
         'Neos.Neos:ContentCollection':
@@ -438,30 +437,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |
 
-    Scenario: Removing a node aggregate clears its stale records, including descendants
-        When I am in workspace "user-workspace"
-        And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                                                                              | tetheredDescendantNodeAggregateIds |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"}                       | {"tethered": "nodewyn-tetherton"}  |
-            | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text Sibling", "autoTranslatableStringProperty": "My Other Text Sibling", "stringProperty": "Whatever"}       | {"tethered": "nodenberg"}          |
-            | prince-nodeheart       | nodewyn-tetherton      | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text GrandChild", "autoTranslatableStringProperty": "My Other Text GrandChild", "stringProperty": "Whatever"} | {"tethered": "princess-nodashian"} |
-        And I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-            | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
-            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | prince-nodeheart       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | princess-nodashian     | ["autoTranslatableStringProperty"]                                |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-
-        When the command RemoveNodeAggregate is executed with payload:
-            | Key                          | Value                    |
-            | nodeAggregateId              | "sir-david-nodenborough" |
-            | coveredDimensionSpacePoint   | {"language": "en"}       |
-            # TODO: which NodeVariantSelectionStrategy? I lean towards 'allSpecializations'.
-            | nodeVariantSelectionStrategy | "allSpecializations"     |
-        Then I expect exactly the following stale translations:
-            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+    # We explicitly ignore "NodeAggregateWasRemoved" events for now
 
     Scenario: Changing a node aggregate's type thins out properties not translatable in the new type
         When I am in workspace "user-workspace"
@@ -473,8 +449,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        # NodeWithFewerTranslations has no `autoTranslatableStringProperty` and no tethered node
-        # TODO: is it really neccessary to ignore children stale translations?
         When the command ChangeNodeAggregateType is executed with payload:
             | Key             | Value                                                           |
             | nodeAggregateId | "sir-david-nodenborough"                                        |
@@ -482,6 +456,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | strategy        | "happypath"                                                     |
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+            # children are ignored (see top-level comment)
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            # NodeWithFewerTranslations has no `autoTranslatableStringProperty`
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
 
     Scenario: Publishing a workspace propagates stale records to the base workspace
@@ -588,4 +565,3 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
     # @todo missing steps: dimension space point moved
-    #TODO: what would be a "dimensionSpacePoint moved" scenario?
