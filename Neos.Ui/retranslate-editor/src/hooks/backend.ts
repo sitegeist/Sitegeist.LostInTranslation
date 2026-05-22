@@ -4,9 +4,8 @@ export type ContentInfoResponse = {
     isUpToDate: boolean;
     referenceLanguage: {
         label: string;
-        dateModified: string;
     } | null;
-
+    staleNodeCount: number;
 };
 
 export type ContentInfoRequest = {
@@ -23,6 +22,9 @@ export type TranslateRequest = {
 
 export type TranslateResponse = {
     message: string;
+    stalePropertyCommandsDispatched: number;
+    variantCommandsDispatched: number;
+    skippedReason: string | null;
 };
 
 const CONTENT_INFO_ENDPOINT = '/lostintranslation/retranslation/getmetadata';

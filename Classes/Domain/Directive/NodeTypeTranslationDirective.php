@@ -13,4 +13,9 @@ class NodeTypeTranslationDirective
         public readonly TranslatablePropertyNames $translatablePropertyNames,
     ) {
     }
+
+    public function getPropertyNames(): PropertyNames
+    {
+        return PropertyNames::fromArray(array_keys($this->translatablePropertyNames->items));
+    }
 }

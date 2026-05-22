@@ -72,18 +72,14 @@ class DeepLTranslationServiceTest extends UnitTestCase
      *
      * @param string[] $expectedTranslatedTexts The translated texts that are expected to be returned by the service method
      * @param null|TextResult|TextResult[] $response
-     *
-     * @return void
-     * @throws Exception
      */
     public function translateWillCorrectlyTranslateTexts(
         array $texts,
         string $targetLanguage,
         ?string $sourceLanguage,
         array $expectedTranslatedTexts,
-        $response
-    ): void
-    {
+        null|TextResult|array $response,
+    ): void {
         $this->mockDeeplClient
             ->expects(self::once())
             ->method('translateText')
@@ -117,13 +113,11 @@ class DeepLTranslationServiceTest extends UnitTestCase
             ->expects(self::once())
             ->method('translateText')
             ->with(['en_foo', 'en_bar', 'en_baz'], 'en', 'de', [TranslateTextOptions::GLOSSARY => 'en_de_glossary'])
-            ->willReturn(
-            [
-                    new TextResult('de_foo', 'en', 6),
-                    new TextResult('de_bar', 'en', 6),
-                    new TextResult('de_baz', 'en', 6)
-                ]
-            );
+            ->willReturn([
+                new TextResult('de_foo', 'en', 6),
+                new TextResult('de_bar', 'en', 6),
+                new TextResult('de_baz', 'en', 6)
+            ]);
 
         $this->translationService->translate(
             ['en_foo', 'en_bar', 'en_baz'],

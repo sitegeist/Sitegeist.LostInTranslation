@@ -15,12 +15,14 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFil
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
+use Sitegeist\LostInTranslation\Domain\Retranslator;
 
 class LostInTranslationCommandController extends CommandController
 {
@@ -32,6 +34,9 @@ class LostInTranslationCommandController extends CommandController
 
     #[Flow\Inject]
     public Context $securityContext;
+
+    #[Flow\Inject]
+    public Retranslator $retranslator;
 
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
@@ -83,5 +88,39 @@ class LostInTranslationCommandController extends CommandController
         foreach ($originSubgraph->findChildNodes($originNode->aggregateId, FindChildNodesFilter::create())->getIterator() as $childNode) {
             $this->translateNodeRecursive($cr, $childNode, $originSubgraph, $targetSubgraph);
         }
+    }
+
+    /**
+     * Retranslate (stale properties + missing variants) below the given node into the target language dimension.
+     *
+     * `$target` is the target dimension value; the source is derived from its `referenceLanguage` preset.
+     */
+    public function retranslateNodeCommand(
+        string $nodeAggregateId,
+        string $target,
+        string $contentRepository,
+        string $workspace,
+    ): void {
+        $this->outputLine('Starting retranslation for node "%s" -> "%s" in workspace "%s"...', [$nodeAggregateId, $target, $workspace]);
+        $result = $this->retranslator->retranslateNode(
+            ContentRepositoryId::fromString($contentRepository),
+            WorkspaceName::fromString($workspace),
+            NodeAggregateId::fromString($nodeAggregateId),
+            DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]),
+        );
+
+        // Distinct messages for skip / no-op / dispatched so misconfiguration is visible from CLI.
+        if ($result->skippedReason !== null) {
+            $this->outputLine('Retranslation for node "%s" -> "%s" skipped: %s', [$nodeAggregateId, $target, $result->skippedReason]);
+            return;
+        }
+        if ($result->isNoOp()) {
+            $this->outputLine('Retranslation for node "%s" -> "%s": nothing to do (no stale properties, no missing variants).', [$nodeAggregateId, $target]);
+            return;
+        }
+        $this->outputLine(
+            'Retranslation for node "%s" -> "%s": dispatched %d stale property update(s) and %d variant creation(s).',
+            [$nodeAggregateId, $target, $result->stalePropertyCommandsDispatched, $result->variantCommandsDispatched],
+        );
     }
 }
