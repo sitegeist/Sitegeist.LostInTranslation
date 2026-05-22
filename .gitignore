@@ -18,3 +18,6 @@ composer.lock
 .phpunit.result.cache
 Configuration/README
 node_modules
+
+.yarn
+.pnp.*

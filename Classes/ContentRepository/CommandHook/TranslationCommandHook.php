@@ -12,9 +12,14 @@ use Neos\ContentRepository\Core\EventStore\PublishedEvents;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
 use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
+use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
+use Neos\ContentRepository\Core\NodeType\TetheredNodeTypeDefinitions;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
@@ -75,17 +80,17 @@ final class TranslationCommandHook implements CommandHookInterface
         );
 
         $sourceDeeplLanguage = $sourceLanguageDirective?->deeplSourceId;
-        $targetDeeplLanguage =  $targetLanguageDirective?->deeplTargetId;
+        $targetDeeplLanguage = $targetLanguageDirective?->deeplTargetId;
 
         if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
             return Commands::createEmpty();
         }
 
         $command->targetOrigin->getCoordinate($this->languageDimension->id);
-        $sourceNode = $this->contentGraphReadModel
+        $sourceSubgraph = $this->contentGraphReadModel
             ->getContentGraph($command->workspaceName)
-            ->getSubgraph($command->sourceOrigin->toDimensionSpacePoint(), VisibilityConstraints::withoutRestrictions())
-            ->findNodeById($command->nodeAggregateId);
+            ->getSubgraph($command->sourceOrigin->toDimensionSpacePoint(), VisibilityConstraints::withoutRestrictions());
+        $sourceNode = $sourceSubgraph->findNodeById($command->nodeAggregateId);
         if ($sourceNode === null) {
             return Commands::createEmpty();
         }
@@ -95,10 +100,86 @@ final class TranslationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
+        $additionalCommands = [];
+        $additionalCommands[] = $this->tryPrepareSetNodeProperties(
+            command: $command,
+            sourceNode: $sourceNode,
+            nodeType: $nodeType,
+            sourceDeeplLanguage: $sourceDeeplLanguage,
+            targetDeeplLanguage: $targetDeeplLanguage,
+        );
+        $additionalCommands = array_merge(
+            $additionalCommands,
+            $this->handleTetheredChildren(
+                command: $command,
+                sourceDeeplLanguage: $sourceDeeplLanguage,
+                targetDeeplLanguage: $targetDeeplLanguage,
+                nodeAggregateId: $sourceNode->aggregateId,
+                tetheredNodeTypeDefinitions: $nodeType->tetheredNodeTypeDefinitions,
+                subgraph: $sourceSubgraph,
+            )
+        );
+        $additionalCommands = array_filter($additionalCommands);
+
+        return Commands::fromArray($additionalCommands);
+    }
+
+    /**
+     * @return array<int,SetNodeProperties|null>
+     */
+    private function handleTetheredChildren(
+        CreateNodeVariant $command,
+        string $sourceDeeplLanguage,
+        string $targetDeeplLanguage,
+        NodeAggregateId $nodeAggregateId,
+        TetheredNodeTypeDefinitions $tetheredNodeTypeDefinitions,
+        ContentSubgraphInterface $subgraph,
+    ): array {
+        $commands = [];
+        foreach ($tetheredNodeTypeDefinitions as $tetheredNodeTypeDefinition) {
+            $tetheredChildNode = $subgraph->findNodeByPath(
+                path: $tetheredNodeTypeDefinition->name,
+                startingNodeAggregateId: $nodeAggregateId
+            );
+            if ($tetheredChildNode) {
+                $tetheredChildNodeType = $this->nodeTypeManager->getNodeType($tetheredChildNode->nodeTypeName);
+                if ($tetheredChildNodeType) {
+                    $commands[] = $this->tryPrepareSetNodeProperties(
+                        command: $command,
+                        sourceNode: $tetheredChildNode,
+                        nodeType: $tetheredChildNodeType,
+                        sourceDeeplLanguage: $sourceDeeplLanguage,
+                        targetDeeplLanguage: $targetDeeplLanguage,
+                    );
+                    $commands = array_merge(
+                        $commands,
+                        $this->handleTetheredChildren(
+                            command: $command,
+                            sourceDeeplLanguage: $sourceDeeplLanguage,
+                            targetDeeplLanguage: $targetDeeplLanguage,
+                            nodeAggregateId: $tetheredChildNode->aggregateId,
+                            tetheredNodeTypeDefinitions: $tetheredChildNodeType->tetheredNodeTypeDefinitions,
+                            subgraph: $subgraph,
+                        )
+                    );
+                }
+            }
+        }
+
+        return $commands;
+    }
+
+    private function tryPrepareSetNodeProperties(
+        CreateNodeVariant $command,
+        Node $sourceNode,
+        NodeType $nodeType,
+        string $sourceDeeplLanguage,
+        string $targetDeeplLanguage,
+    ): ?SetNodeProperties {
         $translationDirective = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
 
         if ($translationDirective->enabled === false) {
-            return Commands::createEmpty();
+            return null;
         }
 
         /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
@@ -120,7 +201,7 @@ final class TranslationCommandHook implements CommandHookInterface
         }
 
         if (empty($propertiesToTranslate)) {
-            return Commands::createEmpty();
+            return null;
         }
 
         if (count($propertiesToTranslate) > 0) {
@@ -143,7 +224,7 @@ final class TranslationCommandHook implements CommandHookInterface
         }
 
         if (empty($translatedProperties)) {
-            return Commands::createEmpty();
+            return null;
         }
 
         $propertiesToSet = [];
@@ -173,15 +254,14 @@ final class TranslationCommandHook implements CommandHookInterface
         }
 
         if (empty($propertiesToSet)) {
-            return Commands::createEmpty();
+            return null;
         }
 
-        $newCommand = SetNodeProperties::create(
-            $command->workspaceName,
-            $command->nodeAggregateId,
-            $command->targetOrigin,
-            PropertyValuesToWrite::fromArray($propertiesToSet)
+        return SetNodeProperties::create(
+            workspaceName: $command->workspaceName,
+            nodeAggregateId: $sourceNode->aggregateId,
+            originDimensionSpacePoint: $command->targetOrigin,
+            propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
         );
-        return Commands::fromArray([$newCommand]);
     }
 }

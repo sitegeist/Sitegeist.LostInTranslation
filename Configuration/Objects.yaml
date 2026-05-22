@@ -20,3 +20,12 @@ Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeySer
         arguments:
           1:
             value: Sitegeist_LostInTranslation_ApiKeyCache
+
+Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationProjectionFactory:
+  arguments:
+    1:
+      object:
+        factoryObjectName: 'Doctrine\ORM\EntityManagerInterface'
+        factoryMethodName: 'getConnection'
+    2:
+      setting: Sitegeist.LostInTranslation.nodeTranslation.languageDimensionName

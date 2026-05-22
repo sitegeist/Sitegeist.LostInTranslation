@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Tests\Unit\Directive;
@@ -32,7 +33,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
         $nodeType = new NodeType(
             NodeTypeName::fromString('Neos.Neos:NodeType'),
             [],
-            Yaml::parse( <<<EOL
+            Yaml::parse(<<<EOL
                 options:
                     automaticTranslation: false
                 EOL
@@ -50,7 +51,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
         $nodeType = new NodeType(
             NodeTypeName::fromString('Neos.Neos:NodeType'),
             [],
-            Yaml::parse( <<<EOL
+            Yaml::parse(<<<EOL
                 options:
                     automaticTranslation: true
                 EOL
@@ -68,7 +69,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
         $superType = new NodeType(
             NodeTypeName::fromString('Neos.Neos:SuperType'),
             [],
-            Yaml::parse( <<<EOL
+            Yaml::parse(<<<EOL
                 options:
                     automaticTranslation: true
                 EOL
@@ -91,7 +92,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
         $nodeType = new NodeType(
             NodeTypeName::fromString('Neos.Neos:NodeType'),
             [],
-            Yaml::parse( <<<EOL
+            Yaml::parse(<<<EOL
                 properties:
                     noText:
                         type: integer
@@ -138,7 +139,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
         $nodeType = new NodeType(
             NodeTypeName::fromString('Neos.Neos:NodeType'),
             [],
-            Yaml::parse( <<<EOL
+            Yaml::parse(<<<EOL
                 properties:
                     noText:
                         type: integer
@@ -219,7 +220,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             new NodeTypeTranslationDirective(
                 true,
                 new TranslatablePropertyNames(
-                    new TranslatablePropertyName( PropertyName::fromString('inlineEditableTextProperty')),
+                    new TranslatablePropertyName(PropertyName::fromString('inlineEditableTextProperty')),
                 ),
             ),
         ];
@@ -239,7 +240,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             new NodeTypeTranslationDirective(
                 false,
                 new TranslatablePropertyNames(
-                    new TranslatablePropertyName( PropertyName::fromString('inlineEditableTextProperty')),
+                    new TranslatablePropertyName(PropertyName::fromString('inlineEditableTextProperty')),
                 ),
             ),
         ];
@@ -257,7 +258,6 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             ]),
             new NodeTypeTranslationDirective(
                 true,
-
                 new TranslatablePropertyNames(
                     new TranslatablePropertyName(PropertyName::fromString('textPropertyWithOptions')),
                 ),
@@ -278,7 +278,6 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             ]),
             new NodeTypeTranslationDirective(
                 false,
-
                 new TranslatablePropertyNames(
                     new TranslatablePropertyName(PropertyName::fromString('textPropertyWithOptions')),
                 ),
@@ -289,8 +288,9 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
     /**
      * @dataProvider detectionOfTranslatablePropertiesDataProvider
      */
-    public function testDetectionOfTranslatableProperties(NodeType $nodeType, NodeTypeTranslationDirective $expectedDirective): void {
-        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType) );
+    public function testDetectionOfTranslatableProperties(NodeType $nodeType, NodeTypeTranslationDirective $expectedDirective): void
+    {
+        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType));
     }
 
 
@@ -333,7 +333,7 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             )
         );
 
-        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType) );
+        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType));
     }
 
     public function testPropertiesWithConfiguredConnectorOptIn(): void
@@ -375,6 +375,6 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             )
         );
 
-        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType) );
+        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType));
     }
 }

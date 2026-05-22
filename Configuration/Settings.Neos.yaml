@@ -22,3 +22,7 @@ Neos:
         # Activate for content governance mode:
         #authProvider:
         #  factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory
+
+        projections:
+          'Sitegeist.LostInTranslation:StaleTranslations':
+            factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationProjectionFactory

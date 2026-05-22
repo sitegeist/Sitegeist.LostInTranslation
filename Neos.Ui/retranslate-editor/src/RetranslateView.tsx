@@ -1,5 +1,4 @@
 import React from 'react';
-import { format, parseISO } from 'date-fns';
 import { useI18n } from '@sitegeist/lostintranslation-neos-bridge';
 import { useContentInfo } from './hooks/useContentInfo';
 import { useNodeInfo } from './hooks/useNodeInfo';
@@ -18,9 +17,6 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
     const nodeInfo = useNodeInfo(target);
     const { data: contentData, isLoading: contentIsLoading } = useContentInfo(nodeInfo.nodeId, nodeInfo.workspace, nodeInfo.dimensions);
     const { isPending: translationPending, mutate: translate } = useTranslate({target});
-    const formattedReferenceDate = contentData?.referenceLanguage?.dateModified
-        ? format(parseISO(contentData.referenceLanguage.dateModified), 'dd.MM.yyyy')
-        : 'no date';
 
     if (contentIsLoading) {
         return (
@@ -55,7 +51,7 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
 
     return (
         <Container>
-            {contentData && contentData.isUpToDate ?
+            {contentData.isUpToDate ?
                 <Info>
                     {t('view.upToDate', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                 </Info>
@@ -64,8 +60,8 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
                         'view.outdated',
                         '',
                         {
-                            language: contentData?.referenceLanguage?.label ?? '',
-                            date: formattedReferenceDate
+                            language: contentData.referenceLanguage.label,
+                            count: String(contentData.staleNodeCount)
                         },
                         'Sitegeist.LostInTranslation',
                         'Main'

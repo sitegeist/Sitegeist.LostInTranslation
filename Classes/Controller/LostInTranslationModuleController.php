@@ -70,6 +70,7 @@ class LostInTranslationModuleController extends AbstractModuleController
         $this->view->assign('status', $status);
     }
 
+    // Renders the fusion view for the form to store a custom deepl key
     public function setCustomKeyAction(): void
     {
     }
