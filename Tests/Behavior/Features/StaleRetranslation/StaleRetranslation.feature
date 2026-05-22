@@ -474,14 +474,15 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # NodeWithFewerTranslations has no `autoTranslatableStringProperty` and no tethered node
+        # TODO: is it really neccessary to ignore children stale translations?
         When the command ChangeNodeAggregateType is executed with payload:
             | Key             | Value                                                           |
             | nodeAggregateId | "sir-david-nodenborough"                                        |
             | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations" |
-            | strategy        | "delete"                                                        |
+            | strategy        | "happypath"                                                     |
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                    |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
 
     Scenario: Publishing a workspace propagates stale records to the base workspace
         When I am in workspace "user-workspace"
@@ -507,14 +508,14 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Scenario: Partial publish propagates only the published nodes' stale records
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                        | tetheredDescendantNodeAggregateIds |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"}  | {"tethered": "nodewyn-tetherton"}  |
-            | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text Sibling"} | {"tethered": "nodewyn-secondton"}  |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                 | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"}         | {"tethered": "nodewyn-tetherton"}  |
+            | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text Sibling"} | {"tethered": "nodenberg"}          |
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
-            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | nodewyn-secondton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
         When the command PublishIndividualNodesFromWorkspace is executed with payload:
@@ -523,16 +524,17 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | nodesToPublish | ["sir-david-nodenborough"] |
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | nodewyn-secondton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     Scenario: Discarding a workspace drops all its stale records
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                         | tetheredDescendantNodeAggregateIds |
             | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} | {"tethered": "nodewyn-tetherton"}  |
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
@@ -549,8 +551,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Scenario: Partial discard drops only the discarded nodes' stale records
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                        | tetheredDescendantNodeAggregateIds |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"}  | {"tethered": "nodewyn-tetherton"}  |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                 | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"}         | {"tethered": "nodewyn-tetherton"}  |
             | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text Sibling"} | {"tethered": "nodenberg"}          |
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
@@ -566,8 +568,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | newContentStreamId | "user-cs-id-after-partial" |
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                      |
-            | user-workspace | {"language":"de"}         | nody-mc-nodeface | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodenberg        | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface | ["autoTranslatableStringProperty"] |
 
     Scenario: Deleting a workspace drops all its stale records
         When I am in workspace "user-workspace"
