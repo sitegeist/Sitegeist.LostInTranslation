@@ -8,12 +8,14 @@ Feature: Create node variant and let the AI translate the properties
     And using the following node types:
     """yaml
     'Neos.ContentRepository:Root': []
+    # Because we build our own test CR from scratch we also need to define this NodeType because we do not read any NodeType definitions
+    'Neos.Neos:Node':
+      abstract: true
+      options:
+       automaticTranslation: true
     'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
-      # TODO: On my machine I get the following exception:
-      #    Must not happen, logic error: Node type "Neos.Neos:Node" does not exist (RuntimeException)
-      # Though when I check the runtime the NodeType "does exist". Maybe it's an issue with my setup?
-      # superTypes:
-      #   'Neos.Neos:Node': true
+      superTypes:
+        'Neos.Neos:Node': true
       properties:
         inlineEditableStringProperty:
           type: string
