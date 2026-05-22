@@ -346,7 +346,7 @@ class StaleTranslationProjection implements ProjectionInterface
                 );
                 if ($record) {
                     $currentPropertyNames = \json_decode($record['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
-                    $newPropertyNames = array_merge($currentPropertyNames, $updatedPropertyNames);
+                    $newPropertyNames = array_unique(array_merge($currentPropertyNames, $updatedPropertyNames));
                     $newPropertyNames = array_intersect(
                         $newPropertyNames,
                         $this->convertPropertyNamesToStringArray($translatablePropertyNames)
@@ -358,7 +358,7 @@ class StaleTranslationProjection implements ProjectionInterface
                             [
                                 'workspaceName' => $event->workspaceName->value,
                                 'nodeAggregateId' => $event->nodeAggregateId->value,
-                                'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
+                                'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
                             ]
                         );
                     } else {
@@ -370,7 +370,7 @@ class StaleTranslationProjection implements ProjectionInterface
                             [
                                 'workspaceName' => $event->workspaceName->value,
                                 'nodeAggregateId' => $event->nodeAggregateId->value,
-                                'originDimensionSpacePointHash' => $event->originDimensionSpacePoint->hash,
+                                'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
                             ]
                         );
                     }
@@ -515,6 +515,12 @@ class StaleTranslationProjection implements ProjectionInterface
                 'child_workspace_name' => $event->workspaceName->value,
             ]
         );
+        $this->dbal->delete(
+            $this->itemTableName,
+            [
+                'workspaceName' => $event->workspaceName->value,
+            ]
+        );
         $this->clearNodeTypeMemory($event->workspaceName);
     }
 
@@ -543,6 +549,16 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenDimensionSpacePointWasMoved(DimensionSpacePointWasMoved $event): void
     {
+        $this->dbal->update(
+            $this->itemTableName,
+            [
+                'originDimensionSpacePoint' => $event->target->toJson(),
+                'originDimensionSpacePointHash' => $event->target->hash,
+            ],
+            [
+                'originDimensionSpacePointHash' => $event->source->hash,
+            ],
+        );
     }
 
     private function replaceWorkspaceEntries(WorkspaceName $workspaceName, WorkspaceName $baseWorkspaceName): void

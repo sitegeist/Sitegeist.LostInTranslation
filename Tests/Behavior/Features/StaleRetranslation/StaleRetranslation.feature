@@ -457,7 +457,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             # children are ignored (see top-level comment)
-            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             # NodeWithFewerTranslations has no `autoTranslatableStringProperty`
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
 
@@ -564,4 +564,33 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
-    # @todo missing steps: dimension space point moved
+    Scenario: Moving a dimension space point
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "first"} | {"tethered": "nodewyn-tetherton"}  |
+        And the command PublishWorkspace is executed with payload:
+            | Key           | Value            |
+            | workspaceName | "user-workspace" |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+        When I change the content dimensions in content repository "default" to:
+            | Identifier | Values  | Generalizations |
+            | language   | en, ltz |                 |
+        And the command MoveDimensionSpacePoint is executed with payload:
+            | Key                  | Value              |
+            | workspaceName        | "live"             |
+            | source               | {"language":"de"}  |
+            | target               | {"language":"ltz"} |
+            | initialWorkspaceName | "live"             |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+            | live           | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
