@@ -22,7 +22,9 @@ use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
+use Sitegeist\LostInTranslation\Domain\PerNodeSynchronisationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchroniser;
 
 class LostInTranslationCommandController extends CommandController
 {
@@ -37,6 +39,9 @@ class LostInTranslationCommandController extends CommandController
 
     #[Flow\Inject]
     public Retranslator $retranslator;
+
+    #[Flow\Inject]
+    public WorkspaceSynchroniser $workspaceSynchroniser;
 
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
@@ -121,6 +126,80 @@ class LostInTranslationCommandController extends CommandController
         $this->outputLine(
             'Retranslation for node "%s" -> "%s": dispatched %d stale property update(s) and %d variant creation(s).',
             [$nodeAggregateId, $target, $result->stalePropertyCommandsDispatched, $result->variantCommandsDispatched],
+        );
+    }
+
+    /**
+     * Synchronise every stale translation in the target workspace+dimension by dispatching one
+     * retranslation per stale-translation record. Source workspace+dimension are accepted but
+     * must currently equal the target workspace and the configured `referenceLanguage` of the
+     * target dimension respectively (cross-workspace sync is not yet supported).
+     *
+     * @param string $sourceWorkspace Source workspace name. Must equal --target-workspace for now.
+     * @param string $sourceDimension Source language dimension value. Must equal the configured `referenceLanguage` of --target-dimension.
+     * @param string $targetWorkspace Target workspace whose stale records will be processed.
+     * @param string $targetDimension Target language dimension value (e.g. "de").
+     * @param string $contentRepository Content repository id (defaults to "default").
+     * @param bool $dryRun If set, report which stale records would be processed without dispatching any commands.
+     * @throws StopCommandException
+     */
+    public function synchroniseCommand(
+        string $sourceWorkspace,
+        string $sourceDimension,
+        string $targetWorkspace,
+        string $targetDimension,
+        string $contentRepository = 'default',
+        bool $dryRun = false,
+    ): void {
+        $result = $this->workspaceSynchroniser->synchroniseWorkspace(
+            contentRepositoryId: ContentRepositoryId::fromString($contentRepository),
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspace),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspace),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $targetDimension]),
+            dryRun: $dryRun,
+        );
+
+        if ($result->skippedReason !== null) {
+            $this->outputLine('Synchronisation skipped: %s', [$result->skippedReason]);
+            $this->quit(1);
+        }
+
+        if ($result->perNodeResults === []) {
+            $this->outputLine('No stale translations to synchronise for workspace "%s" / dimension "%s".', [$targetWorkspace, $targetDimension]);
+            return;
+        }
+
+        foreach ($result->perNodeResults as $perNode) {
+            $this->outputLine($this->formatPerNodeLine($perNode, $dryRun));
+        }
+        $this->outputLine(
+            '%s: %d node(s) processed, %d stale property update(s) and %d variant creation(s) dispatched, %d skipped.',
+            [
+                $dryRun ? 'Dry run' : 'Synchronisation finished',
+                count($result->perNodeResults),
+                $result->totalStalePropertyCommandsDispatched(),
+                $result->totalVariantCommandsDispatched(),
+                $result->totalSkippedNodes(),
+            ],
+        );
+    }
+
+    private function formatPerNodeLine(PerNodeSynchronisationResult $perNode, bool $dryRun): string
+    {
+        $r = $perNode->result;
+        if ($r->skippedReason !== null) {
+            return sprintf('  - %s: skipped (%s)', $perNode->nodeAggregateId->value, $r->skippedReason);
+        }
+        if ($r->isNoOp()) {
+            return sprintf('  - %s: no-op (already in sync)', $perNode->nodeAggregateId->value);
+        }
+        return sprintf(
+            '  - %s: %s%d stale property update(s), %d variant creation(s)',
+            $perNode->nodeAggregateId->value,
+            $dryRun ? 'would dispatch ' : 'dispatched ',
+            $r->stalePropertyCommandsDispatched,
+            $r->variantCommandsDispatched,
         );
     }
 }

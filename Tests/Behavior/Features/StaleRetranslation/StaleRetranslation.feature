@@ -594,3 +594,67 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | live           | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    Scenario: Synchronise clears every stale translation for the target workspace and dimension only
+        # Two stale nodes in user-workspace and one in other-user-workspace. Synchronising only
+        # user-workspace en->de must clear the user-workspace stale entries and leave
+        # other-user-workspace's untouched.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                  | initialPropertyValues                          |
+            | node-alpha      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations | {"inlineEditableStringProperty": "Alpha Text"} |
+            | node-beta       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations | {"inlineEditableStringProperty": "Beta Text"}  |
+        When I am in workspace "other-user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                  | initialPropertyValues                          |
+            | node-gamma      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations | {"inlineEditableStringProperty": "Gamma Text"} |
+
+        And I expect exactly the following stale translations:
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId | propertyNames                    |
+            | other-user-workspace | {"language":"de"}         | node-gamma      | ["inlineEditableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | node-alpha      | ["inlineEditableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | node-beta       | ["inlineEditableStringProperty"] |
+
+        When I synchronise translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+
+        # user-workspace cleared; other-user-workspace untouched.
+        Then I expect exactly the following stale translations:
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId | propertyNames                    |
+            | other-user-workspace | {"language":"de"}         | node-gamma      | ["inlineEditableStringProperty"] |
+
+        # 1x ContentStreamWasForked (CreateWorkspace user-workspace) + 2x NodeAggregateWithNodeWasCreated (node-alpha, node-beta)
+        # + per node: 1x NodePeerVariantWasCreated (Retranslator dispatch) and 1x NodePropertiesWereSet (TranslationCommandHook cascade)
+        # = 3 + 4 = 7 events. Node-alpha is processed before node-beta because StaleTranslationFinder::findAll() returns rows in
+        # primary-key order (workspaceName, nodeAggregateId, originDimensionSpacePointHash).
+        And I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
+        And event at index 3 is of type "NodePeerVariantWasCreated" with payload:
+            | Key             | Expected           |
+            | workspaceName   | "user-workspace"   |
+            | contentStreamId | "user-cs-id"       |
+            | nodeAggregateId | "node-alpha"       |
+            | sourceOrigin    | {"language": "en"} |
+            | peerOrigin      | {"language": "de"} |
+        And event at index 4 is of type "NodePropertiesWereSet" with payload:
+            | Key                                               | Expected                |
+            | workspaceName                                     | "user-workspace"        |
+            | contentStreamId                                   | "user-cs-id"            |
+            | nodeAggregateId                                   | "node-alpha"            |
+            | originDimensionSpacePoint                         | {"language": "de"}      |
+            | propertyValues.inlineEditableStringProperty.value | "Alpha Text translated" |
+        And event at index 5 is of type "NodePeerVariantWasCreated" with payload:
+            | Key             | Expected           |
+            | workspaceName   | "user-workspace"   |
+            | contentStreamId | "user-cs-id"       |
+            | nodeAggregateId | "node-beta"        |
+            | sourceOrigin    | {"language": "en"} |
+            | peerOrigin      | {"language": "de"} |
+        And event at index 6 is of type "NodePropertiesWereSet" with payload:
+            | Key                                               | Expected               |
+            | workspaceName                                     | "user-workspace"       |
+            | contentStreamId                                   | "user-cs-id"           |
+            | nodeAggregateId                                   | "node-beta"            |
+            | originDimensionSpacePoint                         | {"language": "de"}     |
+            | propertyValues.inlineEditableStringProperty.value | "Beta Text translated" |
+
+        # other-user-workspace stream is unchanged: 1x ContentStreamWasForked + 1x NodeAggregateWithNodeWasCreated.
+        And I expect exactly 2 events to be published on stream "ContentStream:other-user-cs-id"

@@ -10,6 +10,7 @@ use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchroniser;
 
 trait StaleTranslations
 {
@@ -50,6 +51,25 @@ trait StaleTranslations
             workspaceName: WorkspaceName::fromString($workspaceName),
             nodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+        );
+    }
+
+    /**
+     * @When /^I synchronise translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
+     * @throws Exception
+     */
+    public function iSynchroniseTranslations(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+    ): void {
+        $this->getObject(WorkspaceSynchroniser::class)->synchroniseWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
         );
     }
 
