@@ -129,9 +129,13 @@ Feature: Automatic retranslation on workspace publish
             | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                                                        | tetheredDescendantNodeAggregateIds |
             | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} | {"tethered": "nodewyn-tetherton"}  |
 
-        # Stale rows recorded for both de and es
+        # Stale rows recorded for both de AND es: en has two configured target languages, so the
+        # projection fans out one row per (target dimension, node). The tethered child gets its
+        # own rows for its translatable property too.
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
@@ -141,13 +145,21 @@ Feature: Automatic retranslation on workspace publish
             | workspaceName      | "user-workspace"     |
             | newContentStreamId | "sync-source-cs-id2" |
 
-        # ES should be auto-synced to es_live while de should record stale translations for user-workspace and live.
-        # TODO: what happens to es_user-workspace? for now it should be untouched
+        # After publish: stale rows are propagated to live (de + es per node) AND replicated back
+        # onto user-workspace by `replaceWorkspaceEntries`. Once the planned synchronisation
+        # auto-translate hook is in place, the es rows in live should disappear (auto-synced from
+        # en) — for now they remain. Tracking that gap is the responsibility of the next two
+        # scenarios in this feature.
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-            | user-workspace | {"language":"en"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live           | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     Scenario: Publishing a property update to en,live auto-syncs the existing DE variant
         # TODO
