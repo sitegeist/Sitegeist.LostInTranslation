@@ -9,27 +9,19 @@ use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
-use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
-use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
-use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\NodeType\NodeTypeNames;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
-use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
-use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
-use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
-use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
-use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
 /**
  * Driver that brings a target-language dimension subtree back in sync with its source (reference)
@@ -53,19 +45,13 @@ class Retranslator
     protected TranslationServiceInterface $translationService;
 
     #[Flow\Inject]
-    protected NodeTypeTranslationDirectiveFactory $nodeTypeTranslationDirectiveFactory;
-
-    #[Flow\Inject]
     protected AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState;
 
     #[Flow\Inject]
-    protected NodeUriPathSegmentGenerator $nodeUriPathSegmentGenerator;
+    protected StalePropertyCommandBuilder $stalePropertyCommandBuilder;
 
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
-
-    #[Flow\InjectConfiguration(path: 'nodeTranslation.experimental-applyHtmlEntityDecodeAfterTranslation')]
-    protected bool $experimentalApplyHtmlEntityDecodeAfterTranslation = false;
 
     /**
      * Retranslate the subtree below `$nodeAggregateId` into `$targetDimensionSpacePoint`.
@@ -179,7 +165,7 @@ class Retranslator
 
             $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
             if ($stale !== null && $existsInTarget) {
-                $command = $this->tryBuildSetNodeProperties(
+                $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
                     nodeTypeManager: $nodeTypeManager,
                     sourceNode: $sourceNode,
                     stalePropertyNames: $stale->propertyNames,
@@ -220,117 +206,6 @@ class Retranslator
         return new RetranslationResult(
             stalePropertyCommandsDispatched: count($stalePropertyCommands),
             variantCommandsDispatched: count($variantCommands),
-        );
-    }
-
-    /**
-     * Build a translated `SetNodeProperties` for the explicit stale property list, or `null`.
-     *
-     * Slimmed clone of {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook::tryPrepareSetNodeProperties}.
-     * The difference: the hook iterates ALL translatable properties (fresh variant, everything is
-     * new); we iterate ONLY the explicit stale list, because editors may have manually overridden
-     * other translated properties on the target side.
-     *
-     * Trusts the projection's invariant that stale records only exist for translation-enabled
-     * node types and translatable properties — so guards on `directive->enabled` and `findByName`
-     * are dropped. The `hasProperty` + empty-source guards remain: editors can blank source
-     * properties between the projection write and our dispatch.
-     */
-    private function tryBuildSetNodeProperties(
-        NodeTypeManager $nodeTypeManager,
-        Node $sourceNode,
-        PropertyNames $stalePropertyNames,
-        OriginDimensionSpacePoint $targetOrigin,
-        string $sourceDeeplLanguage,
-        string $targetDeeplLanguage,
-    ): ?SetNodeProperties {
-        $nodeType = $nodeTypeManager->getNodeType($sourceNode->nodeTypeName);
-        // Defensive: projection guarantees the node type existed when the record was written.
-        // If it's since been removed, we can't resolve the connector for non-string props.
-        if ($nodeType === null) {
-            return null;
-        }
-        $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
-
-        /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
-        $propertiesToTranslate = [];
-        foreach ($stalePropertyNames as $propertyName) {
-            if (!$nodeType->hasProperty($propertyName->value)) {
-                continue;
-            }
-            $sourceValue = $sourceNode->getProperty($propertyName);
-            if ($sourceValue === null || (is_string($sourceValue) && trim($sourceValue) === '')) {
-                continue;
-            }
-
-            $name = $propertyName->value;
-            assert($name !== '');
-
-            $translatable = $directive->translatablePropertyNames->findByName($propertyName);
-            if (is_object($sourceValue) && $translatable?->translationConnector !== null) {
-                $propertiesToTranslate[$name] = $translatable->translationConnector->extractTranslations($sourceValue);
-            } elseif (is_string($sourceValue)) {
-                $propertiesToTranslate[$name] = $sourceValue;
-            }
-        }
-
-        if ($propertiesToTranslate === []) {
-            return null;
-        }
-
-        // deflate → translate → enflate so DeepL sees one string per leaf, connectors get reassembled.
-        $deflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
-        /** @var array<non-empty-string, string> $translatedDeflated */
-        $translatedDeflated = $this->translationService->translate(
-            $deflated,
-            $targetDeeplLanguage,
-            $sourceDeeplLanguage,
-        );
-        if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
-            $translatedDeflated = array_map(
-                static fn (string $value): string => html_entity_decode($value),
-                $translatedDeflated,
-            );
-        }
-        $translatedProperties = ArrayFlatteningUtility::enflate($translatedDeflated);
-
-        $propertiesToSet = [];
-        foreach ($translatedProperties as $name => $translatedValue) {
-            // uriPathSegment has strict charset; DeepL routinely violates it.
-            if (
-                $name === 'uriPathSegment'
-                && is_string($translatedValue)
-                && !preg_match('/^[a-z0-9\-]+$/i', $translatedValue)
-            ) {
-                $translatedValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $translatedValue);
-            }
-            $targetValue = null;
-            if (is_array($translatedValue)) {
-                $translatable = $directive->translatablePropertyNames->findByName($name);
-                $connector = $translatable?->translationConnector;
-                if ($connector !== null) {
-                    $sourceValue = $sourceNode->getProperty($name);
-                    if (is_object($sourceValue)) {
-                        $targetValue = $connector->applyTranslations($sourceValue, $translatedValue);
-                    }
-                }
-            } else {
-                $targetValue = $translatedValue;
-            }
-            if ($targetValue !== null) {
-                $propertiesToSet[$name] = $targetValue;
-            }
-        }
-
-        if ($propertiesToSet === []) {
-            return null;
-        }
-
-        return SetNodeProperties::create(
-            workspaceName: $sourceNode->workspaceName,
-            nodeAggregateId: $sourceNode->aggregateId,
-            originDimensionSpacePoint: $targetOrigin,
-            propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
         );
     }
 
