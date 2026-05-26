@@ -22,6 +22,7 @@ use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
 use Sitegeist\LostInTranslation\Domain\PerNodeSynchronisationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchroniser;
@@ -42,6 +43,9 @@ class LostInTranslationCommandController extends CommandController
 
     #[Flow\Inject]
     public WorkspaceSynchroniser $workspaceSynchroniser;
+
+    #[Flow\Inject]
+    public FullWorkspaceSynchroniser $fullWorkspaceSynchroniser;
 
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
@@ -130,17 +134,31 @@ class LostInTranslationCommandController extends CommandController
     }
 
     /**
-     * Synchronise every stale translation in the target workspace+dimension by dispatching one
-     * retranslation per stale-translation record. Source workspace+dimension are accepted but
-     * must currently equal the target workspace and the configured `referenceLanguage` of the
-     * target dimension respectively (cross-workspace sync is not yet supported).
+     * Synchronise translations in the target workspace+dimension. Two modes:
+     *
+     *  - **default (stale-driven)**: dispatches one retranslation per record the projection has
+     *    flagged stale at `(targetWorkspace, targetDimension)`.
+     *  - **`--full`**: walks the entire source-dimension subgraph from every root aggregate down
+     *    and considers every translatable node, regardless of stale state. Two sub-flags tune
+     *    behaviour:
+     *      - `--skip-existing=false` re-translates nodes whose target variant already exists
+     *        (the default `true` skips them when no stale row exists for the node).
+     *      - `--cache=false` bypasses the translation cache for this run (forces fresh DeepL
+     *        calls; cache reads + writes are both suppressed).
+     *
+     * Source workspace+dimension are accepted in both modes but must currently equal the target
+     * workspace and the configured `referenceLanguage` of the target dimension respectively
+     * (cross-workspace sync is not yet supported).
      *
      * @param string $sourceWorkspace Source workspace name. Must equal --target-workspace for now.
      * @param string $sourceDimension Source language dimension value. Must equal the configured `referenceLanguage` of --target-dimension.
      * @param string $targetWorkspace Target workspace whose stale records will be processed.
      * @param string $targetDimension Target language dimension value (e.g. "de").
      * @param string $contentRepository Content repository id (defaults to "default").
-     * @param bool $dryRun If set, report which stale records would be processed without dispatching any commands.
+     * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.
+     * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
+     * @param bool $skipExisting Only used with --full. When true (default), skip nodes whose target variant already exists and have no stale rows. When false, re-translate them.
+     * @param bool $cache Only used with --full. When false, bypass the translation cache for this run.
      * @throws StopCommandException
      */
     public function synchroniseCommand(
@@ -150,15 +168,35 @@ class LostInTranslationCommandController extends CommandController
         string $targetDimension,
         string $contentRepository = 'default',
         bool $dryRun = false,
+        bool $full = false,
+        bool $skipExisting = true,
+        bool $cache = true,
     ): void {
-        $result = $this->workspaceSynchroniser->synchroniseWorkspace(
-            contentRepositoryId: ContentRepositoryId::fromString($contentRepository),
-            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspace),
-            sourceDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]),
-            targetWorkspaceName: WorkspaceName::fromString($targetWorkspace),
-            targetDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $targetDimension]),
-            dryRun: $dryRun,
-        );
+        $contentRepositoryId = ContentRepositoryId::fromString($contentRepository);
+        $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]);
+        $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $targetDimension]);
+        $sourceWorkspaceName = WorkspaceName::fromString($sourceWorkspace);
+        $targetWorkspaceName = WorkspaceName::fromString($targetWorkspace);
+
+        $result = $full
+            ? $this->fullWorkspaceSynchroniser->synchroniseWorkspaceFull(
+                contentRepositoryId: $contentRepositoryId,
+                sourceWorkspaceName: $sourceWorkspaceName,
+                sourceDimensionSpacePoint: $sourceDsp,
+                targetWorkspaceName: $targetWorkspaceName,
+                targetDimensionSpacePoint: $targetDsp,
+                skipExisting: $skipExisting,
+                useCache: $cache,
+                dryRun: $dryRun,
+            )
+            : $this->workspaceSynchroniser->synchroniseWorkspace(
+                contentRepositoryId: $contentRepositoryId,
+                sourceWorkspaceName: $sourceWorkspaceName,
+                sourceDimensionSpacePoint: $sourceDsp,
+                targetWorkspaceName: $targetWorkspaceName,
+                targetDimensionSpacePoint: $targetDsp,
+                dryRun: $dryRun,
+            );
 
         if ($result->skippedReason !== null) {
             $this->outputLine('Synchronisation skipped: %s', [$result->skippedReason]);

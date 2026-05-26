@@ -65,9 +65,10 @@ class DeepLTranslationService implements TranslationServiceInterface
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage
+     * @param bool $useCache When false, bypass the translation cache for both reads and writes.
      * @return array<string,string>
      */
-    public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
+    public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null, bool $useCache = true): array
     {
         // deepl api does throw critical errors when 'en' or 'pt' is used
         // this prevents that by defaulting to the most likely option
@@ -96,7 +97,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
         $cachedEntries = [];
 
-        if ($this->translationCache?->isEnabled()) {
+        if ($useCache && $this->translationCache?->isEnabled()) {
             foreach ($texts as $i => $text) {
                 if ($cachedValue = $this->translationCache->get($text, $sourceLanguage, $targetLanguage)) {
                     $cachedEntries[$i] = $cachedValue;
@@ -146,7 +147,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 
             $translationWithOriginalIndex = array_combine($keys, $translations);
 
-            if ($this->translationCache?->isEnabled()) {
+            if ($useCache && $this->translationCache?->isEnabled()) {
                 foreach ($translationWithOriginalIndex as $i => $translatedString) {
                     $originalString = $texts[$i];
                     $this->translationCache->set($originalString, $translatedString, $sourceLanguage, $targetLanguage);
