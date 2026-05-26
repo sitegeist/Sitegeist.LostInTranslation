@@ -100,6 +100,27 @@ Sitegeist:
       #
       experimental-applyHtmlEntityDecodeAfterTranslation: false
 
+      #
+      # Automatic synchronization on workspace publish.
+      #
+      # When a workspace is published, (text) properties created or changed in `sourceLanguage` are
+      # translated into `targetLanguage` in `targetWorkspaceName` via the Retranslator.
+      #
+      # Synchronization operates on contentDimension identified by `languageDimensionName` above.
+      #
+      # Multiple rules are supported; do not configure cycles (e.g. en→de AND de→en).
+      #
+      # NOTE: Only NodePropertiesWereSet and NodeAggregateWithNodeWasCreated source events drive sync.
+      #       Node moves/removals are handled by the NodeType `scope` mechanism, not by this feature.
+      #
+      # Empty list (default) = feature off.
+      #
+      synchronization: []
+      #  - sourceWorkspaceName: live
+      #    sourceLanguage: en
+      #    targetWorkspaceName: de-review
+      #    targetLanguage: de
+
 Neos:
   Flow:
     mvc:

@@ -1,6 +1,6 @@
 @contentrepository
 Feature: Automatic retranslation on workspace publish
-    # This test needs the `synchronization` config in
+    # This test needs the `synchronization` config in Configuration/Testing/Settings.yaml
 
     Background:
         Given using the following content dimensions yaml configuration:

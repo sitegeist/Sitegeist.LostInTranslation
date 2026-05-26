@@ -1,3 +1,13 @@
+# Config Used in Synchronization Feature file
+Sitegeist:
+  LostInTranslation:
+    nodeTranslation:
+      synchronization:
+        - sourceWorkspaceName: live
+          sourceLanguage: en
+          targetWorkspaceName: live
+          targetLanguage: es
+
 Neos:
   Flow:
     persistence:
