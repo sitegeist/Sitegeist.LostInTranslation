@@ -164,68 +164,78 @@ Feature: Automatic retranslation on workspace publish
     Scenario: Publishing a property update to en,live auto-syncs the existing es variant
         # Exercises the "target variant already exists" branch of the auto-sync hook: instead of
         # emitting CreateNodeVariant the hook must build a translated SetNodeProperties from
-        # StalePropertyCommandBuilder.
+        # StalePropertyCommandBuilder. Uses a NodeWithAutomaticTranslation with a tethered child so
+        # the first publish has to build a real variant + cascade before the update is exercised.
         #
         # (Scenario title used to say "DE" but the test rule covers en → es, so we test the es
         # variant. Adding a de rule would require two rules and complicate the unrelated bits.)
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                  | initialPropertyValues                       |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations | {"inlineEditableStringProperty": "My Text"} |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                            | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
 
-        # First publish: the es variant is freshly created and translated by the auto-sync.
+        # First publish: the es variants (parent + tethered child) are freshly created and translated.
         When the command PublishWorkspace is executed with payload:
             | Key                | Value                |
             | workspaceName      | "user-workspace"     |
             | newContentStreamId | "sync-source-cs-id2" |
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                    |
-            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        # Now mutate the en source and re-publish. The auto-sync hook should detect the fresh
-        # `(live, sir-david, es)` stale row, see that the es variant already exists, and emit a
+        # Now mutate the en source and re-publish. The auto-sync hook detects the fresh
+        # `(live, sir-david, es)` stale row, sees that the es variant already exists, and emits a
         # translated SetNodeProperties (no NodePeerVariantWasCreated this time).
         When I am in workspace "user-workspace"
         And the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                            |
-            | nodeAggregateId           | "sir-david-nodenborough"                         |
-            | originDimensionSpacePoint | {"language": "en"}                               |
-            | propertyValues            | {"inlineEditableStringProperty": "Updated Text"} |
+            | Key                       | Value                                                                                           |
+            | nodeAggregateId           | "sir-david-nodenborough"                                                                        |
+            | originDimensionSpacePoint | {"language": "en"}                                                                              |
+            | propertyValues            | {"inlineEditableStringProperty": "Updated Text", "autoTranslatableStringProperty": "Updated Other Text"} |
         When the command PublishWorkspace is executed with payload:
             | Key                | Value                |
             | workspaceName      | "user-workspace"     |
             | newContentStreamId | "sync-source-cs-id3" |
 
-        # live/es stale cleared again by auto-sync; live/de remains (no rule covers it).
+        # live/es stale cleared again by auto-sync; live/de remains (no rule covers it). The
+        # tethered child's es row was already cleared in the first sync and is not re-staled,
+        # because the en update only touched the parent.
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                    |
-            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # cs-identifier event timeline:
         #   0 ContentStreamWasCreated (Background)
         #   1 RootNodeAggregateWithNodeWasCreated (Background)
-        #   2 NodeAggregateWithNodeWasCreated (sir-david en, replicated by first publish)
-        #   3 NodePeerVariantWasCreated   (sir-david en→es, auto-sync, first publish)
-        #   4 NodePropertiesWereSet       (sir-david es "My Text translated", cascade)
-        #   5 NodePropertiesWereSet       (sir-david en "Updated Text", replicated by second publish)
-        #   6 NodePropertiesWereSet       (sir-david es "Updated Text translated", auto-sync builds it directly — NO NodePeerVariantWasCreated)
-        And I expect exactly 7 events to be published on stream "ContentStream:cs-identifier"
-        And event at index 6 is of type "NodePropertiesWereSet" with payload:
-            | Key                                               | Expected                  |
-            | workspaceName                                     | "live"                    |
-            | contentStreamId                                   | "cs-identifier"           |
-            | nodeAggregateId                                   | "sir-david-nodenborough"  |
-            | originDimensionSpacePoint                         | {"language": "es"}        |
-            | propertyValues.inlineEditableStringProperty.value | "Updated Text translated" |
+        #   2-3 NodeAggregateWithNodeWasCreated (sir-david + nodewyn-tetherton, replicated by first publish)
+        #   4-5 NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→es, auto-sync first publish)
+        #   6-7 NodePropertiesWereSet     (sir-david es + nodewyn-tetherton es translated, cascade)
+        #   8   NodePropertiesWereSet     (sir-david en updated, replicated by second publish)
+        #   9   NodePropertiesWereSet     (sir-david es re-translated, auto-sync builds it directly — NO NodePeerVariantWasCreated)
+        And I expect exactly 10 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 9 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                        |
+            | workspaceName                                       | "live"                          |
+            | contentStreamId                                     | "cs-identifier"                 |
+            | nodeAggregateId                                     | "sir-david-nodenborough"        |
+            | originDimensionSpacePoint                           | {"language": "es"}              |
+            | propertyValues.inlineEditableStringProperty.value   | "Updated Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "Updated Other Text translated" |
 
     Scenario: Publishing from a workspace not covered by any rule does not trigger sync
         # The configured rule targets `sourceWorkspaceName: live`. Publishing onto a *different*
         # base workspace must therefore leave stale rows untouched: no auto-sync hook activity at
-        # all on that workspace's content stream.
+        # all on that workspace's content stream. Uses a NodeWithAutomaticTranslation + tethered
+        # child to prove the whole subtree is left alone.
         #
         # Reuse the Background's user-workspace as the publish source; rebase it onto a fresh
         # `preview` base so the publish lands on preview rather than live.
@@ -240,8 +250,8 @@ Feature: Automatic retranslation on workspace publish
             | baseWorkspaceName | "preview"        |
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                  | initialPropertyValues                       |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations | {"inlineEditableStringProperty": "My Text"} |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                            | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
 
         # Publish onto `preview` — NOT live — so no rule matches and the auto-sync hook short-circuits.
         When the command PublishWorkspace is executed with payload:
@@ -252,15 +262,186 @@ Feature: Automatic retranslation on workspace publish
         # Both de and es stale rows survive on preview AND user-workspace (replaceWorkspaceEntries
         # copies preview→user-workspace after publish).
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                    |
-            | preview        | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | preview        | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
-            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty"] |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | preview        | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | preview        | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | preview        | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | preview        | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # preview-cs-id timeline (no auto-sync cascade):
         #   0 ContentStreamWasForked (CreateWorkspace preview)
-        #   1 NodeAggregateWithNodeWasCreated (sir-david en, replicated by publish)
+        #   1-2 NodeAggregateWithNodeWasCreated (sir-david + nodewyn-tetherton, replicated by publish)
         # No NodePeerVariantWasCreated, no translated NodePropertiesWereSet — proving the hook
         # did not fire for the uncovered workspace.
-        And I expect exactly 2 events to be published on stream "ContentStream:preview-cs-id"
+        And I expect exactly 3 events to be published on stream "ContentStream:preview-cs-id"
+
+    Scenario: Manual workspace synchronisation only affects the target workspace and dimension
+        # The `synchronise` CLI (WorkspaceSynchroniser) walks the stale records for ONE
+        # (workspace, dimension) pair. Here two elaborate subtrees live in user-workspace and one
+        # document lives in other-user-workspace; synchronising user-workspace en→de must clear
+        # only the user-workspace `de` rows and leave user-workspace `es` + all of
+        # other-user-workspace untouched.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+            | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Face Text", "autoTranslatableStringProperty": "Face Other"}  | {"tethered": "nodenberg"}          |
+        When I am in workspace "other-user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                             |
+            | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Parent Text"} |
+
+        And I expect exactly the following stale translations:
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | other-user-workspace | {"language":"de"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | other-user-workspace | {"language":"es"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"es"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When I synchronise translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+
+        # Only user-workspace/de rows cleared. user-workspace/es and all other-user-workspace rows remain.
+        Then I expect exactly the following stale translations:
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | other-user-workspace | {"language":"de"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | other-user-workspace | {"language":"es"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"es"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    Scenario: Full sync into an empty target dimension creates variants across the whole subtree
+        # The `synchronise --full` mode (FullWorkspaceSynchroniser) walks every translatable node
+        # from the root down, independent of stale state. Here a deep subtree (document + content
+        # with tethered child + grandchild) lives only in live/en; full sync en→de must create and
+        # translate the de variant of every node in that subtree.
+        When I am in workspace "live"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                                          | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation     | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"}                 | {"tethered": "nodewyn-tetherton"}  |
+            | nody-mc-nodeface       | nodewyn-tetherton      | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Grandchild Text", "autoTranslatableStringProperty": "Grandchild Other Text"} |                                    |
+            | parent-doc             | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Parent Doc Text"}                                                          |                                    |
+
+        # Every node is stale in de AND es on create.
+        And I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live          | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"de"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When I full-synchronise translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+
+        # All de rows cleared; es rows survive (full sync targeted de only).
+        Then I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live          | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When I am in workspace "live" and dimension space point {"language":"de"}
+        Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node cs-identifier;sir-david-nodenborough;{"language":"de"}
+        And I expect this node to have the following properties:
+            | Key                          | Value                       |
+            | inlineEditableStringProperty | "My Text translated"        |
+            | autoTranslatableStringProperty | "My Other Text translated" |
+        # the deep grandchild was reached by the walk
+        And I expect node aggregate identifier "nody-mc-nodeface" to lead to node cs-identifier;nody-mc-nodeface;{"language":"de"}
+        And I expect this node to have the following properties:
+            | Key                            | Value                          |
+            | inlineEditableStringProperty   | "Grandchild Text translated"   |
+            | autoTranslatableStringProperty | "Grandchild Other Text translated" |
+        # the sibling document too
+        And I expect node aggregate identifier "parent-doc" to lead to node cs-identifier;parent-doc;{"language":"de"}
+        And I expect this node to have the following properties:
+            | Key                            | Value                       |
+            | autoTranslatableStringProperty | "Parent Doc Text translated" |
+
+    Scenario: Full sync with default skip-existing leaves already-translated subtrees untouched
+        # One subtree is pre-translated (variant exists, de stale already cleared); another is fresh.
+        # Default skip-existing=true skips the already-translated one and only builds the missing variant.
+        When I am in workspace "live"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+        # Pre-translate the sir-david subtree by issuing CreateNodeVariant — TranslationCommandHook
+        # cascades the translation and the projection clears its de stale rows.
+        When the command CreateNodeVariant is executed with payload:
+            | Key             | Value                    |
+            | nodeAggregateId | "sir-david-nodenborough" |
+            | sourceOrigin    | {"language":"en"}        |
+            | targetOrigin    | {"language":"de"}        |
+        # Add a second, untranslated subtree.
+        When the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId  | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                         | tetheredDescendantNodeAggregateIds |
+            | nody-mc-nodeface | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Face Text", "autoTranslatableStringProperty": "Face Other"} | {"tethered": "nodenberg"}          |
+
+        And I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live          | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When I full-synchronise translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+
+        # nody-mc-nodeface subtree's de rows cleared; sir-david subtree untouched (was already done);
+        # all es rows remain.
+        Then I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live          | {"language":"es"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When I am in workspace "live" and dimension space point {"language":"de"}
+        Then I expect node aggregate identifier "nody-mc-nodeface" to lead to node cs-identifier;nody-mc-nodeface;{"language":"de"}
+        And I expect this node to have the following properties:
+            | Key                            | Value                |
+            | inlineEditableStringProperty   | "Face Text translated" |
+            | autoTranslatableStringProperty | "Face Other translated" |
+
+    Scenario: Full sync with skipExisting=false re-translates existing variants too
+        # A manually-overridden de variant gets clobbered by re-translation of the current en source.
+        When I am in workspace "live"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+        When the command CreateNodeVariant is executed with payload:
+            | Key             | Value                    |
+            | nodeAggregateId | "sir-david-nodenborough" |
+            | sourceOrigin    | {"language":"en"}        |
+            | targetOrigin    | {"language":"de"}        |
+        # Editor overrides the auto-translation by hand.
+        When the command SetNodeProperties is executed with payload:
+            | Key                       | Value                                                                                                |
+            | nodeAggregateId           | "sir-david-nodenborough"                                                                             |
+            | originDimensionSpacePoint | {"language": "de"}                                                                                   |
+            | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted DE", "autoTranslatableStringProperty": "Hand Other"}  |
+
+        When I full-synchronise translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} including existing variants
+
+        # The hand-crafted text was clobbered by re-translation of the current source.
+        When I am in workspace "live" and dimension space point {"language":"de"}
+        Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node cs-identifier;sir-david-nodenborough;{"language":"de"}
+        And I expect this node to have the following properties:
+            | Key                            | Value                      |
+            | inlineEditableStringProperty   | "My Text translated"       |
+            | autoTranslatableStringProperty | "My Other Text translated" |
