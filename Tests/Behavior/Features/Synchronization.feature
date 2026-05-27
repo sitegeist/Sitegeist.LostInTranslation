@@ -519,6 +519,23 @@ Feature: Automatic retranslation on workspace publish
             | workspaceName      | "user-workspace"     |
             | newContentStreamId | "sync-source-cs-id2" |
 
+        # Synchronizing cleared every es stale record in `live` — the document's `title`, the
+        # content's properties AND the (empty) content-collection record. live keeps only its
+        # unsynced de rows (no rule covers de). The user-workspace es rows survive: the rule only
+        # scrubs live, and replaceWorkspaceEntries already copied them back before the hook ran
+        # (same as the other publish-on-live scenarios).
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | live           | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | live           | {"language":"de"}         | page-home-main  | []                                                                |
+            | user-workspace | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home       | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main  | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main  | []                                                                |
+
         # Document scope created + translated the es variant of the document …
         When I am in workspace "live" and dimension space point {"language":"es"}
         Then I expect node aggregate identifier "page-home" to lead to node cs-identifier;page-home;{"language":"es"}

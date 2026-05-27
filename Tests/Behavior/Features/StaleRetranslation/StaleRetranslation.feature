@@ -621,3 +621,25 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"de"}         | homepage        | ["title"]     |
             | user-workspace | {"language":"de"}         | homepage-main   | []            |
 
+    Scenario: Retranslating a document removes all of its stale translations including its content collection
+        # A document's tethered ContentCollection carries no translatable properties and is recorded
+        # with an empty stale list. Retranslating the document must clear ALL stale records below it —
+        # the document's own properties, the content inside it, AND the empty content-collection
+        # record — leaving nothing behind (no orphaned stale rows).
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
+            | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
+            | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main  | []                                                                |
+
+        When I retranslate node "page-home" in workspace "user-workspace" and dimension space point {"language":"de"}
+
+        # Every stale record below the document is gone — including the empty content-collection record.
+        Then I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
