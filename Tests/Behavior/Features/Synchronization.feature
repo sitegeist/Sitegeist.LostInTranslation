@@ -366,23 +366,36 @@ Feature: Automatic retranslation on workspace publish
             | live          | {"language":"es"}         | parent-doc             | ["autoTranslatableStringProperty"]                                |
             | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        When I am in workspace "live" and dimension space point {"language":"de"}
-        Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node cs-identifier;sir-david-nodenborough;{"language":"de"}
-        And I expect this node to have the following properties:
-            | Key                          | Value                       |
-            | inlineEditableStringProperty | "My Text translated"        |
-            | autoTranslatableStringProperty | "My Other Text translated" |
-        # the deep grandchild was reached by the walk
-        And I expect node aggregate identifier "nody-mc-nodeface" to lead to node cs-identifier;nody-mc-nodeface;{"language":"de"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                          |
-            | inlineEditableStringProperty   | "Grandchild Text translated"   |
-            | autoTranslatableStringProperty | "Grandchild Other Text translated" |
-        # the sibling document too
-        And I expect node aggregate identifier "parent-doc" to lead to node cs-identifier;parent-doc;{"language":"de"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                       |
-            | autoTranslatableStringProperty | "Parent Doc Text translated" |
+        # cs-identifier event timeline (full sync walks the source subtree top-down):
+        #   0     ContentStreamWasCreated (Background)
+        #   1     RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-5   NodeAggregateWithNodeWasCreated (sir-david + tethered nodewyn-tetherton, nody-mc-nodeface, parent-doc)
+        #   6-7   NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→de)
+        #   8-9   NodePropertiesWereSet     (sir-david de + nodewyn-tetherton de translated, CreateNodeVariant cascade)
+        #   10    NodePropertiesWereSet     (nodewyn-tetherton de re-translated — the walk's pre-fetched stale set
+        #                                    still lists it, so it is refreshed once more after the cascade)
+        #   11    NodePeerVariantWasCreated (nody-mc-nodeface en→de — the deep grandchild reached by the walk)
+        #   12    NodePropertiesWereSet     (nody-mc-nodeface de translated)
+        #   13    NodePeerVariantWasCreated (parent-doc en→de — the sibling document)
+        #   14    NodePropertiesWereSet     (parent-doc de translated)
+        Then I expect exactly 15 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 8 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                   |
+            | nodeAggregateId                                     | "sir-david-nodenborough"   |
+            | originDimensionSpacePoint                           | {"language": "de"}         |
+            | propertyValues.inlineEditableStringProperty.value   | "My Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "My Other Text translated" |
+        And event at index 12 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                           |
+            | nodeAggregateId                                     | "nody-mc-nodeface"                 |
+            | originDimensionSpacePoint                           | {"language": "de"}                 |
+            | propertyValues.inlineEditableStringProperty.value   | "Grandchild Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "Grandchild Other Text translated" |
+        And event at index 14 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                     |
+            | nodeAggregateId                                     | "parent-doc"                 |
+            | originDimensionSpacePoint                           | {"language": "de"}           |
+            | propertyValues.autoTranslatableStringProperty.value | "Parent Doc Text translated" |
 
     Scenario: Full sync with default skip-existing leaves already-translated subtrees untouched
         # One subtree is pre-translated (variant exists, de stale already cleared); another is fresh.
@@ -423,12 +436,24 @@ Feature: Automatic retranslation on workspace publish
             | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        When I am in workspace "live" and dimension space point {"language":"de"}
-        Then I expect node aggregate identifier "nody-mc-nodeface" to lead to node cs-identifier;nody-mc-nodeface;{"language":"de"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                |
-            | inlineEditableStringProperty   | "Face Text translated" |
-            | autoTranslatableStringProperty | "Face Other translated" |
+        # cs-identifier event timeline:
+        #   0     ContentStreamWasCreated (Background)
+        #   1     RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-3   NodeAggregateWithNodeWasCreated (sir-david + tethered nodewyn-tetherton)
+        #   4-7   NodePeerVariantWasCreated + NodePropertiesWereSet (sir-david subtree pre-translated to de)
+        #   8-9   NodeAggregateWithNodeWasCreated (nody-mc-nodeface + tethered nodenberg)
+        #   10-11 NodePeerVariantWasCreated (nody-mc-nodeface + nodenberg en→de — only the untranslated subtree is built)
+        #   12-13 NodePropertiesWereSet     (nody-mc-nodeface de + nodenberg de translated)
+        #   14    NodePropertiesWereSet     (nodenberg de re-translated — the walk's pre-fetched stale set still
+        #                                    lists it, so it is refreshed once more after the cascade)
+        # The already-translated sir-david subtree is skipped: no further events for it.
+        Then I expect exactly 15 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 12 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                |
+            | nodeAggregateId                                     | "nody-mc-nodeface"      |
+            | originDimensionSpacePoint                           | {"language": "de"}      |
+            | propertyValues.inlineEditableStringProperty.value   | "Face Text translated"  |
+            | propertyValues.autoTranslatableStringProperty.value | "Face Other translated" |
 
     Scenario: Full sync with skipExisting=false re-translates existing variants too
         # A manually-overridden de variant gets clobbered by re-translation of the current en source.
@@ -450,13 +475,25 @@ Feature: Automatic retranslation on workspace publish
 
         When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} including existing variants
 
-        # The hand-crafted text was clobbered by re-translation of the current source.
-        When I am in workspace "live" and dimension space point {"language":"de"}
-        Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node cs-identifier;sir-david-nodenborough;{"language":"de"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                      |
-            | inlineEditableStringProperty   | "My Text translated"       |
-            | autoTranslatableStringProperty | "My Other Text translated" |
+        # cs-identifier event timeline:
+        #   0   ContentStreamWasCreated (Background)
+        #   1   RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-3 NodeAggregateWithNodeWasCreated (sir-david + tethered nodewyn-tetherton)
+        #   4-5 NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→de, CreateNodeVariant)
+        #   6-7 NodePropertiesWereSet     (sir-david de + nodewyn-tetherton de translated, cascade)
+        #   8   NodePropertiesWereSet     (sir-david de hand-override "Hand Crafted DE")
+        #   9   NodePropertiesWereSet     (sir-david de re-translated from current source — full sync, skipExisting=false)
+        #   10  NodePropertiesWereSet     (nodewyn-tetherton de re-translated)
+        # The hand-crafted text at index 8 was clobbered by the re-translation at index 9.
+        Then I expect exactly 11 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 9 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                   |
+            | workspaceName                                       | "live"                     |
+            | contentStreamId                                     | "cs-identifier"            |
+            | nodeAggregateId                                     | "sir-david-nodenborough"   |
+            | originDimensionSpacePoint                           | {"language": "de"}         |
+            | propertyValues.inlineEditableStringProperty.value   | "My Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "My Other Text translated" |
 
     Scenario: Stale-mode auto-sync re-translates a tethered child whose source changed
         # Regression guard for the stale-driven path (the default `live` rule): a property change
@@ -483,11 +520,22 @@ Feature: Automatic retranslation on workspace publish
             | workspaceName      | "user-workspace"     |
             | newContentStreamId | "sync-source-cs-id3" |
 
-        When I am in workspace "live" and dimension space point {"language":"es"}
-        Then I expect node aggregate identifier "nodewyn-tetherton" to lead to node cs-identifier;nodewyn-tetherton;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                         |
-            | autoTranslatableStringProperty | "Tethered Changed translated" |
+        # cs-identifier event timeline:
+        #   0   ContentStreamWasCreated (Background)
+        #   1   RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-3 NodeAggregateWithNodeWasCreated (sir-david + nodewyn-tetherton, replicated by publish #1)
+        #   4-5 NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→es, auto-sync publish #1)
+        #   6-7 NodePropertiesWereSet     (sir-david es + nodewyn-tetherton es translated, cascade)
+        #   8   NodePropertiesWereSet     (nodewyn-tetherton en "Tethered Changed", replicated by publish #2)
+        #   9   NodePropertiesWereSet     (nodewyn-tetherton es re-translated from its changed source, auto-sync publish #2)
+        Then I expect exactly 10 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 9 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                      |
+            | workspaceName                                       | "live"                        |
+            | contentStreamId                                     | "cs-identifier"               |
+            | nodeAggregateId                                     | "nodewyn-tetherton"           |
+            | originDimensionSpacePoint                           | {"language": "es"}            |
+            | propertyValues.autoTranslatableStringProperty.value | "Tethered Changed translated" |
 
     Scenario: Document-scope auto-sync mirrors a published document and its content into the target dimension
         # The `live` rule is Document scope: publishing a freshly-created Document.Page that holds
@@ -536,18 +584,29 @@ Feature: Automatic retranslation on workspace publish
             | user-workspace | {"language":"de"}         | page-home-main  | []                                                                |
             | user-workspace | {"language":"es"}         | page-home-main  | []                                                                |
 
+        # cs-identifier event timeline (Document scope mirrors document + content into es):
+        #   0     ContentStreamWasCreated (Background)
+        #   1     RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-4   NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main + intro-text, replicated by publish)
+        #   5     NodePeerVariantWasCreated (page-home en→es — document created first, ancestor-before-descendant)
+        #   6     NodePeerVariantWasCreated (page-home-main en→es, the tethered collection materialises with it)
+        #   7     NodePropertiesWereSet     (page-home es title translated; the collection has no translatable properties)
+        #   8     NodePeerVariantWasCreated (intro-text en→es — the nested content, created after its parent collection exists)
+        #   9     NodePropertiesWereSet     (intro-text es translated)
+        Then I expect exactly 10 events to be published on stream "ContentStream:cs-identifier"
         # Document scope created + translated the es variant of the document …
-        When I am in workspace "live" and dimension space point {"language":"es"}
-        Then I expect node aggregate identifier "page-home" to lead to node cs-identifier;page-home;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key   | Value             |
-            | title | "Home translated" |
+        And event at index 7 is of type "NodePropertiesWereSet" with payload:
+            | Key                               | Expected           |
+            | nodeAggregateId                   | "page-home"        |
+            | originDimensionSpacePoint         | {"language": "es"} |
+            | propertyValues.title.value        | "Home translated"  |
         # … and of the content nested inside its `main` collection.
-        And I expect node aggregate identifier "intro-text" to lead to node cs-identifier;intro-text;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                |
-            | inlineEditableStringProperty   | "Welcome translated" |
-            | autoTranslatableStringProperty | "Intro translated"   |
+        And event at index 9 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected             |
+            | nodeAggregateId                                     | "intro-text"         |
+            | originDimensionSpacePoint                           | {"language": "es"}   |
+            | propertyValues.inlineEditableStringProperty.value   | "Welcome translated" |
+            | propertyValues.autoTranslatableStringProperty.value | "Intro translated"   |
 
     Scenario: Content-scope auto-sync never creates documents and skips content whose document is missing in the target
         # The `content-review` rule is Content scope: it must NOT create Document variants
@@ -574,11 +633,12 @@ Feature: Automatic retranslation on workspace publish
             | workspaceName      | "content-user"         |
             | newContentStreamId | "content-user-cs-id-2" |
 
-        # Nothing was created in es: the document is not auto-created, and the content's document is
-        # absent from the target dimension, so the content is skipped too.
-        When I am in workspace "content-review" and dimension space point {"language":"es"}
-        Then I expect node aggregate identifier "page-home" to lead to no node
-        And I expect node aggregate identifier "intro-text" to lead to no node
+        # content-review-cs-id event timeline — Content scope synced nothing:
+        #   0   ContentStreamWasForked (CreateWorkspace content-review)
+        #   1-3 NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main + intro-text, replicated by publish)
+        # No NodePeerVariantWasCreated and no NodePropertiesWereSet are appended: the document is not
+        # auto-created, and the content's document is absent from es, so the content is skipped too.
+        Then I expect exactly 4 events to be published on stream "ContentStream:content-review-cs-id"
 
     Scenario: Content-scope auto-sync fills in content below a document that already exists in the target
         # The `content-review` rule is Content scope. Once a Document has been manually adopted into
@@ -613,15 +673,26 @@ Feature: Automatic retranslation on workspace publish
             | workspaceName      | "content-user"         |
             | newContentStreamId | "content-user-cs-id-2" |
 
+        # content-review-cs-id event timeline:
+        #   0   ContentStreamWasForked (CreateWorkspace content-review)
+        #   1-2 NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main, replicated by publish)
+        #   3-4 NodePeerVariantWasCreated (page-home + page-home-main en→es — the manual adoption, replicated)
+        #   5   NodePropertiesWereSet     (page-home es title translated — the manual adoption's cascade, replicated)
+        #   6   NodeAggregateWithNodeWasCreated (intro-text, replicated by publish)
+        #   7   NodePeerVariantWasCreated (intro-text en→es — Content scope fills it in because its document exists in es)
+        #   8   NodePropertiesWereSet     (intro-text es translated)
+        Then I expect exactly 9 events to be published on stream "ContentStream:content-review-cs-id"
         # The content was created + translated in es because its document exists there …
-        When I am in workspace "content-review" and dimension space point {"language":"es"}
-        Then I expect node aggregate identifier "intro-text" to lead to node content-review-cs-id;intro-text;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                |
-            | inlineEditableStringProperty   | "Welcome translated" |
-            | autoTranslatableStringProperty | "Intro translated"   |
-        # … and the manually-adopted document keeps its translation, untouched by the content sync.
-        And I expect node aggregate identifier "page-home" to lead to node content-review-cs-id;page-home;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key   | Value             |
-            | title | "Home translated" |
+        And event at index 8 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected             |
+            | nodeAggregateId                                     | "intro-text"         |
+            | originDimensionSpacePoint                           | {"language": "es"}   |
+            | propertyValues.inlineEditableStringProperty.value   | "Welcome translated" |
+            | propertyValues.autoTranslatableStringProperty.value | "Intro translated"   |
+        # … and the manually-adopted document keeps its translation: the only NodePropertiesWereSet for
+        # page-home/es is the replicated manual one (index 5) — the content sync never re-touched it.
+        And event at index 5 is of type "NodePropertiesWereSet" with payload:
+            | Key                        | Expected           |
+            | nodeAggregateId            | "page-home"        |
+            | originDimensionSpacePoint  | {"language": "es"} |
+            | propertyValues.title.value | "Home translated"  |
