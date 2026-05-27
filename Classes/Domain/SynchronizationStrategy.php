@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain;
 
 /**
- * Which nodes a publication synchronisation rule visits.
+ * Which nodes a publication synchronization rule visits.
  *
  *  - {@see self::Stale}: only nodes the {@see \Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationProjection}
  *    flagged (a source property changed, or a variant was ported into the target dimension). Cheap;

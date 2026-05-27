@@ -23,8 +23,8 @@ Neos:
           # runtime state before returning commands, and TranslationCommandHook::onAfterHandle
           # resets that state at the start of every entry. Reversing the order would wipe the
           # AI attribution before the cascade ran.
-          'Sitegeist.LostInTranslation:PublicationSynchronisationCommandHook':
-            factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\PublicationSynchronisationCommandHookFactory
+          'Sitegeist.LostInTranslation:SynchronizationCommandHook':
+            factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\SynchronizationCommandHookFactory
         # Activate for content governance mode:
         #authProvider:
         #  factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory

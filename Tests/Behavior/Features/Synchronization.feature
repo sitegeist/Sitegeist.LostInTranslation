@@ -279,10 +279,10 @@ Feature: Automatic retranslation on workspace publish
         # did not fire for the uncovered workspace.
         And I expect exactly 3 events to be published on stream "ContentStream:preview-cs-id"
 
-    Scenario: Manual workspace synchronisation only affects the target workspace and dimension
-        # The `synchronise` CLI (WorkspaceSynchroniser) walks the stale records for ONE
+    Scenario: Manual workspace synchronization only affects the target workspace and dimension
+        # The `synchronize` CLI (WorkspaceSynchronizer) walks the stale records for ONE
         # (workspace, dimension) pair. Here two elaborate subtrees live in user-workspace and one
-        # document lives in other-user-workspace; synchronising user-workspace en→de must clear
+        # document lives in other-user-workspace; synchronizing user-workspace en→de must clear
         # only the user-workspace `de` rows and leave user-workspace `es` + all of
         # other-user-workspace untouched.
         When I am in workspace "user-workspace"
@@ -308,7 +308,7 @@ Feature: Automatic retranslation on workspace publish
             | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace       | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        When I synchronise translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+        When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
 
         # Only user-workspace/de rows cleared. user-workspace/es and all other-user-workspace rows remain.
         Then I expect exactly the following stale translations:
@@ -321,7 +321,7 @@ Feature: Automatic retranslation on workspace publish
             | user-workspace       | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     Scenario: Full sync into an empty target dimension creates variants across the whole subtree
-        # The `synchronise --full` mode (FullWorkspaceSynchroniser) walks every translatable node
+        # The `synchronize --full` mode (FullWorkspaceSynchronizer) walks every translatable node
         # from the root down, independent of stale state. Here a deep subtree (document + content
         # with tethered child + grandchild) lives only in live/en; full sync en→de must create and
         # translate the de variant of every node in that subtree.
@@ -344,7 +344,7 @@ Feature: Automatic retranslation on workspace publish
             | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        When I full-synchronise translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+        When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
 
         # All de rows cleared; es rows survive (full sync targeted de only).
         Then I expect exactly the following stale translations:
@@ -400,7 +400,7 @@ Feature: Automatic retranslation on workspace publish
             | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-        When I full-synchronise translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+        When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
 
         # nody-mc-nodeface subtree's de rows cleared; sir-david subtree untouched (was already done);
         # all es rows remain.
@@ -436,7 +436,7 @@ Feature: Automatic retranslation on workspace publish
             | originDimensionSpacePoint | {"language": "de"}                                                                                   |
             | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted DE", "autoTranslatableStringProperty": "Hand Other"}  |
 
-        When I full-synchronise translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} including existing variants
+        When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} including existing variants
 
         # The hand-crafted text was clobbered by re-translation of the current source.
         When I am in workspace "live" and dimension space point {"language":"de"}

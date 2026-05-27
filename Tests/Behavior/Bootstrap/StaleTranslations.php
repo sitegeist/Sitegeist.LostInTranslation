@@ -9,9 +9,9 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
-use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
-use Sitegeist\LostInTranslation\Domain\WorkspaceSynchroniser;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 trait StaleTranslations
 {
@@ -56,16 +56,16 @@ trait StaleTranslations
     }
 
     /**
-     * @When /^I synchronise translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
+     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
      * @throws Exception
      */
-    public function iSynchroniseTranslations(
+    public function iSynchronizeTranslations(
         string $sourceWorkspaceName,
         string $sourceDimensionSpacePoint,
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
     ): void {
-        $this->getObject(WorkspaceSynchroniser::class)->synchroniseWorkspace(
+        $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
             contentRepositoryId: $this->currentContentRepository->id,
             sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
             sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
@@ -75,10 +75,10 @@ trait StaleTranslations
     }
 
     /**
-     * @When /^I full-synchronise translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})( including existing variants)?$/
+     * @When /^I full-synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})( including existing variants)?$/
      * @throws Exception
      */
-    public function iFullSynchroniseTranslations(
+    public function iFullSynchronizeTranslations(
         string $sourceWorkspaceName,
         string $sourceDimensionSpacePoint,
         string $targetWorkspaceName,
@@ -86,7 +86,7 @@ trait StaleTranslations
         string $includingExisting = '',
     ): void {
         $skipExisting = $includingExisting === '';
-        $this->getObject(FullWorkspaceSynchroniser::class)->synchroniseWorkspaceFull(
+        $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
             contentRepositoryId: $this->currentContentRepository->id,
             sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
             sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),

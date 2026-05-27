@@ -8,7 +8,7 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\Flow\Annotations as Flow;
 
 #[Flow\Proxy(false)]
-final readonly class PerNodeSynchronisationResult
+final readonly class PerNodeSynchronizationResult
 {
     public function __construct(
         public NodeAggregateId $nodeAggregateId,

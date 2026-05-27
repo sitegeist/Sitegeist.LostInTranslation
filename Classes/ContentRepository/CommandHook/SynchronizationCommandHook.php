@@ -26,10 +26,10 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
-use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
-use Sitegeist\LostInTranslation\Domain\SynchronisationRule;
-use Sitegeist\LostInTranslation\Domain\SynchronisationRules;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStrategy;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Domain\TranslationStrategy;
@@ -51,19 +51,19 @@ use Sitegeist\LostInTranslation\Domain\TranslationStrategy;
  * dispatch directly. AI authorship is flagged via {@see AISystemTranslationRuntimeState} so the
  * returned commands' events are attributed to the AI service rather than the publishing editor.
  */
-final class PublicationSynchronisationCommandHook implements CommandHookInterface
+final class SynchronizationCommandHook implements CommandHookInterface
 {
     private ?StaleTranslationFinder $resolvedStaleTranslationFinder = null;
 
     public function __construct(
         private readonly bool $enabled,
-        private readonly SynchronisationRules $rules,
+        private readonly SynchronizationRules $rules,
         private readonly ContentGraphReadModelInterface $contentGraphReadModel,
         private readonly NodeTypeManager $nodeTypeManager,
         private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         private readonly ContentRepositoryId $contentRepositoryId,
         private readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
-        private readonly FullWorkspaceSynchroniser $fullWorkspaceSynchroniser,
+        private readonly FullWorkspaceSynchronizer $fullWorkspaceSynchronizer,
         private readonly DimensionValueDirectiveFactory $dimensionValueDirectiveFactory,
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
@@ -139,7 +139,7 @@ final class PublicationSynchronisationCommandHook implements CommandHookInterfac
     /**
      * @return list<CommandInterface>
      */
-    private function commandsForRule(SynchronisationRule $rule): array
+    private function commandsForRule(SynchronizationRule $rule): array
     {
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceLanguage]);
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetLanguage]);
@@ -160,11 +160,11 @@ final class PublicationSynchronisationCommandHook implements CommandHookInterfac
             return [];
         }
 
-        // Full strategy: walk the whole target subtree (delegated to FullWorkspaceSynchroniser,
+        // Full strategy: walk the whole target subtree (delegated to FullWorkspaceSynchronizer,
         // which also encodes the "stale always forces a refresh" override). `keep-existing` maps to
         // skipExisting=true, `force-refresh` to false.
         if ($rule->synchronizationStrategy === SynchronizationStrategy::Full) {
-            return iterator_to_array($this->fullWorkspaceSynchroniser->buildSynchronisationCommands(
+            return iterator_to_array($this->fullWorkspaceSynchronizer->buildSynchronizationCommands(
                 contentRepositoryId: $this->contentRepositoryId,
                 targetWorkspaceName: $targetWorkspace,
                 sourceDimensionSpacePoint: $sourceDsp,

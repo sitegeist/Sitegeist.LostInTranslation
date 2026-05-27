@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain;
 
 /**
- * What a publication synchronisation rule does with a visited node whose target variant
+ * What a publication synchronization rule does with a visited node whose target variant
  * **already exists**.
  *
  *  - {@see self::KeepExisting}: leave the existing variant alone (protect manual edits).

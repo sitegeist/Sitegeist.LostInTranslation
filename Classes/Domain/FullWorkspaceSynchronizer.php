@@ -32,7 +32,7 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
 /**
  * Walks the entire source-dimension subgraph from each root aggregate downward and emits
  * translation commands for every translatable node — independent of the stale-translation
- * projection. Where {@see WorkspaceSynchroniser} only acts on records the projection has already
+ * projection. Where {@see WorkspaceSynchronizer} only acts on records the projection has already
  * flagged, this service treats every node in the source dimension as a candidate.
  *
  * Decision matrix per node (only when `directive->enabled`):
@@ -49,11 +49,11 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
  *
  * Two entry points share the same per-node decision ({@see self::decideCommandForNode}) and
  * traversal ({@see self::traverseSourceSubtree}):
- *   - {@see self::synchroniseWorkspaceFull} dispatches inline (CLI `synchronise --full`).
- *   - {@see self::buildSynchronisationCommands} returns commands without dispatching, for the
+ *   - {@see self::synchronizeWorkspaceFull} dispatches inline (CLI `synchronize --full`).
+ *   - {@see self::buildSynchronizationCommands} returns commands without dispatching, for the
  *     publication hook which must hand commands back from `onAfterHandle` rather than dispatch.
  */
-class FullWorkspaceSynchroniser
+class FullWorkspaceSynchronizer
 {
     #[Flow\Inject]
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
@@ -73,7 +73,7 @@ class FullWorkspaceSynchroniser
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
 
-    public function synchroniseWorkspaceFull(
+    public function synchronizeWorkspaceFull(
         ContentRepositoryId $contentRepositoryId,
         WorkspaceName $sourceWorkspaceName,
         DimensionSpacePoint $sourceDimensionSpacePoint,
@@ -82,10 +82,10 @@ class FullWorkspaceSynchroniser
         bool $skipExisting = true,
         bool $useCache = true,
         bool $dryRun = false,
-    ): WorkspaceSynchronisationResult {
+    ): WorkspaceSynchronizationResult {
         if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
-                'cross-workspace full synchronisation is not yet supported (source "%s" != target "%s")',
+            return WorkspaceSynchronizationResult::skipped(sprintf(
+                'cross-workspace full synchronization is not yet supported (source "%s" != target "%s")',
                 $sourceWorkspaceName->value,
                 $targetWorkspaceName->value,
             ));
@@ -95,7 +95,7 @@ class FullWorkspaceSynchroniser
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
         $languageDimension = $cr->getContentDimensionSource()->getDimension($languageDimensionId);
         if ($languageDimension === null) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
+            return WorkspaceSynchronizationResult::skipped(sprintf(
                 'language dimension "%s" not configured in CR "%s"',
                 $this->languageDimensionName,
                 $contentRepositoryId->value,
@@ -109,13 +109,13 @@ class FullWorkspaceSynchroniser
         );
         $expectedSourceDsp = $resolver->tryResolveSourceDimensionSpacePoint($targetDimensionSpacePoint);
         if ($expectedSourceDsp === null) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
+            return WorkspaceSynchronizationResult::skipped(sprintf(
                 'no referenceLanguage configured for target dimension %s',
                 $targetDimensionSpacePoint->toJson(),
             ));
         }
         if (!$expectedSourceDsp->equals($sourceDimensionSpacePoint)) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
+            return WorkspaceSynchronizationResult::skipped(sprintf(
                 'source dimension %s does not match configured referenceLanguage %s for target dimension %s',
                 $sourceDimensionSpacePoint->toJson(),
                 $expectedSourceDsp->toJson(),
@@ -133,7 +133,7 @@ class FullWorkspaceSynchroniser
             OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
         )?->deeplTargetId;
         if ($sourceDeepl === null || $targetDeepl === null) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
+            return WorkspaceSynchronizationResult::skipped(sprintf(
                 'DeepL language not resolvable for source %s or target %s',
                 $sourceDimensionSpacePoint->toJson(),
                 $targetDimensionSpacePoint->toJson(),
@@ -165,7 +165,7 @@ class FullWorkspaceSynchroniser
                 continue;
             }
             $isVariant = $command instanceof CreateNodeVariant;
-            $perNodeResults[] = new PerNodeSynchronisationResult(
+            $perNodeResults[] = new PerNodeSynchronizationResult(
                 $node->aggregateId,
                 $dryRun
                     ? RetranslationResult::skipped('dry-run')
@@ -179,7 +179,7 @@ class FullWorkspaceSynchroniser
             }
         }
 
-        return new WorkspaceSynchronisationResult($perNodeResults);
+        return new WorkspaceSynchronizationResult($perNodeResults);
     }
 
     /**
@@ -192,7 +192,7 @@ class FullWorkspaceSynchroniser
      * materialises tethered descendants) is dispatched before a non-tethered grandchild's own
      * `CreateNodeVariant`.
      */
-    public function buildSynchronisationCommands(
+    public function buildSynchronizationCommands(
         ContentRepositoryId $contentRepositoryId,
         WorkspaceName $targetWorkspaceName,
         DimensionSpacePoint $sourceDimensionSpacePoint,

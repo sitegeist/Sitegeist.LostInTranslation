@@ -22,10 +22,10 @@ use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
-use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
-use Sitegeist\LostInTranslation\Domain\PerNodeSynchronisationResult;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
+use Sitegeist\LostInTranslation\Domain\PerNodeSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
-use Sitegeist\LostInTranslation\Domain\WorkspaceSynchroniser;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 class LostInTranslationCommandController extends CommandController
 {
@@ -42,10 +42,10 @@ class LostInTranslationCommandController extends CommandController
     public Retranslator $retranslator;
 
     #[Flow\Inject]
-    public WorkspaceSynchroniser $workspaceSynchroniser;
+    public WorkspaceSynchronizer $workspaceSynchronizer;
 
     #[Flow\Inject]
-    public FullWorkspaceSynchroniser $fullWorkspaceSynchroniser;
+    public FullWorkspaceSynchronizer $fullWorkspaceSynchronizer;
 
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
@@ -134,7 +134,7 @@ class LostInTranslationCommandController extends CommandController
     }
 
     /**
-     * Synchronise translations in the target workspace+dimension. Two modes:
+     * Synchronize translations in the target workspace+dimension. Two modes:
      *
      *  - **default (stale-driven)**: dispatches one retranslation per record the projection has
      *    flagged stale at `(targetWorkspace, targetDimension)`.
@@ -161,7 +161,7 @@ class LostInTranslationCommandController extends CommandController
      * @param bool $cache Only used with --full. When false, bypass the translation cache for this run.
      * @throws StopCommandException
      */
-    public function synchroniseCommand(
+    public function synchronizeCommand(
         string $sourceWorkspace,
         string $sourceDimension,
         string $targetWorkspace,
@@ -179,7 +179,7 @@ class LostInTranslationCommandController extends CommandController
         $targetWorkspaceName = WorkspaceName::fromString($targetWorkspace);
 
         $result = $full
-            ? $this->fullWorkspaceSynchroniser->synchroniseWorkspaceFull(
+            ? $this->fullWorkspaceSynchronizer->synchronizeWorkspaceFull(
                 contentRepositoryId: $contentRepositoryId,
                 sourceWorkspaceName: $sourceWorkspaceName,
                 sourceDimensionSpacePoint: $sourceDsp,
@@ -189,7 +189,7 @@ class LostInTranslationCommandController extends CommandController
                 useCache: $cache,
                 dryRun: $dryRun,
             )
-            : $this->workspaceSynchroniser->synchroniseWorkspace(
+            : $this->workspaceSynchronizer->synchronizeWorkspace(
                 contentRepositoryId: $contentRepositoryId,
                 sourceWorkspaceName: $sourceWorkspaceName,
                 sourceDimensionSpacePoint: $sourceDsp,
@@ -199,12 +199,12 @@ class LostInTranslationCommandController extends CommandController
             );
 
         if ($result->skippedReason !== null) {
-            $this->outputLine('Synchronisation skipped: %s', [$result->skippedReason]);
+            $this->outputLine('Synchronization skipped: %s', [$result->skippedReason]);
             $this->quit(1);
         }
 
         if ($result->perNodeResults === []) {
-            $this->outputLine('No stale translations to synchronise for workspace "%s" / dimension "%s".', [$targetWorkspace, $targetDimension]);
+            $this->outputLine('No stale translations to synchronize for workspace "%s" / dimension "%s".', [$targetWorkspace, $targetDimension]);
             return;
         }
 
@@ -214,7 +214,7 @@ class LostInTranslationCommandController extends CommandController
         $this->outputLine(
             '%s: %d node(s) processed, %d stale property update(s) and %d variant creation(s) dispatched, %d skipped.',
             [
-                $dryRun ? 'Dry run' : 'Synchronisation finished',
+                $dryRun ? 'Dry run' : 'Synchronization finished',
                 count($result->perNodeResults),
                 $result->totalStalePropertyCommandsDispatched(),
                 $result->totalVariantCommandsDispatched(),
@@ -223,7 +223,7 @@ class LostInTranslationCommandController extends CommandController
         );
     }
 
-    private function formatPerNodeLine(PerNodeSynchronisationResult $perNode, bool $dryRun): string
+    private function formatPerNodeLine(PerNodeSynchronizationResult $perNode, bool $dryRun): string
     {
         $r = $perNode->result;
         if ($r->skippedReason !== null) {

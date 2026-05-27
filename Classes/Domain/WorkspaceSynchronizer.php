@@ -22,14 +22,14 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  * to come back as `RetranslationResult::isNoOp()` rather than re-translating.
  *
  * Source workspace + source dimension are part of the public API in anticipation of future
- * cross-workspace synchronisation. For now the only supported shape is:
+ * cross-workspace synchronization. For now the only supported shape is:
  *  - sourceWorkspace == targetWorkspace
  *  - sourceDimension equals the configured `referenceLanguage` of targetDimension
  *
- * Either mismatch short-circuits with {@see WorkspaceSynchronisationResult::skipped()} so the
- * caller (typically the `synchronise` CLI) can surface a clear error.
+ * Either mismatch short-circuits with {@see WorkspaceSynchronizationResult::skipped()} so the
+ * caller (typically the `synchronize` CLI) can surface a clear error.
  */
-class WorkspaceSynchroniser
+class WorkspaceSynchronizer
 {
     #[Flow\Inject]
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
@@ -40,17 +40,17 @@ class WorkspaceSynchroniser
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
 
-    public function synchroniseWorkspace(
+    public function synchronizeWorkspace(
         ContentRepositoryId $contentRepositoryId,
         WorkspaceName $sourceWorkspaceName,
         DimensionSpacePoint $sourceDimensionSpacePoint,
         WorkspaceName $targetWorkspaceName,
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $dryRun = false,
-    ): WorkspaceSynchronisationResult {
+    ): WorkspaceSynchronizationResult {
         if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
-                'cross-workspace synchronisation is not yet supported (source workspace "%s" != target workspace "%s")',
+            return WorkspaceSynchronizationResult::skipped(sprintf(
+                'cross-workspace synchronization is not yet supported (source workspace "%s" != target workspace "%s")',
                 $sourceWorkspaceName->value,
                 $targetWorkspaceName->value,
             ));
@@ -65,13 +65,13 @@ class WorkspaceSynchroniser
         );
         $expectedSourceDsp = $resolver->tryResolveSourceDimensionSpacePoint($targetDimensionSpacePoint);
         if ($expectedSourceDsp === null) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
+            return WorkspaceSynchronizationResult::skipped(sprintf(
                 'no referenceLanguage configured for target dimension %s',
                 $targetDimensionSpacePoint->toJson(),
             ));
         }
         if (!$expectedSourceDsp->equals($sourceDimensionSpacePoint)) {
-            return WorkspaceSynchronisationResult::skipped(sprintf(
+            return WorkspaceSynchronizationResult::skipped(sprintf(
                 'source dimension %s does not match configured referenceLanguage %s for target dimension %s',
                 $sourceDimensionSpacePoint->toJson(),
                 $expectedSourceDsp->toJson(),
@@ -91,7 +91,7 @@ class WorkspaceSynchroniser
                 continue;
             }
             if ($dryRun) {
-                $perNodeResults[] = new PerNodeSynchronisationResult(
+                $perNodeResults[] = new PerNodeSynchronizationResult(
                     $entry->nodeAggregateId,
                     RetranslationResult::skipped('dry-run'),
                 );
@@ -103,9 +103,9 @@ class WorkspaceSynchroniser
                 nodeAggregateId: $entry->nodeAggregateId,
                 targetDimensionSpacePoint: $targetDimensionSpacePoint,
             );
-            $perNodeResults[] = new PerNodeSynchronisationResult($entry->nodeAggregateId, $result);
+            $perNodeResults[] = new PerNodeSynchronizationResult($entry->nodeAggregateId, $result);
         }
 
-        return new WorkspaceSynchronisationResult($perNodeResults);
+        return new WorkspaceSynchronizationResult($perNodeResults);
     }
 }

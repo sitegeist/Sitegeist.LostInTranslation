@@ -8,19 +8,19 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
 
 /**
- * Immutable collection of {@see SynchronisationRule}s loaded from settings.
+ * Immutable collection of {@see SynchronizationRule}s loaded from settings.
  *
- * @implements \IteratorAggregate<int,SynchronisationRule>
+ * @implements \IteratorAggregate<int,SynchronizationRule>
  */
 #[Flow\Proxy(false)]
-final readonly class SynchronisationRules implements \IteratorAggregate, \Countable
+final readonly class SynchronizationRules implements \IteratorAggregate, \Countable
 {
     /**
-     * @var list<SynchronisationRule>
+     * @var list<SynchronizationRule>
      */
     public array $items;
 
-    public function __construct(SynchronisationRule ...$items)
+    public function __construct(SynchronizationRule ...$items)
     {
         $this->items = array_values($items);
     }
@@ -31,7 +31,7 @@ final readonly class SynchronisationRules implements \IteratorAggregate, \Counta
     public static function fromArray(array $rawRules): self
     {
         return new self(...array_map(
-            static fn (array $row): SynchronisationRule => SynchronisationRule::fromArray($row),
+            static fn (array $row): SynchronizationRule => SynchronizationRule::fromArray($row),
             $rawRules,
         ));
     }
@@ -44,7 +44,7 @@ final readonly class SynchronisationRules implements \IteratorAggregate, \Counta
     {
         return new self(...array_filter(
             $this->items,
-            static fn (SynchronisationRule $rule): bool => $rule->sourceWorkspaceName === $publicationTarget->value,
+            static fn (SynchronizationRule $rule): bool => $rule->sourceWorkspaceName === $publicationTarget->value,
         ));
     }
 

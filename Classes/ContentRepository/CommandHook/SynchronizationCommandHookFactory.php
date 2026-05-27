@@ -13,12 +13,12 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
-use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
-use Sitegeist\LostInTranslation\Domain\SynchronisationRules;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
-class PublicationSynchronisationCommandHookFactory implements CommandHookFactoryInterface
+class SynchronizationCommandHookFactory implements CommandHookFactoryInterface
 {
     #[Flow\InjectConfiguration(path: 'nodeTranslation.enabled')]
     public bool $enabled = false;
@@ -35,7 +35,7 @@ class PublicationSynchronisationCommandHookFactory implements CommandHookFactory
     public function __construct(
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         protected readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
-        protected readonly FullWorkspaceSynchroniser $fullWorkspaceSynchroniser,
+        protected readonly FullWorkspaceSynchronizer $fullWorkspaceSynchronizer,
         protected readonly TranslationServiceInterface $translationService,
         protected readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
     ) {
@@ -59,15 +59,15 @@ class PublicationSynchronisationCommandHookFactory implements CommandHookFactory
         // recursion" guard. By the time the hook actually fires, the CR is fully constructed.
         // Positional args: Flow's proxy generator wraps `__construct` with a no-params shim that
         // uses `func_get_args()`, so named parameters never reach the user-defined signature.
-        return new PublicationSynchronisationCommandHook(
+        return new SynchronizationCommandHook(
             $this->enabled,
-            SynchronisationRules::fromArray($this->synchronization),
+            SynchronizationRules::fromArray($this->synchronization),
             $commandHooksFactoryDependencies->contentGraphReadModel,
             $commandHooksFactoryDependencies->nodeTypeManager,
             $this->contentRepositoryRegistry,
             $commandHooksFactoryDependencies->contentRepositoryId,
             $this->stalePropertyCommandBuilder,
-            $this->fullWorkspaceSynchroniser,
+            $this->fullWorkspaceSynchronizer,
             new DimensionValueDirectiveFactory(),
             $this->translationService,
             $languageDimension,

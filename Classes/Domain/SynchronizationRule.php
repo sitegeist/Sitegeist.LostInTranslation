@@ -17,7 +17,7 @@ use Neos\Flow\Annotations as Flow;
  * override).
  */
 #[Flow\Proxy(false)]
-final readonly class SynchronisationRule
+final readonly class SynchronizationRule
 {
     public function __construct(
         public string $sourceWorkspaceName,
@@ -36,7 +36,7 @@ final readonly class SynchronisationRule
     {
         foreach (['sourceWorkspaceName', 'sourceLanguage', 'targetWorkspaceName', 'targetLanguage'] as $key) {
             if (!isset($row[$key]) || !is_string($row[$key]) || $row[$key] === '') {
-                throw new \InvalidArgumentException(sprintf('SynchronisationRule is missing required string field "%s"', $key), 1779051200);
+                throw new \InvalidArgumentException(sprintf('SynchronizationRule is missing required string field "%s"', $key), 1779051200);
             }
         }
 
@@ -44,7 +44,7 @@ final readonly class SynchronisationRule
         $synchronizationStrategy = SynchronizationStrategy::tryFrom($synchronizationStrategyValue);
         if ($synchronizationStrategy === null) {
             throw new \InvalidArgumentException(sprintf(
-                'Invalid synchronizationStrategy "%s" in SynchronisationRule; expected one of: %s',
+                'Invalid synchronizationStrategy "%s" in SynchronizationRule; expected one of: %s',
                 $synchronizationStrategyValue,
                 implode(', ', array_map(static fn (SynchronizationStrategy $s): string => $s->value, SynchronizationStrategy::cases())),
             ), 1779051300);
@@ -54,7 +54,7 @@ final readonly class SynchronisationRule
         $translationStrategy = TranslationStrategy::tryFrom($translationStrategyValue);
         if ($translationStrategy === null) {
             throw new \InvalidArgumentException(sprintf(
-                'Invalid translationStrategy "%s" in SynchronisationRule; expected one of: %s',
+                'Invalid translationStrategy "%s" in SynchronizationRule; expected one of: %s',
                 $translationStrategyValue,
                 implode(', ', array_map(static fn (TranslationStrategy $s): string => $s->value, TranslationStrategy::cases())),
             ), 1779051301);
