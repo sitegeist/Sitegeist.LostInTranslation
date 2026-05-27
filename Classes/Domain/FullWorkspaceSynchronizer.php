@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain;
 
 use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
-use Neos\ContentRepository\Core\CommandHandler\Commands;
 use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
@@ -180,56 +179,6 @@ class FullWorkspaceSynchronizer
         }
 
         return new WorkspaceSynchronizationResult($perNodeResults);
-    }
-
-    /**
-     * Plan (but do not dispatch) the full-sync commands for one (workspace, source→target
-     * dimension) pair. Used by the publication hook, which must RETURN commands from
-     * `onAfterHandle` rather than dispatch them inline. DeepL language ids are resolved by the
-     * caller (the hook already has them).
-     *
-     * Commands come out in depth-first pre-order, so a parent `CreateNodeVariant` (which also
-     * materialises tethered descendants) is dispatched before a non-tethered grandchild's own
-     * `CreateNodeVariant`.
-     */
-    public function buildSynchronizationCommands(
-        ContentRepositoryId $contentRepositoryId,
-        WorkspaceName $targetWorkspaceName,
-        DimensionSpacePoint $sourceDimensionSpacePoint,
-        DimensionSpacePoint $targetDimensionSpacePoint,
-        string $sourceDeeplLanguage,
-        string $targetDeeplLanguage,
-        bool $skipExisting,
-        bool $useCache,
-    ): Commands {
-        $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
-        $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
-        $staleByNodeId = $this->collectStaleByNodeId($cr, $targetWorkspaceName, $targetOrigin);
-        $nodeTypeManager = $cr->getNodeTypeManager();
-
-        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
-        $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
-        $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
-
-        $commands = [];
-        foreach ($this->traverseSourceSubtrees($contentGraph, $sourceSubgraph) as $node) {
-            $command = $this->decideCommandForNode(
-                $nodeTypeManager,
-                $node,
-                $targetSubgraph,
-                $targetOrigin,
-                $staleByNodeId,
-                $sourceDeeplLanguage,
-                $targetDeeplLanguage,
-                $skipExisting,
-                $useCache,
-            );
-            if ($command !== null) {
-                $commands[] = $command;
-            }
-        }
-
-        return Commands::fromArray($commands);
     }
 
     /**

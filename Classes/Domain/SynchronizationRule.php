@@ -9,23 +9,23 @@ use Neos\Flow\Annotations as Flow;
 /**
  * One rule of `Sitegeist.LostInTranslation.nodeTranslation.synchronization`. Reads as:
  * "When a publish lands on `sourceWorkspaceName`, auto-translate (`targetWorkspaceName`,
- * `targetLanguage`) from `sourceLanguage`."
+ * `targetDimension`) from `sourceDimension`."
  *
- * `synchronizationStrategy` picks *which* nodes are visited (stale records vs the whole subtree);
- * `translationStrategy` picks what happens to a visited node whose target variant already exists.
- * See the respective enums for the exact semantics (including the "stale always forces a refresh"
- * override).
+ * Automatic synchronization is always driven by the stale-translation projection. `scope` picks
+ * how far the mirroring reaches: {@see SynchronizationScope::Content} only fills in content below
+ * Documents that already exist in the target, while {@see SynchronizationScope::Document} also
+ * creates the missing Document variants themselves. Walking the whole tree from the root is the
+ * separate `synchronize --full` CLI command, never triggered automatically.
  */
 #[Flow\Proxy(false)]
 final readonly class SynchronizationRule
 {
     public function __construct(
         public string $sourceWorkspaceName,
-        public string $sourceLanguage,
+        public string $sourceDimension,
         public string $targetWorkspaceName,
-        public string $targetLanguage,
-        public SynchronizationStrategy $synchronizationStrategy = SynchronizationStrategy::Stale,
-        public TranslationStrategy $translationStrategy = TranslationStrategy::KeepExisting,
+        public string $targetDimension,
+        public SynchronizationScope $scope,
     ) {
     }
 
@@ -34,39 +34,30 @@ final readonly class SynchronizationRule
      */
     public static function fromArray(array $row): self
     {
-        foreach (['sourceWorkspaceName', 'sourceLanguage', 'targetWorkspaceName', 'targetLanguage'] as $key) {
+        foreach (['sourceWorkspaceName', 'sourceDimension', 'targetWorkspaceName', 'targetDimension'] as $key) {
             if (!isset($row[$key]) || !is_string($row[$key]) || $row[$key] === '') {
                 throw new \InvalidArgumentException(sprintf('SynchronizationRule is missing required string field "%s"', $key), 1779051200);
             }
         }
 
-        $synchronizationStrategyValue = $row['synchronizationStrategy'] ?? SynchronizationStrategy::Stale->value;
-        $synchronizationStrategy = SynchronizationStrategy::tryFrom($synchronizationStrategyValue);
-        if ($synchronizationStrategy === null) {
-            throw new \InvalidArgumentException(sprintf(
-                'Invalid synchronizationStrategy "%s" in SynchronizationRule; expected one of: %s',
-                $synchronizationStrategyValue,
-                implode(', ', array_map(static fn (SynchronizationStrategy $s): string => $s->value, SynchronizationStrategy::cases())),
-            ), 1779051300);
+        if (!isset($row['scope']) || !is_string($row['scope']) || $row['scope'] === '') {
+            throw new \InvalidArgumentException('SynchronizationRule is missing required string field "scope"', 1779051201);
         }
-
-        $translationStrategyValue = $row['translationStrategy'] ?? TranslationStrategy::KeepExisting->value;
-        $translationStrategy = TranslationStrategy::tryFrom($translationStrategyValue);
-        if ($translationStrategy === null) {
+        $scope = SynchronizationScope::tryFrom($row['scope']);
+        if ($scope === null) {
             throw new \InvalidArgumentException(sprintf(
-                'Invalid translationStrategy "%s" in SynchronizationRule; expected one of: %s',
-                $translationStrategyValue,
-                implode(', ', array_map(static fn (TranslationStrategy $s): string => $s->value, TranslationStrategy::cases())),
-            ), 1779051301);
+                'Invalid scope "%s" in SynchronizationRule; expected one of: %s',
+                $row['scope'],
+                implode(', ', array_map(static fn (SynchronizationScope $s): string => $s->value, SynchronizationScope::cases())),
+            ), 1779051202);
         }
 
         return new self(
             sourceWorkspaceName: $row['sourceWorkspaceName'],
-            sourceLanguage: $row['sourceLanguage'],
+            sourceDimension: $row['sourceDimension'],
             targetWorkspaceName: $row['targetWorkspaceName'],
-            targetLanguage: $row['targetLanguage'],
-            synchronizationStrategy: $synchronizationStrategy,
-            translationStrategy: $translationStrategy,
+            targetDimension: $row['targetDimension'],
+            scope: $scope,
         );
     }
 }

@@ -103,42 +103,39 @@ Sitegeist:
       #
       # Automatic synchronization on workspace publish.
       #
-      # When a workspace is published, (text) properties in `sourceLanguage` are translated into
-      # `targetLanguage` in `targetWorkspaceName` via the Retranslator. A rule fires when the
-      # publish target workspace equals the rule's `sourceWorkspaceName`.
+      # When a workspace is published, (text) properties in `sourceDimension` are translated into
+      # `targetDimension` in `targetWorkspaceName`. A rule fires when the publish target workspace
+      # equals the rule's `sourceWorkspaceName`.
       #
-      # Synchronization operates on contentDimension identified by `languageDimensionName` above.
+      # Synchronization operates on the contentDimension identified by `languageDimensionName` above
+      # and is ALWAYS driven by the stale-translation projection — only nodes whose source changed
+      # (or that were freshly created) are considered. Walking the whole tree from the root is the
+      # separate, manual `./flow lostintranslation:synchronize --full` CLI command; it is a heavy
+      # operation and is never triggered automatically.
       #
       # Multiple rules are supported; do not configure cycles (e.g. en→de AND de→en).
       #
-      # Each rule has two optional strategy fields:
+      # Each rule requires a `scope`:
       #
-      #   synchronizationStrategy: stale | full   (default: stale)
-      #     stale = only nodes the stale-translation projection flagged (a source property changed,
-      #             or a variant was ported into the target dimension). Cheap; right for steady state.
-      #     full  = walk the whole target subtree from the root and consider every translatable node,
-      #             regardless of stale state. For rebuilding/recovering a target dimension. More
-      #             expensive — it runs on every matching publish.
-      #
-      #   translationStrategy: keep-existing | force-refresh   (default: keep-existing)
-      #     keep-existing = leave an already-existing target variant untouched (protect manual edits).
-      #     force-refresh = re-translate existing target variants from the current source (overwrite).
-      #     Override: a node with a stale record is ALWAYS refreshed regardless of this setting, so
-      #     keep-existing only protects existing-and-non-stale variants. In `stale` mode every visited
-      #     node is stale by definition, so translationStrategy has no visible effect there.
+      #   scope: Content | Document   (required)
+      #     Content  = only create/translate nodes whose containing Document already exists in the
+      #                target dimension + workspace. Documents are never created automatically —
+      #                adopting a Document into the target dimension stays a manual editor action.
+      #                A Document that already exists in the target still has its own properties
+      #                (re-)translated when stale.
+      #     Document = mirror the whole Document and Content structure: create (and translate) the
+      #                missing Document variants as well as Content variants.
       #
       # NOTE: Only NodePropertiesWereSet and NodeAggregateWithNodeWasCreated source events drive sync.
-      #       Node moves/removals are handled by the NodeType `scope` mechanism, not by this feature.
       #
       # Empty list (default) = feature off.
       #
       synchronization: []
       #  - sourceWorkspaceName: live
-      #    sourceLanguage: en
+      #    sourceDimension: en
       #    targetWorkspaceName: de-review
-      #    targetLanguage: de
-      #    synchronizationStrategy: stale          # optional, default
-      #    translationStrategy: keep-existing       # optional, default
+      #    targetDimension: de
+      #    scope: Document
 
 Neos:
   Flow:

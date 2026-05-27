@@ -3,25 +3,20 @@ Sitegeist:
   LostInTranslation:
     nodeTranslation:
       synchronization:
-        # default strategies (stale / keep-existing): exercised by the publish-on-live scenarios
+        # Document scope: mirror documents AND content on publish to `live`. Exercised by the
+        # publish-on-live scenarios (en → es is auto-synced; de has no rule).
         - sourceWorkspaceName: live
-          sourceLanguage: en
+          sourceDimension: en
           targetWorkspaceName: live
-          targetLanguage: es
-        # full + keep-existing: only fires on publish to `review`
-        - sourceWorkspaceName: review
-          sourceLanguage: en
-          targetWorkspaceName: review
-          targetLanguage: es
-          synchronizationStrategy: full
-          translationStrategy: keep-existing
-        # full + force-refresh: only fires on publish to `staging`
-        - sourceWorkspaceName: staging
-          sourceLanguage: en
-          targetWorkspaceName: staging
-          targetLanguage: es
-          synchronizationStrategy: full
-          translationStrategy: force-refresh
+          targetDimension: es
+          scope: Document
+        # Content scope: only fill in content below documents that already exist in the target
+        # dimension; never create documents automatically. Fires on publish to `content-review`.
+        - sourceWorkspaceName: content-review
+          sourceDimension: en
+          targetWorkspaceName: content-review
+          targetDimension: es
+          scope: Content
 
 Neos:
   Flow:

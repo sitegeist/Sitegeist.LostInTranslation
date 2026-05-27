@@ -17,8 +17,12 @@ use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishWork
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
@@ -26,30 +30,41 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
-use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
-use Sitegeist\LostInTranslation\Domain\SynchronizationStrategy;
+use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
-use Sitegeist\LostInTranslation\Domain\TranslationStrategy;
 
 /**
  * Command hook that fires the auto-sync rules from
  * `Sitegeist.LostInTranslation.nodeTranslation.synchronization` after a workspace publish.
  *
- * For every rule whose `sourceWorkspaceName` matches the publish target, the hook iterates the
- * stale-translation records sitting at the rule's `(targetWorkspaceName, targetLanguage)` and
- * emits one command per record:
+ * Automatic synchronization is always stale-driven: for every rule whose `sourceWorkspaceName`
+ * matches the publish target, the hook iterates the stale-translation records sitting at the rule's
+ * `(targetWorkspaceName, targetDimension)` and emits one command per record:
  *  - **target variant missing** → `CreateNodeVariant`; the existing
  *    {@see TranslationCommandHook} cascades the translated `SetNodeProperties` automatically.
  *  - **target variant exists** → a translated `SetNodeProperties` built by
  *    {@see StalePropertyCommandBuilder}.
  *
+ * The rule's {@see SynchronizationScope} gates which records are acted on:
+ *  - {@see SynchronizationScope::Document} mirrors the whole structure (documents AND content).
+ *  - {@see SynchronizationScope::Content} only acts on records whose containing Document already
+ *    exists in the target dimension, and never creates Document variants automatically.
+ *
+ * Emitted commands are ordered ancestor-before-descendant (by source-tree depth) so a parent
+ * `CreateNodeVariant` — which materialises tethered descendants such as a document's content
+ * collection — is dispatched before a deeper node's own `CreateNodeVariant`.
+ *
  * The hook only reads the {@see StaleTranslationFinder} (the projection has already caught up
  * by the time `onAfterHandle` runs, per the CR contract) and returns commands; it does not
  * dispatch directly. AI authorship is flagged via {@see AISystemTranslationRuntimeState} so the
  * returned commands' events are attributed to the AI service rather than the publishing editor.
+ *
+ * Walking the whole tree from the root (regardless of stale state) is deliberately NOT done here —
+ * that is the separate, manual `synchronize --full` CLI command
+ * ({@see \Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer}).
  */
 final class SynchronizationCommandHook implements CommandHookInterface
 {
@@ -63,7 +78,6 @@ final class SynchronizationCommandHook implements CommandHookInterface
         private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         private readonly ContentRepositoryId $contentRepositoryId,
         private readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
-        private readonly FullWorkspaceSynchronizer $fullWorkspaceSynchronizer,
         private readonly DimensionValueDirectiveFactory $dimensionValueDirectiveFactory,
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
@@ -141,8 +155,8 @@ final class SynchronizationCommandHook implements CommandHookInterface
      */
     private function commandsForRule(SynchronizationRule $rule): array
     {
-        $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceLanguage]);
-        $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetLanguage]);
+        $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
+        $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDsp);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
 
@@ -160,22 +174,6 @@ final class SynchronizationCommandHook implements CommandHookInterface
             return [];
         }
 
-        // Full strategy: walk the whole target subtree (delegated to FullWorkspaceSynchronizer,
-        // which also encodes the "stale always forces a refresh" override). `keep-existing` maps to
-        // skipExisting=true, `force-refresh` to false.
-        if ($rule->synchronizationStrategy === SynchronizationStrategy::Full) {
-            return iterator_to_array($this->fullWorkspaceSynchronizer->buildSynchronizationCommands(
-                contentRepositoryId: $this->contentRepositoryId,
-                targetWorkspaceName: $targetWorkspace,
-                sourceDimensionSpacePoint: $sourceDsp,
-                targetDimensionSpacePoint: $targetDsp,
-                sourceDeeplLanguage: $sourceDeepl,
-                targetDeeplLanguage: $targetDeepl,
-                skipExisting: $rule->translationStrategy === TranslationStrategy::KeepExisting,
-                useCache: true,
-            ));
-        }
-
         $sourceSubgraph = $this->contentGraphReadModel
             ->getContentGraph($targetWorkspace)
             ->getSubgraph($sourceDsp, VisibilityConstraints::withoutRestrictions());
@@ -183,7 +181,10 @@ final class SynchronizationCommandHook implements CommandHookInterface
             ->getContentGraph($targetWorkspace)
             ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
 
-        $commands = [];
+        // Collect each command paired with the source-tree depth of the node it acts on, so the
+        // batch can be ordered ancestor-before-descendant below.
+        /** @var list<array{depth:int,command:CommandInterface}> $plannedCommands */
+        $plannedCommands = [];
         foreach ($this->staleTranslationFinder()->findAll() as $stale) {
             assert($stale instanceof StaleTranslation);
             if (!$stale->workspaceName->equals($targetWorkspace)) {
@@ -198,6 +199,19 @@ final class SynchronizationCommandHook implements CommandHookInterface
             if ($sourceNode === null) {
                 continue;
             }
+            // Content scope only mirrors nodes whose containing Document already exists in the
+            // target dimension; Documents are never created automatically. For a Document node the
+            // closest Document is itself — so a Document missing in the target is left alone (no
+            // auto-create), while one that already exists is still (re-)translated when stale.
+            if ($rule->scope === SynchronizationScope::Content) {
+                $documentNode = $sourceSubgraph->findClosestNode(
+                    $sourceNode->aggregateId,
+                    FindClosestNodeFilter::create(nodeTypes: 'Neos.Neos:Document'),
+                );
+                if ($documentNode === null || $targetSubgraph->findNodeById($documentNode->aggregateId) === null) {
+                    continue;
+                }
+            }
             $targetExists = $targetSubgraph->findNodeById($stale->nodeAggregateId) !== null;
             if ($targetExists) {
                 $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
@@ -209,7 +223,10 @@ final class SynchronizationCommandHook implements CommandHookInterface
                     targetDeeplLanguage: $targetDeepl,
                 );
                 if ($command !== null) {
-                    $commands[] = $command;
+                    $plannedCommands[] = [
+                        'depth' => $this->treeDepthOf($sourceSubgraph, $stale->nodeAggregateId),
+                        'command' => $command,
+                    ];
                 }
                 continue;
             }
@@ -219,13 +236,32 @@ final class SynchronizationCommandHook implements CommandHookInterface
             if ($sourceNode->classification->isTethered()) {
                 continue;
             }
-            $commands[] = CreateNodeVariant::create(
-                $targetWorkspace,
-                $stale->nodeAggregateId,
-                $sourceNode->originDimensionSpacePoint,
-                $targetOrigin,
-            );
+            $plannedCommands[] = [
+                'depth' => $this->treeDepthOf($sourceSubgraph, $stale->nodeAggregateId),
+                'command' => CreateNodeVariant::create(
+                    $targetWorkspace,
+                    $stale->nodeAggregateId,
+                    $sourceNode->originDimensionSpacePoint,
+                    $targetOrigin,
+                ),
+            ];
         }
-        return $commands;
+
+        // Stale records arrive in primary-key order, not hierarchical order. A descendant's
+        // `CreateNodeVariant` must not be dispatched before the ancestor variant that materialises
+        // its (tethered) parent in the target dimension. Sorting by source-tree depth (PHP's sort
+        // is stable since 8.0) yields a valid top-down order without walking the whole tree.
+        usort($plannedCommands, static fn (array $a, array $b): int => $a['depth'] <=> $b['depth']);
+
+        return array_map(static fn (array $planned): CommandInterface => $planned['command'], $plannedCommands);
+    }
+
+    /**
+     * Distance of the node from its root aggregate in the source subgraph (root = 0, its children
+     * = 1, …). Used purely to order the synchronization commands ancestor-before-descendant.
+     */
+    private function treeDepthOf(ContentSubgraphInterface $sourceSubgraph, NodeAggregateId $nodeAggregateId): int
+    {
+        return $sourceSubgraph->findAncestorNodes($nodeAggregateId, FindAncestorNodesFilter::create())->count();
     }
 }

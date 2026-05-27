@@ -6,8 +6,7 @@ namespace Sitegeist\LostInTranslation\Tests\Unit\Domain;
 
 use Neos\Flow\Tests\UnitTestCase;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
-use Sitegeist\LostInTranslation\Domain\SynchronizationStrategy;
-use Sitegeist\LostInTranslation\Domain\TranslationStrategy;
+use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 
 class SynchronizationRuleTest extends UnitTestCase
 {
@@ -18,52 +17,58 @@ class SynchronizationRuleTest extends UnitTestCase
     {
         return [
             'sourceWorkspaceName' => 'live',
-            'sourceLanguage' => 'en',
+            'sourceDimension' => 'en',
             'targetWorkspaceName' => 'live',
-            'targetLanguage' => 'es',
+            'targetDimension' => 'es',
+            'scope' => 'Document',
         ];
     }
 
     /** @test */
-    public function fromArrayDefaultsToStaleAndKeepExistingWhenStrategyFieldsAreOmitted(): void
+    public function fromArrayParsesAllFields(): void
     {
         $rule = SynchronizationRule::fromArray($this->requiredFields());
 
-        self::assertSame(SynchronizationStrategy::Stale, $rule->synchronizationStrategy);
-        self::assertSame(TranslationStrategy::KeepExisting, $rule->translationStrategy);
+        self::assertSame('live', $rule->sourceWorkspaceName);
+        self::assertSame('en', $rule->sourceDimension);
+        self::assertSame('live', $rule->targetWorkspaceName);
+        self::assertSame('es', $rule->targetDimension);
+        self::assertSame(SynchronizationScope::Document, $rule->scope);
     }
 
     /** @test */
-    public function fromArrayParsesExplicitStrategies(): void
+    public function fromArrayParsesContentScope(): void
     {
-        $rule = SynchronizationRule::fromArray($this->requiredFields() + [
-            'synchronizationStrategy' => 'full',
-            'translationStrategy' => 'force-refresh',
-        ]);
+        $rule = SynchronizationRule::fromArray(['scope' => 'Content'] + $this->requiredFields());
 
-        self::assertSame(SynchronizationStrategy::Full, $rule->synchronizationStrategy);
-        self::assertSame(TranslationStrategy::ForceRefresh, $rule->translationStrategy);
+        self::assertSame(SynchronizationScope::Content, $rule->scope);
     }
 
     /** @test */
-    public function fromArrayRejectsUnknownSynchronizationStrategy(): void
+    public function fromArrayRejectsUnknownScope(): void
     {
+        $fields = $this->requiredFields();
+        $fields['scope'] = 'Everything';
+
         $this->expectException(\InvalidArgumentException::class);
-        SynchronizationRule::fromArray($this->requiredFields() + ['synchronizationStrategy' => 'sometimes']);
+        SynchronizationRule::fromArray($fields);
     }
 
     /** @test */
-    public function fromArrayRejectsUnknownTranslationStrategy(): void
+    public function fromArrayRejectsMissingScope(): void
     {
+        $fields = $this->requiredFields();
+        unset($fields['scope']);
+
         $this->expectException(\InvalidArgumentException::class);
-        SynchronizationRule::fromArray($this->requiredFields() + ['translationStrategy' => 'maybe']);
+        SynchronizationRule::fromArray($fields);
     }
 
     /** @test */
     public function fromArrayRejectsMissingRequiredField(): void
     {
         $fields = $this->requiredFields();
-        unset($fields['targetLanguage']);
+        unset($fields['targetDimension']);
 
         $this->expectException(\InvalidArgumentException::class);
         SynchronizationRule::fromArray($fields);

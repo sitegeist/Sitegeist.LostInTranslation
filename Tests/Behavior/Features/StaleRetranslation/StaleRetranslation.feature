@@ -23,6 +23,18 @@ Feature: Track the staleness state of translations and run retranslation on stal
           abstract: true
         'Neos.Neos:Document':
           abstract: true
+          properties:
+            title:
+              type: string
+              options:
+                automaticTranslation: true
+            # TODO: add uriPathSegment to test correct handling of auto-translatable properties with special processing
+        'Sitegeist.LostInTranslation.Document.Page':
+          superTypes:
+            'Neos.Neos:Document': true
+          childNodes:
+            main:
+              type: 'Neos.Neos:ContentCollection'
         'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
           superTypes:
             'Neos.Neos:Content': true
@@ -594,4 +606,18 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | live           | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    Scenario: Document nodes are recorded as stale translations
+        # A Document.Page carries the auto-translatable `title` inherited from Neos.Neos:Document, so
+        # creating one records a stale translation for `title` in the target dimension — Documents
+        # are tracked for retranslation just like Content nodes. Its tethered `main`
+        # ContentCollection has no translatable properties and is recorded with an empty list.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                              | initialPropertyValues | tetheredDescendantNodeAggregateIds |
+            | homepage        | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page | {"title": "Home"}     | {"main": "homepage-main"}          |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+            | user-workspace | {"language":"de"}         | homepage        | ["title"]     |
+            | user-workspace | {"language":"de"}         | homepage-main   | []            |
 

@@ -24,6 +24,18 @@ Feature: Automatic retranslation on workspace publish
           abstract: true
         'Neos.Neos:Document':
           abstract: true
+          properties:
+            title:
+              type: string
+              options:
+                automaticTranslation: true
+            # TODO: add uriPathSegment to test correct handling of auto-translatable properties with special processing
+        'Sitegeist.LostInTranslation.Document.Page':
+          superTypes:
+            'Neos.Neos:Document': true
+          childNodes:
+            main:
+              type: 'Neos.Neos:ContentCollection'
         'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
           superTypes:
             'Neos.Neos:Content': true
@@ -446,154 +458,6 @@ Feature: Automatic retranslation on workspace publish
             | inlineEditableStringProperty   | "My Text translated"       |
             | autoTranslatableStringProperty | "My Other Text translated" |
 
-    Scenario: Auto-sync rule with synchronizationStrategy=full + translationStrategy=force-refresh overwrites a manual translation
-        # The `staging` rule is full + force-refresh. On every publish to staging it re-translates
-        # existing es variants from the current source — so a hand-made es edit is overwritten.
-        When the command CreateWorkspace is executed with payload:
-            | Key                | Value                |
-            | workspaceName      | "staging"            |
-            | baseWorkspaceName  | "live"               |
-            | newContentStreamId | "staging-cs-id"      |
-        And the command CreateWorkspace is executed with payload:
-            | Key                | Value                |
-            | workspaceName      | "staging-user"       |
-            | baseWorkspaceName  | "staging"            |
-            | newContentStreamId | "staging-user-cs-id" |
-        When I am in workspace "staging-user"
-        And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
-        # Publish #1 → full rule creates + translates the es variant on staging.
-        When the command PublishWorkspace is executed with payload:
-            | Key                | Value                  |
-            | workspaceName      | "staging-user"         |
-            | newContentStreamId | "staging-user-cs-id-2" |
-
-        # Hand-edit the es variant directly on staging (target-dimension edit → no stale record).
-        When I am in workspace "staging"
-        And the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                               |
-            | nodeAggregateId           | "sir-david-nodenborough"                            |
-            | originDimensionSpacePoint | {"language": "es"}                                  |
-            | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted ES"} |
-
-        # A second, unrelated publish triggers the rule again. force-refresh re-translates the
-        # existing (non-stale) es variant, overwriting the manual edit.
-        When I am in workspace "staging-user"
-        And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId  | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
-            | nody-mc-nodeface | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Face Text"}  |
-        When the command PublishWorkspace is executed with payload:
-            | Key                | Value                  |
-            | workspaceName      | "staging-user"         |
-            | newContentStreamId | "staging-user-cs-id-3" |
-
-        When I am in workspace "staging" and dimension space point {"language":"es"}
-        Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node staging-cs-id;sir-david-nodenborough;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                          | Value                |
-            | inlineEditableStringProperty | "My Text translated" |
-
-    Scenario: Auto-sync rule with translationStrategy=keep-existing preserves manual edits but a stale node is still refreshed
-        # The `review` rule is full + keep-existing. A hand-made es edit on a non-stale node survives,
-        # but a node whose source changed (→ stale) is still re-translated — the load-bearing override.
-        When the command CreateWorkspace is executed with payload:
-            | Key                | Value               |
-            | workspaceName      | "review"            |
-            | baseWorkspaceName  | "live"              |
-            | newContentStreamId | "review-cs-id"      |
-        And the command CreateWorkspace is executed with payload:
-            | Key                | Value               |
-            | workspaceName      | "review-user"       |
-            | baseWorkspaceName  | "review"            |
-            | newContentStreamId | "review-user-cs-id" |
-        When I am in workspace "review-user"
-        And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text"}    |
-            | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Face Text"}  |
-        # Publish #1 → es variants created + translated for both nodes.
-        When the command PublishWorkspace is executed with payload:
-            | Key                | Value                 |
-            | workspaceName      | "review-user"         |
-            | newContentStreamId | "review-user-cs-id-2" |
-
-        # Hand-edit sir-david's es directly on review (no stale). Leave nody-mc's es alone.
-        When I am in workspace "review"
-        And the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                               |
-            | nodeAggregateId           | "sir-david-nodenborough"                            |
-            | originDimensionSpacePoint | {"language": "es"}                                  |
-            | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted ES"} |
-
-        # Change nody-mc's EN source (→ stale for its es) and publish.
-        When I am in workspace "review-user"
-        And the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                              |
-            | nodeAggregateId           | "nody-mc-nodeface"                                 |
-            | originDimensionSpacePoint | {"language": "en"}                                 |
-            | propertyValues            | {"inlineEditableStringProperty": "Face Changed"}   |
-        When the command PublishWorkspace is executed with payload:
-            | Key                | Value                 |
-            | workspaceName      | "review-user"         |
-            | newContentStreamId | "review-user-cs-id-3" |
-
-        When I am in workspace "review" and dimension space point {"language":"es"}
-        # keep-existing preserved the hand-made, non-stale translation …
-        Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node review-cs-id;sir-david-nodenborough;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                          | Value               |
-            | inlineEditableStringProperty | "Hand Crafted ES"   |
-        # … but the stale node was refreshed from its new source anyway.
-        And I expect node aggregate identifier "nody-mc-nodeface" to lead to node review-cs-id;nody-mc-nodeface;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                          | Value                    |
-            | inlineEditableStringProperty | "Face Changed translated" |
-
-    Scenario: Full sync re-translates a stale tethered child whose target variant already exists
-        # A property change confined to a TETHERED child (whose target variant already exists) must
-        # still be re-synced. The tethered child cannot be created independently, but once its
-        # variant exists a SetNodeProperties can refresh it directly.
-        When the command CreateWorkspace is executed with payload:
-            | Key                | Value               |
-            | workspaceName      | "review"            |
-            | baseWorkspaceName  | "live"              |
-            | newContentStreamId | "review-cs-id"      |
-        And the command CreateWorkspace is executed with payload:
-            | Key                | Value               |
-            | workspaceName      | "review-user"       |
-            | baseWorkspaceName  | "review"            |
-            | newContentStreamId | "review-user-cs-id" |
-        When I am in workspace "review-user"
-        And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
-            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
-        # Publish #1 → full rule creates + translates the es variants of sir-david AND its tethered child.
-        When the command PublishWorkspace is executed with payload:
-            | Key                | Value                 |
-            | workspaceName      | "review-user"         |
-            | newContentStreamId | "review-user-cs-id-2" |
-
-        # Change ONLY the tethered child's en source (→ stale for the tethered child's es), then publish.
-        When I am in workspace "review-user"
-        And the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                                          |
-            | nodeAggregateId           | "nodewyn-tetherton"                                            |
-            | originDimensionSpacePoint | {"language": "en"}                                             |
-            | propertyValues            | {"autoTranslatableStringProperty": "Tethered Changed"}         |
-        When the command PublishWorkspace is executed with payload:
-            | Key                | Value                 |
-            | workspaceName      | "review-user"         |
-            | newContentStreamId | "review-user-cs-id-3" |
-
-        # The tethered child's existing es variant is refreshed from its new source (stale forces it,
-        # even under keep-existing).
-        When I am in workspace "review" and dimension space point {"language":"es"}
-        Then I expect node aggregate identifier "nodewyn-tetherton" to lead to node review-cs-id;nodewyn-tetherton;{"language":"es"}
-        And I expect this node to have the following properties:
-            | Key                            | Value                         |
-            | autoTranslatableStringProperty | "Tethered Changed translated" |
-
     Scenario: Stale-mode auto-sync re-translates a tethered child whose source changed
         # Regression guard for the stale-driven path (the default `live` rule): a property change
         # confined to a tethered child is picked up from its stale record and re-translated on publish.
@@ -624,3 +488,123 @@ Feature: Automatic retranslation on workspace publish
         And I expect this node to have the following properties:
             | Key                            | Value                         |
             | autoTranslatableStringProperty | "Tethered Changed translated" |
+
+    Scenario: Document-scope auto-sync mirrors a published document and its content into the target dimension
+        # The `live` rule is Document scope: publishing a freshly-created Document.Page that holds
+        # content in its `main` collection must create AND translate the es variant of BOTH the
+        # document and its content. The content's aggregate id ("intro-text") deliberately sorts
+        # BEFORE the document's ("page-home"), proving the hook orders the document's variant
+        # creation ahead of the content's — the content's parent (the document's tethered `main`)
+        # only exists once the document variant has been created.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
+            | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
+            | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+
+        # The document's `title` and the content's properties are recorded stale in both target
+        # dimensions. The tethered `main` ContentCollection has no translatable properties, so it is
+        # recorded with an empty property list (it is created structurally alongside the document).
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home       | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main  | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main  | []                                                                |
+
+        When the command PublishWorkspace is executed with payload:
+            | Key                | Value                |
+            | workspaceName      | "user-workspace"     |
+            | newContentStreamId | "sync-source-cs-id2" |
+
+        # Document scope created + translated the es variant of the document …
+        When I am in workspace "live" and dimension space point {"language":"es"}
+        Then I expect node aggregate identifier "page-home" to lead to node cs-identifier;page-home;{"language":"es"}
+        And I expect this node to have the following properties:
+            | Key   | Value             |
+            | title | "Home translated" |
+        # … and of the content nested inside its `main` collection.
+        And I expect node aggregate identifier "intro-text" to lead to node cs-identifier;intro-text;{"language":"es"}
+        And I expect this node to have the following properties:
+            | Key                            | Value                |
+            | inlineEditableStringProperty   | "Welcome translated" |
+            | autoTranslatableStringProperty | "Intro translated"   |
+
+    Scenario: Content-scope auto-sync never creates documents and skips content whose document is missing in the target
+        # The `content-review` rule is Content scope: it must NOT create Document variants
+        # automatically, and only fills in content whose containing Document already exists in the
+        # target dimension. Here neither the document nor its content exists in es yet, so publishing
+        # creates nothing in es — adopting the document into es stays a manual editor action.
+        When the command CreateWorkspace is executed with payload:
+            | Key                | Value                  |
+            | workspaceName      | "content-review"       |
+            | baseWorkspaceName  | "live"                 |
+            | newContentStreamId | "content-review-cs-id" |
+        And the command CreateWorkspace is executed with payload:
+            | Key                | Value                |
+            | workspaceName      | "content-user"       |
+            | baseWorkspaceName  | "content-review"     |
+            | newContentStreamId | "content-user-cs-id" |
+        When I am in workspace "content-user"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
+            | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
+            | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+        When the command PublishWorkspace is executed with payload:
+            | Key                | Value                  |
+            | workspaceName      | "content-user"         |
+            | newContentStreamId | "content-user-cs-id-2" |
+
+        # Nothing was created in es: the document is not auto-created, and the content's document is
+        # absent from the target dimension, so the content is skipped too.
+        When I am in workspace "content-review" and dimension space point {"language":"es"}
+        Then I expect node aggregate identifier "page-home" to lead to no node
+        And I expect node aggregate identifier "intro-text" to lead to no node
+
+    Scenario: Content-scope auto-sync fills in content below a document that already exists in the target
+        # The `content-review` rule is Content scope. Once a Document has been manually adopted into
+        # the target dimension, publishing fresh content inside it auto-creates and translates the
+        # content's es variant — while the manually-translated document itself is left untouched.
+        When the command CreateWorkspace is executed with payload:
+            | Key                | Value                  |
+            | workspaceName      | "content-review"       |
+            | baseWorkspaceName  | "live"                 |
+            | newContentStreamId | "content-review-cs-id" |
+        And the command CreateWorkspace is executed with payload:
+            | Key                | Value                |
+            | workspaceName      | "content-user"       |
+            | baseWorkspaceName  | "content-review"     |
+            | newContentStreamId | "content-user-cs-id" |
+        When I am in workspace "content-user"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                              | initialPropertyValues | tetheredDescendantNodeAggregateIds |
+            | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page | {"title": "Home"}     | {"main": "page-home-main"}         |
+        # The editor manually adopts the document into the es dimension (the deliberate manual action).
+        When the command CreateNodeVariant is executed with payload:
+            | Key             | Value             |
+            | nodeAggregateId | "page-home"       |
+            | sourceOrigin    | {"language":"en"} |
+            | targetOrigin    | {"language":"es"} |
+        # Now add content inside the already-adopted document.
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId | nodeTypeName                                                         | initialPropertyValues                                                                  |
+            | intro-text      | page-home-main        | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |
+        When the command PublishWorkspace is executed with payload:
+            | Key                | Value                  |
+            | workspaceName      | "content-user"         |
+            | newContentStreamId | "content-user-cs-id-2" |
+
+        # The content was created + translated in es because its document exists there …
+        When I am in workspace "content-review" and dimension space point {"language":"es"}
+        Then I expect node aggregate identifier "intro-text" to lead to node content-review-cs-id;intro-text;{"language":"es"}
+        And I expect this node to have the following properties:
+            | Key                            | Value                |
+            | inlineEditableStringProperty   | "Welcome translated" |
+            | autoTranslatableStringProperty | "Intro translated"   |
+        # … and the manually-adopted document keeps its translation, untouched by the content sync.
+        And I expect node aggregate identifier "page-home" to lead to node content-review-cs-id;page-home;{"language":"es"}
+        And I expect this node to have the following properties:
+            | Key   | Value             |
+            | title | "Home translated" |
