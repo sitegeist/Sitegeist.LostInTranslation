@@ -5,17 +5,18 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain;
 
 use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
+use Neos\ContentRepository\Core\CommandHandler\Commands;
 use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
+use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindRootNodeAggregatesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
-use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
@@ -31,20 +32,26 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
 /**
  * Walks the entire source-dimension subgraph from each root aggregate downward and emits
  * translation commands for every translatable node — independent of the stale-translation
- * projection. Where {@see WorkspaceSynchroniser} only acts on records the projection has
- * already flagged, this service treats every node in the source dimension as a candidate.
+ * projection. Where {@see WorkspaceSynchroniser} only acts on records the projection has already
+ * flagged, this service treats every node in the source dimension as a candidate.
  *
- * Decision matrix per node (only applied if `directive->enabled === true` and the node is
- * non-tethered):
- *   - target variant absent → `CreateNodeVariant`; the {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
+ * Decision matrix per node (only when `directive->enabled`):
+ *   - target variant absent + non-tethered → `CreateNodeVariant`; the {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
  *     cascades a full-properties `SetNodeProperties` automatically.
- *   - target variant present + `$skipExisting` + no stale row → skip (assume already translated
- *     or manually authored).
- *   - target variant present (other) → translated `SetNodeProperties` for *every* translatable
- *     property (not just the stale slice), built by {@see StalePropertyCommandBuilder}.
+ *   - target variant absent + tethered → skip; the tethered variant is created (and translated)
+ *     by its non-tethered ancestor's `CreateNodeVariant` cascade.
+ *   - target variant present + `$skipExisting` + no stale row → skip (keep manual edits).
+ *   - target variant present otherwise (i.e. `!$skipExisting`, OR a stale record exists) →
+ *     translated `SetNodeProperties` for *every* translatable property. This applies to tethered
+ *     children too: once their variant exists, a property change on the source is refreshed
+ *     directly. The stale-record case is the load-bearing override: a stale node is always
+ *     refreshed even under `$skipExisting`.
  *
- * Commands are dispatched directly (not returned) and tagged via
- * {@see AISystemTranslationRuntimeState} so events are attributed to the AI service.
+ * Two entry points share the same per-node decision ({@see self::decideCommandForNode}) and
+ * traversal ({@see self::traverseSourceSubtree}):
+ *   - {@see self::synchroniseWorkspaceFull} dispatches inline (CLI `synchronise --full`).
+ *   - {@see self::buildSynchronisationCommands} returns commands without dispatching, for the
+ *     publication hook which must hand commands back from `onAfterHandle` rather than dispatch.
  */
 class FullWorkspaceSynchroniser
 {
@@ -134,9 +141,208 @@ class FullWorkspaceSynchroniser
         }
 
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
+        $staleByNodeId = $this->collectStaleByNodeId($cr, $targetWorkspaceName, $targetOrigin);
+        $nodeTypeManager = $cr->getNodeTypeManager();
 
-        // Pre-fetch stale records for the (targetWorkspace, targetDSP) slice. Used only for the
-        // `skipExisting` decision; full sync does not need them as a source of truth.
+        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
+        $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+
+        $perNodeResults = [];
+        foreach ($this->traverseSourceSubtrees($contentGraph, $sourceSubgraph) as $node) {
+            $command = $this->decideCommandForNode(
+                $nodeTypeManager,
+                $node,
+                $targetSubgraph,
+                $targetOrigin,
+                $staleByNodeId,
+                $sourceDeepl,
+                $targetDeepl,
+                $skipExisting,
+                $useCache,
+            );
+            if ($command === null) {
+                continue;
+            }
+            $isVariant = $command instanceof CreateNodeVariant;
+            $perNodeResults[] = new PerNodeSynchronisationResult(
+                $node->aggregateId,
+                $dryRun
+                    ? RetranslationResult::skipped('dry-run')
+                    : new RetranslationResult(
+                        stalePropertyCommandsDispatched: $isVariant ? 0 : 1,
+                        variantCommandsDispatched: $isVariant ? 1 : 0,
+                    ),
+            );
+            if (!$dryRun) {
+                $this->dispatchAsAi($cr, $command);
+            }
+        }
+
+        return new WorkspaceSynchronisationResult($perNodeResults);
+    }
+
+    /**
+     * Plan (but do not dispatch) the full-sync commands for one (workspace, source→target
+     * dimension) pair. Used by the publication hook, which must RETURN commands from
+     * `onAfterHandle` rather than dispatch them inline. DeepL language ids are resolved by the
+     * caller (the hook already has them).
+     *
+     * Commands come out in depth-first pre-order, so a parent `CreateNodeVariant` (which also
+     * materialises tethered descendants) is dispatched before a non-tethered grandchild's own
+     * `CreateNodeVariant`.
+     */
+    public function buildSynchronisationCommands(
+        ContentRepositoryId $contentRepositoryId,
+        WorkspaceName $targetWorkspaceName,
+        DimensionSpacePoint $sourceDimensionSpacePoint,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+        string $sourceDeeplLanguage,
+        string $targetDeeplLanguage,
+        bool $skipExisting,
+        bool $useCache,
+    ): Commands {
+        $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
+        $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
+        $staleByNodeId = $this->collectStaleByNodeId($cr, $targetWorkspaceName, $targetOrigin);
+        $nodeTypeManager = $cr->getNodeTypeManager();
+
+        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
+        $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+
+        $commands = [];
+        foreach ($this->traverseSourceSubtrees($contentGraph, $sourceSubgraph) as $node) {
+            $command = $this->decideCommandForNode(
+                $nodeTypeManager,
+                $node,
+                $targetSubgraph,
+                $targetOrigin,
+                $staleByNodeId,
+                $sourceDeeplLanguage,
+                $targetDeeplLanguage,
+                $skipExisting,
+                $useCache,
+            );
+            if ($command !== null) {
+                $commands[] = $command;
+            }
+        }
+
+        return Commands::fromArray($commands);
+    }
+
+    /**
+     * Decide the single command for a visited node, or null when it should be skipped (not
+     * translatable, a tethered child with no target variant yet, already in sync under
+     * `$skipExisting`, or no translatable values).
+     *
+     * @param array<string, StaleTranslation> $staleByNodeId
+     */
+    private function decideCommandForNode(
+        NodeTypeManager $nodeTypeManager,
+        Node $node,
+        ContentSubgraphInterface $targetSubgraph,
+        OriginDimensionSpacePoint $targetOrigin,
+        array $staleByNodeId,
+        string $sourceDeepl,
+        string $targetDeepl,
+        bool $skipExisting,
+        bool $useCache,
+    ): ?CommandInterface {
+        $nodeType = $nodeTypeManager->getNodeType($node->nodeTypeName);
+        if ($nodeType === null) {
+            return null;
+        }
+        $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
+        if (!$directive->enabled) {
+            return null;
+        }
+
+        if ($targetSubgraph->findNodeById($node->aggregateId) === null) {
+            // No target variant yet. A tethered child cannot be created independently — it
+            // materialises with its non-tethered ancestor's CreateNodeVariant cascade (which the
+            // TranslationCommandHook then translates), so we skip emitting one here.
+            if ($node->classification->isTethered()) {
+                return null;
+            }
+            // The cascade also translates the full property set of the new variant.
+            return CreateNodeVariant::create(
+                $node->workspaceName,
+                $node->aggregateId,
+                $node->originDimensionSpacePoint,
+                $targetOrigin,
+            );
+        }
+
+        // The target variant already exists (true for tethered children once their ancestor was
+        // translated) — a SetNodeProperties can refresh it directly, so tethered nodes are NOT
+        // excluded from this branch.
+
+        // Target variant exists. Keep it untouched only when keeping existing AND it is not stale —
+        // a stale record always forces a refresh.
+        if ($skipExisting && !isset($staleByNodeId[$node->aggregateId->value])) {
+            return null;
+        }
+
+        // Re-translate every translatable property (not just the stale slice).
+        $allTranslatableNames = PropertyNames::fromArray(array_map(
+            static fn ($t): PropertyName => $t->propertyName,
+            iterator_to_array($directive->translatablePropertyNames),
+        ));
+        return $this->stalePropertyCommandBuilder->buildSetNodeProperties(
+            nodeTypeManager: $nodeTypeManager,
+            sourceNode: $node,
+            stalePropertyNames: $allTranslatableNames,
+            targetOrigin: $targetOrigin,
+            sourceDeeplLanguage: $sourceDeepl,
+            targetDeeplLanguage: $targetDeepl,
+            useCache: $useCache,
+        );
+    }
+
+    /**
+     * Depth-first pre-order traversal of every root aggregate's source-dimension subtree. Children
+     * are followed unfiltered (Document/ContentCollection/Content alike), mirroring the legacy
+     * `translateCommand` walk.
+     *
+     * @return \Generator<Node>
+     */
+    private function traverseSourceSubtrees(
+        \Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface $contentGraph,
+        ContentSubgraphInterface $sourceSubgraph,
+    ): \Generator {
+        foreach ($contentGraph->findRootNodeAggregates(FindRootNodeAggregatesFilter::create()) as $rootAggregate) {
+            $rootNode = $sourceSubgraph->findNodeById($rootAggregate->nodeAggregateId);
+            if ($rootNode === null) {
+                continue;
+            }
+            yield from $this->traverseSubtree($sourceSubgraph, $rootNode);
+        }
+    }
+
+    /**
+     * @return \Generator<Node>
+     */
+    private function traverseSubtree(ContentSubgraphInterface $sourceSubgraph, Node $node): \Generator
+    {
+        yield $node;
+        foreach ($sourceSubgraph->findChildNodes($node->aggregateId, FindChildNodesFilter::create()) as $childNode) {
+            yield from $this->traverseSubtree($sourceSubgraph, $childNode);
+        }
+    }
+
+    /**
+     * Pre-fetch the stale records for the (targetWorkspace, targetDSP) slice, keyed by node
+     * aggregate id. Used only for the `skipExisting` decision.
+     *
+     * @return array<string, StaleTranslation>
+     */
+    private function collectStaleByNodeId(
+        ContentRepository $cr,
+        WorkspaceName $targetWorkspaceName,
+        OriginDimensionSpacePoint $targetOrigin,
+    ): array {
         $staleByNodeId = [];
         foreach ($cr->projectionState(StaleTranslationReadModel::class)->staleTranslationFinder->findAll() as $stale) {
             assert($stale instanceof StaleTranslation);
@@ -148,145 +354,7 @@ class FullWorkspaceSynchroniser
             }
             $staleByNodeId[$stale->nodeAggregateId->value] = $stale;
         }
-
-        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
-        $sourceSubgraph = $contentGraph->getSubgraph(
-            $sourceDimensionSpacePoint,
-            NeosVisibilityConstraints::excludeRemoved(),
-        );
-        $targetSubgraph = $contentGraph->getSubgraph(
-            $targetDimensionSpacePoint,
-            NeosVisibilityConstraints::excludeRemoved(),
-        );
-
-        $perNodeResults = [];
-
-        // DFS over every root aggregate's source-side subgraph. We iterate by following
-        // findChildNodes — covers Documents, ContentCollection, Content alike, since the
-        // legacy translateCommand pattern uses an unfiltered findChildNodes call.
-        $rootAggregates = $contentGraph->findRootNodeAggregates(FindRootNodeAggregatesFilter::create());
-        foreach ($rootAggregates as $rootAggregate) {
-            $rootNode = $sourceSubgraph->findNodeById($rootAggregate->nodeAggregateId);
-            if ($rootNode === null) {
-                continue;
-            }
-            $this->walkNode(
-                cr: $cr,
-                node: $rootNode,
-                sourceSubgraph: $sourceSubgraph,
-                targetSubgraph: $targetSubgraph,
-                targetOrigin: $targetOrigin,
-                staleByNodeId: $staleByNodeId,
-                sourceDeepl: $sourceDeepl,
-                targetDeepl: $targetDeepl,
-                skipExisting: $skipExisting,
-                useCache: $useCache,
-                dryRun: $dryRun,
-                perNodeResults: $perNodeResults,
-            );
-        }
-
-        return new WorkspaceSynchronisationResult($perNodeResults);
-    }
-
-    /**
-     * @param array<string, StaleTranslation> $staleByNodeId
-     * @param list<PerNodeSynchronisationResult> $perNodeResults
-     */
-    private function walkNode(
-        ContentRepository $cr,
-        Node $node,
-        ContentSubgraphInterface $sourceSubgraph,
-        ContentSubgraphInterface $targetSubgraph,
-        OriginDimensionSpacePoint $targetOrigin,
-        array $staleByNodeId,
-        string $sourceDeepl,
-        string $targetDeepl,
-        bool $skipExisting,
-        bool $useCache,
-        bool $dryRun,
-        array &$perNodeResults,
-    ): void {
-        $nodeTypeManager = $cr->getNodeTypeManager();
-        $nodeType = $nodeTypeManager->getNodeType($node->nodeTypeName);
-        if ($nodeType !== null && !$node->classification->isTethered()) {
-            $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
-            if ($directive->enabled) {
-                $existsInTarget = $targetSubgraph->findNodeById($node->aggregateId) !== null;
-                if (!$existsInTarget) {
-                    $command = CreateNodeVariant::create(
-                        $node->workspaceName,
-                        $node->aggregateId,
-                        $node->originDimensionSpacePoint,
-                        $targetOrigin,
-                    );
-                    $perNodeResults[] = new PerNodeSynchronisationResult(
-                        $node->aggregateId,
-                        $dryRun
-                            ? RetranslationResult::skipped('dry-run')
-                            : new RetranslationResult(stalePropertyCommandsDispatched: 0, variantCommandsDispatched: 1),
-                    );
-                    if (!$dryRun) {
-                        $this->dispatchAsAi($cr, $command);
-                    }
-                } elseif ($skipExisting && !isset($staleByNodeId[$node->aggregateId->value])) {
-                    $perNodeResults[] = new PerNodeSynchronisationResult(
-                        $node->aggregateId,
-                        RetranslationResult::skipped('target variant exists and no stale rows (skipExisting)'),
-                    );
-                } else {
-                    // Build SetNodeProperties for ALL translatable properties (full re-translate),
-                    // not just the stale slice — that's the semantic difference from stale-driven sync.
-                    $allTranslatableNames = PropertyNames::fromArray(array_map(
-                        static fn ($t): PropertyName => $t->propertyName,
-                        iterator_to_array($directive->translatablePropertyNames),
-                    ));
-                    $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
-                        nodeTypeManager: $nodeTypeManager,
-                        sourceNode: $node,
-                        stalePropertyNames: $allTranslatableNames,
-                        targetOrigin: $targetOrigin,
-                        sourceDeeplLanguage: $sourceDeepl,
-                        targetDeeplLanguage: $targetDeepl,
-                        useCache: $useCache,
-                    );
-                    if ($command === null) {
-                        $perNodeResults[] = new PerNodeSynchronisationResult(
-                            $node->aggregateId,
-                            RetranslationResult::skipped('no translatable property values'),
-                        );
-                    } else {
-                        $perNodeResults[] = new PerNodeSynchronisationResult(
-                            $node->aggregateId,
-                            $dryRun
-                                ? RetranslationResult::skipped('dry-run')
-                                : new RetranslationResult(stalePropertyCommandsDispatched: 1, variantCommandsDispatched: 0),
-                        );
-                        if (!$dryRun) {
-                            $this->dispatchAsAi($cr, $command);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Recurse: walking the *source* subgraph so we don't depend on the target tree shape.
-        foreach ($sourceSubgraph->findChildNodes($node->aggregateId, FindChildNodesFilter::create()) as $childNode) {
-            $this->walkNode(
-                cr: $cr,
-                node: $childNode,
-                sourceSubgraph: $sourceSubgraph,
-                targetSubgraph: $targetSubgraph,
-                targetOrigin: $targetOrigin,
-                staleByNodeId: $staleByNodeId,
-                sourceDeepl: $sourceDeepl,
-                targetDeepl: $targetDeepl,
-                skipExisting: $skipExisting,
-                useCache: $useCache,
-                dryRun: $dryRun,
-                perNodeResults: $perNodeResults,
-            );
-        }
+        return $staleByNodeId;
     }
 
     private function dispatchAsAi(ContentRepository $cr, CommandInterface $command): void

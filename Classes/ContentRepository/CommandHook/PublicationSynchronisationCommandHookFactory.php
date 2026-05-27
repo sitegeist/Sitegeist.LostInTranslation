@@ -13,6 +13,7 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\SynchronisationRules;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -34,6 +35,7 @@ class PublicationSynchronisationCommandHookFactory implements CommandHookFactory
     public function __construct(
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         protected readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
+        protected readonly FullWorkspaceSynchroniser $fullWorkspaceSynchroniser,
         protected readonly TranslationServiceInterface $translationService,
         protected readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
     ) {
@@ -65,6 +67,7 @@ class PublicationSynchronisationCommandHookFactory implements CommandHookFactory
             $this->contentRepositoryRegistry,
             $commandHooksFactoryDependencies->contentRepositoryId,
             $this->stalePropertyCommandBuilder,
+            $this->fullWorkspaceSynchroniser,
             new DimensionValueDirectiveFactory(),
             $this->translationService,
             $languageDimension,

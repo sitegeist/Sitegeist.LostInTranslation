@@ -103,12 +103,29 @@ Sitegeist:
       #
       # Automatic synchronization on workspace publish.
       #
-      # When a workspace is published, (text) properties created or changed in `sourceLanguage` are
-      # translated into `targetLanguage` in `targetWorkspaceName` via the Retranslator.
+      # When a workspace is published, (text) properties in `sourceLanguage` are translated into
+      # `targetLanguage` in `targetWorkspaceName` via the Retranslator. A rule fires when the
+      # publish target workspace equals the rule's `sourceWorkspaceName`.
       #
       # Synchronization operates on contentDimension identified by `languageDimensionName` above.
       #
       # Multiple rules are supported; do not configure cycles (e.g. en→de AND de→en).
+      #
+      # Each rule has two optional strategy fields:
+      #
+      #   synchronizationStrategy: stale | full   (default: stale)
+      #     stale = only nodes the stale-translation projection flagged (a source property changed,
+      #             or a variant was ported into the target dimension). Cheap; right for steady state.
+      #     full  = walk the whole target subtree from the root and consider every translatable node,
+      #             regardless of stale state. For rebuilding/recovering a target dimension. More
+      #             expensive — it runs on every matching publish.
+      #
+      #   translationStrategy: keep-existing | force-refresh   (default: keep-existing)
+      #     keep-existing = leave an already-existing target variant untouched (protect manual edits).
+      #     force-refresh = re-translate existing target variants from the current source (overwrite).
+      #     Override: a node with a stale record is ALWAYS refreshed regardless of this setting, so
+      #     keep-existing only protects existing-and-non-stale variants. In `stale` mode every visited
+      #     node is stale by definition, so translationStrategy has no visible effect there.
       #
       # NOTE: Only NodePropertiesWereSet and NodeAggregateWithNodeWasCreated source events drive sync.
       #       Node moves/removals are handled by the NodeType `scope` mechanism, not by this feature.
@@ -120,6 +137,8 @@ Sitegeist:
       #    sourceLanguage: en
       #    targetWorkspaceName: de-review
       #    targetLanguage: de
+      #    synchronizationStrategy: stale          # optional, default
+      #    translationStrategy: keep-existing       # optional, default
 
 Neos:
   Flow:

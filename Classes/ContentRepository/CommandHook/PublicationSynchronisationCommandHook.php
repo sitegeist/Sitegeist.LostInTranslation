@@ -26,10 +26,13 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchroniser;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\SynchronisationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronisationRules;
+use Sitegeist\LostInTranslation\Domain\SynchronizationStrategy;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
+use Sitegeist\LostInTranslation\Domain\TranslationStrategy;
 
 /**
  * Command hook that fires the auto-sync rules from
@@ -60,6 +63,7 @@ final class PublicationSynchronisationCommandHook implements CommandHookInterfac
         private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         private readonly ContentRepositoryId $contentRepositoryId,
         private readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
+        private readonly FullWorkspaceSynchroniser $fullWorkspaceSynchroniser,
         private readonly DimensionValueDirectiveFactory $dimensionValueDirectiveFactory,
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
@@ -133,7 +137,7 @@ final class PublicationSynchronisationCommandHook implements CommandHookInterfac
     }
 
     /**
-     * @return list<CreateNodeVariant|\Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties>
+     * @return list<CommandInterface>
      */
     private function commandsForRule(SynchronisationRule $rule): array
     {
@@ -154,6 +158,22 @@ final class PublicationSynchronisationCommandHook implements CommandHookInterfac
             )?->deeplTargetId;
         if ($sourceDeepl === null || $targetDeepl === null) {
             return [];
+        }
+
+        // Full strategy: walk the whole target subtree (delegated to FullWorkspaceSynchroniser,
+        // which also encodes the "stale always forces a refresh" override). `keep-existing` maps to
+        // skipExisting=true, `force-refresh` to false.
+        if ($rule->synchronizationStrategy === SynchronizationStrategy::Full) {
+            return iterator_to_array($this->fullWorkspaceSynchroniser->buildSynchronisationCommands(
+                contentRepositoryId: $this->contentRepositoryId,
+                targetWorkspaceName: $targetWorkspace,
+                sourceDimensionSpacePoint: $sourceDsp,
+                targetDimensionSpacePoint: $targetDsp,
+                sourceDeeplLanguage: $sourceDeepl,
+                targetDeeplLanguage: $targetDeepl,
+                skipExisting: $rule->translationStrategy === TranslationStrategy::KeepExisting,
+                useCache: true,
+            ));
         }
 
         $sourceSubgraph = $this->contentGraphReadModel
