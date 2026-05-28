@@ -139,11 +139,8 @@ class LostInTranslationCommandController extends CommandController
      *  - **default (stale-driven)**: dispatches one retranslation per record the projection has flagged stale at
      *    `(targetWorkspace, targetDimension)`.
      *  - **`--full`**: walks the entire source-dimension subgraph from every root aggregate down and considers every
-     *    translatable node, regardless of stale state. Two sub-flags tune behaviour:
-     *      - `--skip-existing=false` re-translates nodes whose target variant already exists (the default `true` skips
-     *        them when no stale row exists for the node).
-     *      - `--cache=false` bypasses the translation cache for this run (forces fresh DeepL calls; cache reads +
-     *        writes are both suppressed).
+     *    translatable node, regardless of stale state. Nodes whose target variant already exists and have no stale
+     *    row are kept untouched (manual edits are preserved).
      *
      * Source workspace+dimension are accepted in both modes but must currently equal the target workspace and the
      * configured `referenceLanguage` of the target dimension respectively (cross-workspace sync is not yet supported).
@@ -156,9 +153,6 @@ class LostInTranslationCommandController extends CommandController
      * @param string $contentRepository Content repository id (defaults to "default").
      * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.
      * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
-     * @param bool $skipExisting Only used with --full. When true (default), skip nodes whose target variant already
-     *                           exists and have no stale rows. When false, re-translate them.
-     * @param bool $cache Only used with --full. When false, bypass the translation cache for this run.
      * @throws StopCommandException
      */
     public function synchronizeCommand(
@@ -169,8 +163,6 @@ class LostInTranslationCommandController extends CommandController
         string $contentRepository = 'default',
         bool $dryRun = false,
         bool $full = false,
-        bool $skipExisting = true,
-        bool $cache = true,
     ): void {
         $contentRepositoryId = ContentRepositoryId::fromString($contentRepository);
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]);
@@ -185,8 +177,6 @@ class LostInTranslationCommandController extends CommandController
                 sourceDimensionSpacePoint: $sourceDsp,
                 targetWorkspaceName: $targetWorkspaceName,
                 targetDimensionSpacePoint: $targetDsp,
-                skipExisting: $skipExisting,
-                useCache: $cache,
                 dryRun: $dryRun,
             )
             : $this->workspaceSynchronizer->synchronizeWorkspace(
