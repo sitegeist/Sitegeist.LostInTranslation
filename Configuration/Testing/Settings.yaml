@@ -3,15 +3,15 @@ Sitegeist:
   LostInTranslation:
     nodeTranslation:
       synchronization:
-        # Document scope: mirror documents AND content on publish to `live`. Exercised by the
-        # publish-on-live scenarios (en → es is auto-synced; de has no rule).
+        # Document scope: mirror documents AND content on publish to `live`. Exercised by the publish-on-live scenarios
+        # (en → es is auto-synced; de has no rule).
         - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: live
           targetDimension: es
           scope: Document
-        # Content scope: only fill in content below documents that already exist in the target
-        # dimension; never create documents automatically. Fires on publish to `content-review`.
+        # Content scope: only fill in content below documents that already exist in the target dimension; never create
+        # documents automatically. Fires on publish to `content-review`.
         - sourceWorkspaceName: content-review
           sourceDimension: en
           targetWorkspaceName: content-review

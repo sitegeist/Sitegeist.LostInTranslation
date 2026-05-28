@@ -52,11 +52,11 @@ class SynchronizationCommandHookFactory implements CommandHookFactoryInterface
             ), 1779052300);
         }
 
-        // The CR is mid-construction during build(); resolve the stale-translation finder lazily
-        // (inside `onAfterHandle`) to avoid the "Content repository was attempted to be build in
-        // recursion" guard. By the time the hook actually fires, the CR is fully constructed.
-        // Positional args: Flow's proxy generator wraps `__construct` with a no-params shim that
-        // uses `func_get_args()`, so named parameters never reach the user-defined signature.
+        // The CR is mid-construction during build(); resolve the stale-translation finder lazily (inside
+        // `onAfterHandle`) to avoid the "Content repository was attempted to be build in recursion" guard. By the time
+        // the hook actually fires, the CR is fully constructed.
+        // Positional args: Flow's proxy generator wraps `__construct` with a no-params shim that uses
+        // `func_get_args()`, so named parameters never reach the user-defined signature.
         return new SynchronizationCommandHook(
             $this->enabled,
             SynchronizationRules::fromArray($this->synchronization),

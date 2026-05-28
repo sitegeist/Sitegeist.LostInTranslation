@@ -136,28 +136,28 @@ class LostInTranslationCommandController extends CommandController
     /**
      * Synchronize translations in the target workspace+dimension. Two modes:
      *
-     *  - **default (stale-driven)**: dispatches one retranslation per record the projection has
-     *    flagged stale at `(targetWorkspace, targetDimension)`.
-     *  - **`--full`**: walks the entire source-dimension subgraph from every root aggregate down
-     *    and considers every translatable node, regardless of stale state. Two sub-flags tune
-     *    behaviour:
-     *      - `--skip-existing=false` re-translates nodes whose target variant already exists
-     *        (the default `true` skips them when no stale row exists for the node).
-     *      - `--cache=false` bypasses the translation cache for this run (forces fresh DeepL
-     *        calls; cache reads + writes are both suppressed).
+     *  - **default (stale-driven)**: dispatches one retranslation per record the projection has flagged stale at
+     *    `(targetWorkspace, targetDimension)`.
+     *  - **`--full`**: walks the entire source-dimension subgraph from every root aggregate down and considers every
+     *    translatable node, regardless of stale state. Two sub-flags tune behaviour:
+     *      - `--skip-existing=false` re-translates nodes whose target variant already exists (the default `true` skips
+     *        them when no stale row exists for the node).
+     *      - `--cache=false` bypasses the translation cache for this run (forces fresh DeepL calls; cache reads +
+     *        writes are both suppressed).
      *
-     * Source workspace+dimension are accepted in both modes but must currently equal the target
-     * workspace and the configured `referenceLanguage` of the target dimension respectively
-     * (cross-workspace sync is not yet supported).
+     * Source workspace+dimension are accepted in both modes but must currently equal the target workspace and the
+     * configured `referenceLanguage` of the target dimension respectively (cross-workspace sync is not yet supported).
      *
      * @param string $sourceWorkspace Source workspace name. Must equal --target-workspace for now.
-     * @param string $sourceDimension Source language dimension value. Must equal the configured `referenceLanguage` of --target-dimension.
+     * @param string $sourceDimension Source language dimension value. Must equal the configured `referenceLanguage` of
+     *                                --target-dimension.
      * @param string $targetWorkspace Target workspace whose stale records will be processed.
      * @param string $targetDimension Target language dimension value (e.g. "de").
      * @param string $contentRepository Content repository id (defaults to "default").
      * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.
      * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
-     * @param bool $skipExisting Only used with --full. When true (default), skip nodes whose target variant already exists and have no stale rows. When false, re-translate them.
+     * @param bool $skipExisting Only used with --full. When true (default), skip nodes whose target variant already
+     *                           exists and have no stale rows. When false, re-translate them.
      * @param bool $cache Only used with --full. When false, bypass the translation cache for this run.
      * @throws StopCommandException
      */

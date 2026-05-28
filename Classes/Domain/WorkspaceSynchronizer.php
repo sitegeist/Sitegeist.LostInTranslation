@@ -16,18 +16,18 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 /**
  * Workspace-level orchestrator on top of {@see Retranslator}.
  *
- * Loads every stale-translation record matching the target (workspace, originDimensionSpacePoint)
- * and dispatches one {@see Retranslator::retranslateNode()} call per record. The dispatch chain
- * is idempotent: a parent's subtree walk that clears child stale records causes later iterations
- * to come back as `RetranslationResult::isNoOp()` rather than re-translating.
+ * Loads every stale-translation record matching the target (workspace, originDimensionSpacePoint) and dispatches one
+ * {@see Retranslator::retranslateNode()} call per record. The dispatch chain is idempotent: a parent's subtree walk
+ * that clears child stale records causes later iterations to come back as `RetranslationResult::isNoOp()` rather than
+ * re-translating.
  *
- * Source workspace + source dimension are part of the public API in anticipation of future
- * cross-workspace synchronization. For now the only supported shape is:
+ * Source workspace + source dimension are part of the public API in anticipation of future cross-workspace
+ * synchronization. For now the only supported shape is:
  *  - sourceWorkspace == targetWorkspace
  *  - sourceDimension equals the configured `referenceLanguage` of targetDimension
  *
- * Either mismatch short-circuits with {@see WorkspaceSynchronizationResult::skipped()} so the
- * caller (typically the `synchronize` CLI) can surface a clear error.
+ * Either mismatch short-circuits with {@see WorkspaceSynchronizationResult::skipped()} so the caller (typically the
+ * `synchronize` CLI) can surface a clear error.
  */
 class WorkspaceSynchronizer
 {

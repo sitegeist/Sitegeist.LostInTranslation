@@ -608,10 +608,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     Scenario: Document nodes are recorded as stale translations
-        # A Document.Page carries the auto-translatable `title` inherited from Neos.Neos:Document, so
-        # creating one records a stale translation for `title` in the target dimension — Documents
-        # are tracked for retranslation just like Content nodes. Its tethered `main`
-        # ContentCollection has no translatable properties and is recorded with an empty list.
+        # A Document.Page carries the auto-translatable `title` inherited from Neos.Neos:Document, so creating one
+        # records a stale translation for `title` in the target dimension — Documents are tracked for retranslation
+        # just like Content nodes. Its tethered `main` ContentCollection has no translatable properties and is
+        # recorded with an empty list.
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
             | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                              | initialPropertyValues | tetheredDescendantNodeAggregateIds |
@@ -622,10 +622,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | user-workspace | {"language":"de"}         | homepage-main   | []            |
 
     Scenario: Retranslating a document removes all of its stale translations including its content collection
-        # A document's tethered ContentCollection carries no translatable properties and is recorded
-        # with an empty stale list. Retranslating the document must clear ALL stale records below it —
-        # the document's own properties, the content inside it, AND the empty content-collection
-        # record — leaving nothing behind (no orphaned stale rows).
+        # A document's tethered ContentCollection carries no translatable properties and is recorded with an empty stale
+        # list. Retranslating the document must clear ALL stale records below it — the document's own properties, the
+        # content inside it, AND the empty content-collection record — leaving nothing behind (no orphaned stale rows).
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
             | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |

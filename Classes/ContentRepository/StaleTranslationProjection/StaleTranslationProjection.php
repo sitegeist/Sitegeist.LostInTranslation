@@ -170,12 +170,11 @@ class StaleTranslationProjection implements ProjectionInterface
     {
         match ($event::class) {
             NodeAggregateWithNodeWasCreated::class => $this->whenNodeAggregateWithNodeWasCreated($event),
-            // A variant carries the (untranslated) source properties until the cascaded
-            // SetNodeProperties translates them — so for a node WITH translatable properties the
-            // stale record stays valid and is cleared later by NodePropertiesWereSet. But a
-            // property-less node (e.g. a tethered ContentCollection) is recorded with an empty
-            // property list and never receives a SetNodeProperties, so its stale record would linger
-            // forever; creating its variant fully satisfies it, so we drop the empty record here.
+            // A variant carries the (untranslated) source properties until the cascaded SetNodeProperties translates
+            // them — so for a node WITH translatable properties the stale record stays valid and is cleared later by
+            // NodePropertiesWereSet. But a property-less node (e.g. a tethered ContentCollection) is recorded with an
+            // empty property list and never receives a SetNodeProperties, so its stale record would linger forever;
+            // creating its variant fully satisfies it, so we drop the empty record here.
             NodeSpecializationVariantWasCreated::class => $this->whenNodeSpecializationVariantWasCreated($event),
             NodeGeneralizationVariantWasCreated::class => $this->whenNodeGeneralizationVariantWasCreated($event),
             NodePeerVariantWasCreated::class => $this->whenNodePeerVariantWasCreated($event),
@@ -273,11 +272,10 @@ class StaleTranslationProjection implements ProjectionInterface
     }
 
     /**
-     * Drop a stale record at the variant's target origin when it has NO translatable properties to
-     * translate (an empty property list). Such records exist only to mirror structure (e.g. a
-     * tethered ContentCollection); once the variant exists there is nothing left to do for them.
-     * Records that still list translatable properties are left untouched — they are cleared by the
-     * subsequent translated {@see NodePropertiesWereSet}.
+     * Drop a stale record at the variant's target origin when it has NO translatable properties to translate (an empty
+     * property list). Such records exist only to mirror structure (e.g. a tethered ContentCollection); once the variant
+     * exists there is nothing left to do for them. Records that still list translatable properties are left untouched —
+     * they are cleared by the subsequent translated {@see NodePropertiesWereSet}.
      */
     private function clearStructuralStaleRecord(
         WorkspaceName $workspaceName,

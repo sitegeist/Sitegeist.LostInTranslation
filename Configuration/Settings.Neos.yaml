@@ -19,10 +19,9 @@ Neos:
         commandHooks:
           'Sitegeist.LostInTranslation:TranslationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory
-          # Must come AFTER TranslationCommandHook: the publication hook sets the AI-authorship
-          # runtime state before returning commands, and TranslationCommandHook::onAfterHandle
-          # resets that state at the start of every entry. Reversing the order would wipe the
-          # AI attribution before the cascade ran.
+          # Must come AFTER TranslationCommandHook: the publication hook sets the AI-authorship runtime state before
+          # returning commands, and TranslationCommandHook::onAfterHandle resets that state at the start of every entry.
+          # Reversing the order would wipe the AI attribution before the cascade ran.
           'Sitegeist.LostInTranslation:SynchronizationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\SynchronizationCommandHookFactory
         # Activate for content governance mode:

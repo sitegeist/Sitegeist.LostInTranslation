@@ -7,15 +7,13 @@ namespace Sitegeist\LostInTranslation\Domain;
 use Neos\Flow\Annotations as Flow;
 
 /**
- * One rule of `Sitegeist.LostInTranslation.nodeTranslation.synchronization`. Reads as:
- * "When a publish lands on `sourceWorkspaceName`, auto-translate (`targetWorkspaceName`,
- * `targetDimension`) from `sourceDimension`."
+ * One rule of `Sitegeist.LostInTranslation.nodeTranslation.synchronization`. Reads as: "When a publish lands on
+ * `sourceWorkspaceName`, auto-translate (`targetWorkspaceName`, `targetDimension`) from `sourceDimension`."
  *
- * Automatic synchronization is always driven by the stale-translation projection. `scope` picks
- * how far the mirroring reaches: {@see SynchronizationScope::Content} only fills in content below
- * Documents that already exist in the target, while {@see SynchronizationScope::Document} also
- * creates the missing Document variants themselves. Walking the whole tree from the root is the
- * separate `synchronize --full` CLI command, never triggered automatically.
+ * Automatic synchronization is always driven by the stale-translation projection. `scope` picks how far the mirroring
+ * reaches: {@see SynchronizationScope::Content} only fills in content below Documents that already exist in the target,
+ * while {@see SynchronizationScope::Document} also creates the missing Document variants themselves. Walking the whole
+ * tree from the root is the separate `synchronize --full` CLI command, never triggered automatically.
  */
 #[Flow\Proxy(false)]
 final readonly class SynchronizationRule

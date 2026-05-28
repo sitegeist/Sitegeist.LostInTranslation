@@ -37,33 +37,32 @@ use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
- * Command hook that fires the auto-sync rules from
- * `Sitegeist.LostInTranslation.nodeTranslation.synchronization` after a workspace publish.
+ * Command hook that fires the auto-sync rules from `Sitegeist.LostInTranslation.nodeTranslation.synchronization`
+ * after a workspace publish.
  *
- * Automatic synchronization is always stale-driven: for every rule whose `sourceWorkspaceName`
- * matches the publish target, the hook iterates the stale-translation records sitting at the rule's
+ * Automatic synchronization is always stale-driven: for every rule whose `sourceWorkspaceName` matches the publish
+ * target, the hook iterates the stale-translation records sitting at the rule's
  * `(targetWorkspaceName, targetDimension)` and emits one command per record:
- *  - **target variant missing** → `CreateNodeVariant`; the existing
- *    {@see TranslationCommandHook} cascades the translated `SetNodeProperties` automatically.
- *  - **target variant exists** → a translated `SetNodeProperties` built by
- *    {@see StalePropertyCommandBuilder}.
+ *  - **target variant missing** → `CreateNodeVariant`; the existing {@see TranslationCommandHook} cascades the
+ *    translated `SetNodeProperties` automatically.
+ *  - **target variant exists** → a translated `SetNodeProperties` built by {@see StalePropertyCommandBuilder}.
  *
  * The rule's {@see SynchronizationScope} gates which records are acted on:
  *  - {@see SynchronizationScope::Document} mirrors the whole structure (documents AND content).
- *  - {@see SynchronizationScope::Content} only acts on records whose containing Document already
- *    exists in the target dimension, and never creates Document variants automatically.
+ *  - {@see SynchronizationScope::Content} only acts on records whose containing Document already exists in the target
+ *    dimension, and never creates Document variants automatically.
  *
- * Emitted commands are ordered ancestor-before-descendant (by source-tree depth) so a parent
- * `CreateNodeVariant` — which materialises tethered descendants such as a document's content
- * collection — is dispatched before a deeper node's own `CreateNodeVariant`.
+ * Emitted commands are ordered ancestor-before-descendant (by source-tree depth) so a parent `CreateNodeVariant` —
+ * which materialises tethered descendants such as a document's content collection — is dispatched before a deeper
+ * node's own `CreateNodeVariant`.
  *
- * The hook only reads the {@see StaleTranslationFinder} (the projection has already caught up
- * by the time `onAfterHandle` runs, per the CR contract) and returns commands; it does not
- * dispatch directly. AI authorship is flagged via {@see AISystemTranslationRuntimeState} so the
- * returned commands' events are attributed to the AI service rather than the publishing editor.
+ * The hook only reads the {@see StaleTranslationFinder} (the projection has already caught up by the time
+ * `onAfterHandle` runs, per the CR contract) and returns commands; it does not dispatch directly. AI authorship is
+ * flagged via {@see AISystemTranslationRuntimeState} so the returned commands' events are attributed to the AI service
+ * rather than the publishing editor.
  *
- * Walking the whole tree from the root (regardless of stale state) is deliberately NOT done here —
- * that is the separate, manual `synchronize --full` CLI command
+ * Walking the whole tree from the root (regardless of stale state) is deliberately NOT done here — that is the
+ * separate, manual `synchronize --full` CLI command
  * ({@see \Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer}).
  */
 final class SynchronizationCommandHook implements CommandHookInterface
@@ -132,9 +131,9 @@ final class SynchronizationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
-        // Mark the cascade as AI-authored. The existing TranslationCommandHook resets the state
-        // at the start of every `onAfterHandle`, so the attribution is scoped to the dispatched
-        // commands themselves and does not leak to the next user-initiated command.
+        // Mark the cascade as AI-authored. The existing TranslationCommandHook resets the state at the start of every
+        // `onAfterHandle`, so the attribution is scoped to the dispatched commands themselves and does not leak to the
+        // next user-initiated command.
         $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
 
         return Commands::fromArray($additionalCommands);
@@ -181,8 +180,8 @@ final class SynchronizationCommandHook implements CommandHookInterface
             ->getContentGraph($targetWorkspace)
             ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
 
-        // Collect each command paired with the source-tree depth of the node it acts on, so the
-        // batch can be ordered ancestor-before-descendant below.
+        // Collect each command paired with the source-tree depth of the node it acts on, so the batch can be ordered
+        // ancestor-before-descendant below.
         /** @var list<array{depth:int,command:CommandInterface}> $plannedCommands */
         $plannedCommands = [];
         foreach ($this->staleTranslationFinder()->findAll() as $stale) {
@@ -194,15 +193,15 @@ final class SynchronizationCommandHook implements CommandHookInterface
                 continue;
             }
             $sourceNode = $sourceSubgraph->findNodeById($stale->nodeAggregateId);
-            // Source variant not present in the target workspace at the source dimension —
-            // nothing to translate from. Leave the stale row alone.
+            // Source variant not present in the target workspace at the source dimension — nothing to translate from.
+            // Leave the stale row alone.
             if ($sourceNode === null) {
                 continue;
             }
-            // Content scope only mirrors nodes whose containing Document already exists in the
-            // target dimension; Documents are never created automatically. For a Document node the
-            // closest Document is itself — so a Document missing in the target is left alone (no
-            // auto-create), while one that already exists is still (re-)translated when stale.
+            // Content scope only mirrors nodes whose containing Document already exists in the target dimension;
+            // Documents are never created automatically. For a Document node the closest Document is itself — so a
+            // Document missing in the target is left alone (no auto-create), while one that already exists is still
+            // (re-)translated when stale.
             if ($rule->scope === SynchronizationScope::Content) {
                 $documentNode = $sourceSubgraph->findClosestNode(
                     $sourceNode->aggregateId,
@@ -230,9 +229,8 @@ final class SynchronizationCommandHook implements CommandHookInterface
                 }
                 continue;
             }
-            // Tethered children are created together with their non-tethered ancestor's variant —
-            // the existing TranslationCommandHook handles the cascade, so we don't emit a
-            // CreateNodeVariant for them ourselves.
+            // Tethered children are created together with their non-tethered ancestor's variant — the existing
+            // TranslationCommandHook handles the cascade, so we don't emit a CreateNodeVariant for them ourselves.
             if ($sourceNode->classification->isTethered()) {
                 continue;
             }
@@ -247,18 +245,18 @@ final class SynchronizationCommandHook implements CommandHookInterface
             ];
         }
 
-        // Stale records arrive in primary-key order, not hierarchical order. A descendant's
-        // `CreateNodeVariant` must not be dispatched before the ancestor variant that materialises
-        // its (tethered) parent in the target dimension. Sorting by source-tree depth (PHP's sort
-        // is stable since 8.0) yields a valid top-down order without walking the whole tree.
+        // Stale records arrive in primary-key order, not hierarchical order. A descendant's `CreateNodeVariant` must
+        // not be dispatched before the ancestor variant that materialises its (tethered) parent in the target
+        // dimension. Sorting by source-tree depth (PHP's sort is stable since 8.0) yields a valid top-down order
+        // without walking the whole tree.
         usort($plannedCommands, static fn (array $a, array $b): int => $a['depth'] <=> $b['depth']);
 
         return array_map(static fn (array $planned): CommandInterface => $planned['command'], $plannedCommands);
     }
 
     /**
-     * Distance of the node from its root aggregate in the source subgraph (root = 0, its children
-     * = 1, …). Used purely to order the synchronization commands ancestor-before-descendant.
+     * Distance of the node from its root aggregate in the source subgraph (root = 0, its children = 1, …). Used
+     * purely to order the synchronization commands ancestor-before-descendant.
      */
     private function treeDepthOf(ContentSubgraphInterface $sourceSubgraph, NodeAggregateId $nodeAggregateId): int
     {

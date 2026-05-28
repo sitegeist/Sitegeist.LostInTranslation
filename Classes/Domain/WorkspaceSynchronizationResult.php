@@ -8,10 +8,9 @@ use Neos\Flow\Annotations as Flow;
 
 /**
  * Outcome of a {@see WorkspaceSynchronizer::synchronizeWorkspace()} call. Carries one
- * {@see PerNodeSynchronizationResult} per stale-translation record that was iterated, so the CLI
- * can render per-node lines and aggregate totals. `skippedReason` is set when the orchestrator
- * itself short-circuited before iterating (e.g. validation failure); a non-null reason implies an
- * empty `perNodeResults`.
+ * {@see PerNodeSynchronizationResult} per stale-translation record that was iterated, so the CLI can render per-node
+ * lines and aggregate totals. `skippedReason` is set when the orchestrator itself short-circuited before iterating
+ * (e.g. validation failure); a non-null reason implies an empty `perNodeResults`.
  */
 #[Flow\Proxy(false)]
 final readonly class WorkspaceSynchronizationResult

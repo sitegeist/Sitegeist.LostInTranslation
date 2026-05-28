@@ -9,9 +9,9 @@ use Neos\ContentRepository\Core\Feature\Security\Dto\UserId;
 interface TranslationServiceInterface
 {
     /**
-     * Translate every value in `$texts`, preserving keys. When `$useCache` is false the
-     * implementation MUST skip its translation cache for both reads (no shortcut return) and
-     * writes (no cache pollution from this call). Used by "force re-translate" tooling.
+     * Translate every value in `$texts`, preserving keys. When `$useCache` is false the implementation MUST skip its
+     * translation cache for both reads (no shortcut return) and writes (no cache pollution from this call). Used by
+     * "force re-translate" tooling.
      *
      * @param array<string,string> $texts
      * @param string $targetLanguage

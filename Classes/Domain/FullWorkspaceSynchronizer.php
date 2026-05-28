@@ -29,28 +29,24 @@ use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 
 /**
- * Walks the entire source-dimension subgraph from each root aggregate downward and emits
- * translation commands for every translatable node — independent of the stale-translation
- * projection. Where {@see WorkspaceSynchronizer} only acts on records the projection has already
- * flagged, this service treats every node in the source dimension as a candidate.
+ * Walks the entire source-dimension subgraph from each root aggregate downward and emits translation commands for every
+ * translatable node — independent of the stale-translation projection. Where {@see WorkspaceSynchronizer} only acts on
+ * records the projection has already flagged, this service treats every node in the source dimension as a candidate.
  *
  * Decision matrix per node (only when `directive->enabled`):
- *   - target variant absent + non-tethered → `CreateNodeVariant`; the {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
- *     cascades a full-properties `SetNodeProperties` automatically.
- *   - target variant absent + tethered → skip; the tethered variant is created (and translated)
- *     by its non-tethered ancestor's `CreateNodeVariant` cascade.
+ *   - target variant absent + non-tethered → `CreateNodeVariant`; the
+ *     {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook} cascades a
+ *     full-properties `SetNodeProperties` automatically.
+ *   - target variant absent + tethered → skip; the tethered variant is created (and translated) by its non-tethered
+ *     ancestor's `CreateNodeVariant` cascade.
  *   - target variant present + `$skipExisting` + no stale row → skip (keep manual edits).
- *   - target variant present otherwise (i.e. `!$skipExisting`, OR a stale record exists) →
- *     translated `SetNodeProperties` for *every* translatable property. This applies to tethered
- *     children too: once their variant exists, a property change on the source is refreshed
- *     directly. The stale-record case is the load-bearing override: a stale node is always
- *     refreshed even under `$skipExisting`.
+ *   - target variant present otherwise (i.e. `!$skipExisting`, OR a stale record exists) → translated
+ *     `SetNodeProperties` for *every* translatable property. This applies to tethered children too: once their variant
+ *     exists, a property change on the source is refreshed directly. The stale-record case is the load-bearing
+ *     override: a stale node is always refreshed even under `$skipExisting`.
  *
- * Two entry points share the same per-node decision ({@see self::decideCommandForNode}) and
- * traversal ({@see self::traverseSourceSubtree}):
- *   - {@see self::synchronizeWorkspaceFull} dispatches inline (CLI `synchronize --full`).
- *   - {@see self::buildSynchronizationCommands} returns commands without dispatching, for the
- *     publication hook which must hand commands back from `onAfterHandle` rather than dispatch.
+ * Sole entry point {@see self::synchronizeWorkspaceFull} (CLI `synchronize --full`) dispatches inline, delegating
+ * per-node decisions to {@see self::decideCommandForNode} and traversal to {@see self::traverseSourceSubtrees}.
  */
 class FullWorkspaceSynchronizer
 {
@@ -182,9 +178,8 @@ class FullWorkspaceSynchronizer
     }
 
     /**
-     * Decide the single command for a visited node, or null when it should be skipped (not
-     * translatable, a tethered child with no target variant yet, already in sync under
-     * `$skipExisting`, or no translatable values).
+     * Decide the single command for a visited node, or null when it should be skipped (not translatable, a tethered
+     * child with no target variant yet, already in sync under `$skipExisting`, or no translatable values).
      *
      * @param array<string, StaleTranslation> $staleByNodeId
      */
@@ -209,9 +204,9 @@ class FullWorkspaceSynchronizer
         }
 
         if ($targetSubgraph->findNodeById($node->aggregateId) === null) {
-            // No target variant yet. A tethered child cannot be created independently — it
-            // materialises with its non-tethered ancestor's CreateNodeVariant cascade (which the
-            // TranslationCommandHook then translates), so we skip emitting one here.
+            // No target variant yet. A tethered child cannot be created independently — it materialises with its
+            // non-tethered ancestor's CreateNodeVariant cascade (which the TranslationCommandHook then translates),
+            // so we skip emitting one here.
             if ($node->classification->isTethered()) {
                 return null;
             }
@@ -224,12 +219,9 @@ class FullWorkspaceSynchronizer
             );
         }
 
-        // The target variant already exists (true for tethered children once their ancestor was
-        // translated) — a SetNodeProperties can refresh it directly, so tethered nodes are NOT
-        // excluded from this branch.
-
-        // Target variant exists. Keep it untouched only when keeping existing AND it is not stale —
-        // a stale record always forces a refresh.
+        // Target variant exists (true for tethered children once their ancestor was translated) — a SetNodeProperties
+        // can refresh it directly, so tethered nodes are NOT excluded from this branch. Keep it untouched only when
+        // keeping existing AND it is not stale — a stale record always forces a refresh.
         if ($skipExisting && !isset($staleByNodeId[$node->aggregateId->value])) {
             return null;
         }
@@ -251,9 +243,8 @@ class FullWorkspaceSynchronizer
     }
 
     /**
-     * Depth-first pre-order traversal of every root aggregate's source-dimension subtree. Children
-     * are followed unfiltered (Document/ContentCollection/Content alike), mirroring the legacy
-     * `translateCommand` walk.
+     * Depth-first pre-order traversal of every root aggregate's source-dimension subtree. Children are followed
+     * unfiltered (Document/ContentCollection/Content alike), mirroring the legacy `translateCommand` walk.
      *
      * @return \Generator<Node>
      */
@@ -282,8 +273,8 @@ class FullWorkspaceSynchronizer
     }
 
     /**
-     * Pre-fetch the stale records for the (targetWorkspace, targetDSP) slice, keyed by node
-     * aggregate id. Used only for the `skipExisting` decision.
+     * Pre-fetch the stale records for the (targetWorkspace, targetDSP) slice, keyed by node aggregate id. Used only for
+     * the `skipExisting` decision.
      *
      * @return array<string, StaleTranslation>
      */

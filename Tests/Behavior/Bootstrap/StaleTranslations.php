@@ -98,11 +98,11 @@ trait StaleTranslations
     }
 
     /**
-     * Application-level "Publish" button on a document in the Neos UI — publishes the document
-     * itself together with the content nodes below it, leaving sibling documents alone. Delegates to
+     * Application-level "Publish" button on a document in the Neos UI — publishes the document itself together with the
+     * content nodes below it, leaving sibling documents alone. Delegates to
      * {@see WorkspacePublishingService::publishChangesInDocument()} which under the hood emits a
-     * {@see \Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace}
-     * for the resolved document subtree.
+     * {@see \Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace} for
+     * the resolved document subtree.
      *
      * @When the command PublishChangesInDocument is executed with payload:
      * @throws \Exception

@@ -18,11 +18,10 @@ use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 /**
  * Builds a translated `SetNodeProperties` command for the explicit stale property list of one node.
  *
- * Shared by {@see Retranslator} (subtree retranslation) and the workspace-publication auto-sync
- * hook. Trusts the stale-translation projection's invariant: records only exist for
- * translation-enabled node types and translatable properties — so guards on `directive->enabled`
- * and `findByName` are dropped. The `hasProperty` + empty-source guards remain because editors
- * may blank a source property between the projection write and our dispatch.
+ * Shared by {@see Retranslator} (subtree retranslation) and the workspace-publication auto-sync hook. Trusts the
+ * stale-translation projection's invariant: records only exist for translation-enabled node types and translatable
+ * properties — so guards on `directive->enabled` and `findByName` are dropped. The `hasProperty` + empty-source guards
+ * remain because editors may blank a source property between the projection write and our dispatch.
  *
  * @internal Only for consumption inside Sitegeist.LostInTranslation.
  */
@@ -50,8 +49,8 @@ class StalePropertyCommandBuilder
         bool $useCache = true,
     ): ?SetNodeProperties {
         $nodeType = $nodeTypeManager->getNodeType($sourceNode->nodeTypeName);
-        // Defensive: projection guarantees the node type existed when the record was written.
-        // If it's since been removed, we can't resolve the connector for non-string props.
+        // Defensive: projection guarantees the node type existed when the record was written. If it's since been
+        // removed, we can't resolve the connector for non-string props.
         if ($nodeType === null) {
             return null;
         }

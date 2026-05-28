@@ -37,8 +37,8 @@ final readonly class SynchronizationRules implements \IteratorAggregate, \Counta
     }
 
     /**
-     * Rules whose `sourceWorkspaceName` matches the workspace that just received a publish
-     * (i.e. the publish target / base workspace).
+     * Rules whose `sourceWorkspaceName` matches the workspace that just received a publish (i.e. the publish target /
+     * base workspace).
      */
     public function forPublicationTarget(WorkspaceName $publicationTarget): self
     {
