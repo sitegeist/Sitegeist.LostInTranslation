@@ -1071,3 +1071,59 @@ Feature: Automatic retranslation on workspace publish
             | user-workspace | {"language":"es"}         | sibling-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sibling-text-2    | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"es"}         | sibling-text-2    | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    Scenario: Synchronize propagates a cleared source property to the target dimension
+        # When an editor clears a translatable property to "" in the source dimension, synchronize must
+        # propagate the clearing verbatim to the target — the StalePropertyCommandBuilder routes empty source
+        # values around DeepL and emits SetNodeProperties with "" so the target variant matches the source.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                                                        |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} |
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        # First sync en→de: variant doesn't exist yet, so the Retranslator emits CreateNodeVariant which the
+        # TranslationCommandHook cascades into a translated SetNodeProperties. Clears the de stale row.
+        When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        # Clear autoTranslatableStringProperty in the en source — projection records a new de stale row.
+        When I am in workspace "user-workspace"
+        And the command SetNodeProperties is executed with payload:
+            | Key                       | Value                                  |
+            | nodeAggregateId           | "sir-david-nodenborough"               |
+            | originDimensionSpacePoint | {"language": "en"}                     |
+            | propertyValues            | {"autoTranslatableStringProperty": ""} |
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        # Sync again en→de — the de variant already exists, so the Retranslator goes through
+        # StalePropertyCommandBuilder. The empty source value is propagated verbatim (no DeepL call) and the
+        # stale row is cleared.
+        When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        # user-cs-id event timeline:
+        #   0   ContentStreamWasForked     (Background)
+        #   1   NodeAggregateWithNodeWasCreated (sir-david)
+        #   2   NodePeerVariantWasCreated  (sir-david en→de, first sync)
+        #   3   NodePropertiesWereSet      (sir-david de translated, TranslationCommandHook cascade)
+        #   4   NodePropertiesWereSet      (sir-david en, autoTranslatableStringProperty cleared)
+        #   5   NodePropertiesWereSet      (sir-david de, autoTranslatableStringProperty cleared by second sync)
+        And I expect exactly 6 events to be published on stream "ContentStream:user-cs-id"
+        And event at index 5 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                 |
+            | workspaceName                                       | "user-workspace"         |
+            | contentStreamId                                     | "user-cs-id"             |
+            | nodeAggregateId                                     | "sir-david-nodenborough" |
+            | originDimensionSpacePoint                           | {"language": "de"}       |
+            | propertyValues.autoTranslatableStringProperty.value | ""                       |

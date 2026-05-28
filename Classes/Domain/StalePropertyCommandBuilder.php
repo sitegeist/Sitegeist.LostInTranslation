@@ -58,17 +58,27 @@ class StalePropertyCommandBuilder
 
         /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
         $propertiesToTranslate = [];
+        // String properties whose source is blank ("" / whitespace) are propagated verbatim to the target so the
+        // clearing is mirrored — without round-tripping through DeepL (which would otherwise turn "" into
+        // " translated" via the dummy service, and is a wasted call against the real DeepL API).
+        /** @var array<non-empty-string, string> $propertiesToClear */
+        $propertiesToClear = [];
         foreach ($stalePropertyNames as $propertyName) {
             if (!$nodeType->hasProperty($propertyName->value)) {
                 continue;
             }
             $sourceValue = $sourceNode->getProperty($propertyName);
-            if ($sourceValue === null || (is_string($sourceValue) && trim($sourceValue) === '')) {
+            if ($sourceValue === null) {
                 continue;
             }
 
             $name = $propertyName->value;
             assert($name !== '');
+
+            if (is_string($sourceValue) && trim($sourceValue) === '') {
+                $propertiesToClear[$name] = $sourceValue;
+                continue;
+            }
 
             $translatable = $directive->translatablePropertyNames->findByName($propertyName);
             if (is_object($sourceValue) && $translatable?->translationConnector !== null) {
@@ -78,8 +88,19 @@ class StalePropertyCommandBuilder
             }
         }
 
-        if ($propertiesToTranslate === []) {
+        if ($propertiesToTranslate === [] && $propertiesToClear === []) {
             return null;
+        }
+
+        $propertiesToSet = $propertiesToClear;
+
+        if ($propertiesToTranslate === []) {
+            return SetNodeProperties::create(
+                workspaceName: $sourceNode->workspaceName,
+                nodeAggregateId: $sourceNode->aggregateId,
+                originDimensionSpacePoint: $targetOrigin,
+                propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
+            );
         }
 
         // deflate → translate → enflate so DeepL sees one string per leaf, connectors get reassembled.
@@ -99,7 +120,6 @@ class StalePropertyCommandBuilder
         }
         $translatedProperties = ArrayFlatteningUtility::enflate($translatedDeflated);
 
-        $propertiesToSet = [];
         foreach ($translatedProperties as $name => $translatedValue) {
             // uriPathSegment has strict charset; DeepL routinely violates it.
             if (
