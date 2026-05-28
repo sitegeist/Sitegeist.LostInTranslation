@@ -183,8 +183,16 @@ Feature: Automatic retranslation on workspace publish
         # variant. Adding a de rule would require two rules and complicate the unrelated bits.)
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                            | tetheredDescendantNodeAggregateIds |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
             | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+
+        # Initial stale state after setting up the content.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # First publish: the es variants (parent + tethered child) are freshly created and translated.
         When the command PublishWorkspace is executed with payload:
@@ -205,9 +213,9 @@ Feature: Automatic retranslation on workspace publish
         # translated SetNodeProperties (no NodePeerVariantWasCreated this time).
         When I am in workspace "user-workspace"
         And the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                                                                           |
-            | nodeAggregateId           | "sir-david-nodenborough"                                                                        |
-            | originDimensionSpacePoint | {"language": "en"}                                                                              |
+            | Key                       | Value                                                                                                    |
+            | nodeAggregateId           | "sir-david-nodenborough"                                                                                 |
+            | originDimensionSpacePoint | {"language": "en"}                                                                                       |
             | propertyValues            | {"inlineEditableStringProperty": "Updated Text", "autoTranslatableStringProperty": "Updated Other Text"} |
         When the command PublishWorkspace is executed with payload:
             | Key                | Value                |
@@ -252,18 +260,28 @@ Feature: Automatic retranslation on workspace publish
         # Reuse the Background's user-workspace as the publish source; rebase it onto a fresh
         # `preview` base so the publish lands on preview rather than live.
         When the command CreateWorkspace is executed with payload:
-            | Key                | Value             |
-            | workspaceName      | "preview"         |
-            | baseWorkspaceName  | "live"            |
-            | newContentStreamId | "preview-cs-id"   |
+            | Key                | Value           |
+            | workspaceName      | "preview"       |
+            | baseWorkspaceName  | "live"          |
+            | newContentStreamId | "preview-cs-id" |
         And the command ChangeBaseWorkspace is executed with payload:
             | Key               | Value            |
             | workspaceName     | "user-workspace" |
             | baseWorkspaceName | "preview"        |
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:
-            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                            | tetheredDescendantNodeAggregateIds |
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
             | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+
+        # Initial stale state after setting up the content (only user-workspace, since the creates
+        # happened there; ChangeBaseWorkspace earlier wiped user-workspace and then the creates
+        # re-populated it).
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Publish onto `preview` — NOT live — so no rule matches and the auto-sync hook short-circuits.
         When the command PublishWorkspace is executed with payload:
@@ -461,6 +479,15 @@ Feature: Automatic retranslation on workspace publish
         And the following CreateNodeAggregateWithNode commands are executed:
             | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
             | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+
+        # Initial stale state after setting up the content directly on live.
+        And I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live          | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
         When the command CreateNodeVariant is executed with payload:
             | Key             | Value                    |
             | nodeAggregateId | "sir-david-nodenborough" |
@@ -468,10 +495,10 @@ Feature: Automatic retranslation on workspace publish
             | targetOrigin    | {"language":"de"}        |
         # Editor overrides the auto-translation by hand.
         When the command SetNodeProperties is executed with payload:
-            | Key                       | Value                                                                                                |
-            | nodeAggregateId           | "sir-david-nodenborough"                                                                             |
-            | originDimensionSpacePoint | {"language": "de"}                                                                                   |
-            | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted DE", "autoTranslatableStringProperty": "Hand Other"}  |
+            | Key                       | Value                                                                                               |
+            | nodeAggregateId           | "sir-david-nodenborough"                                                                            |
+            | originDimensionSpacePoint | {"language": "de"}                                                                                  |
+            | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted DE", "autoTranslatableStringProperty": "Hand Other"} |
 
         When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} including existing variants
 
@@ -495,6 +522,14 @@ Feature: Automatic retranslation on workspace publish
             | propertyValues.inlineEditableStringProperty.value   | "My Text translated"       |
             | propertyValues.autoTranslatableStringProperty.value | "My Other Text translated" |
 
+        # Final stale state: the de variants were created (publish #1's CreateNodeVariant) and
+        # re-translated (full sync), so all live/de rows are cleared. es was never touched (full sync
+        # targeted de only), so live/es rows for both nodes survive.
+        Then I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live          | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
     Scenario: Stale-mode auto-sync re-translates a tethered child whose source changed
         # Regression guard for the stale-driven path (the default `live` rule): a property change
         # confined to a tethered child is picked up from its stale record and re-translated on publish.
@@ -502,6 +537,15 @@ Feature: Automatic retranslation on workspace publish
         And the following CreateNodeAggregateWithNode commands are executed:
             | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
             | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+
+        # Initial stale state after setting up the content.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
         # Publish #1 → live/es rule creates + translates the es variants of sir-david AND its tethered child.
         When the command PublishWorkspace is executed with payload:
             | Key                | Value                |
@@ -536,6 +580,21 @@ Feature: Automatic retranslation on workspace publish
             | nodeAggregateId                                     | "nodewyn-tetherton"           |
             | originDimensionSpacePoint                           | {"language": "es"}            |
             | propertyValues.autoTranslatableStringProperty.value | "Tethered Changed translated" |
+
+        # Final stale state. live/es is fully cleared again: nodewyn-tetherton/es was the only
+        # re-staled row and the auto-sync scrubbed it. live/de survives (no rule covers de).
+        # user-workspace was overwritten by live's rows during publish #2 (replaceWorkspaceEntries
+        # runs BEFORE the auto-sync hook clears es), so it now mirrors live's rows AT THAT MOMENT —
+        # which still included the just-replicated nodewyn-tetherton/es. sir-david/es is absent from
+        # user-workspace because publish #1's auto-sync already cleared it on live, and the
+        # post-publish-#2 copy reflected that cleared state.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     Scenario: Document-scope auto-sync mirrors a published document and its content into the target dimension
         # The `live` rule is Document scope: publishing a freshly-created Document.Page that holds
@@ -596,10 +655,10 @@ Feature: Automatic retranslation on workspace publish
         Then I expect exactly 10 events to be published on stream "ContentStream:cs-identifier"
         # Document scope created + translated the es variant of the document …
         And event at index 7 is of type "NodePropertiesWereSet" with payload:
-            | Key                               | Expected           |
-            | nodeAggregateId                   | "page-home"        |
-            | originDimensionSpacePoint         | {"language": "es"} |
-            | propertyValues.title.value        | "Home translated"  |
+            | Key                        | Expected           |
+            | nodeAggregateId            | "page-home"        |
+            | originDimensionSpacePoint  | {"language": "es"} |
+            | propertyValues.title.value | "Home translated"  |
         # … and of the content nested inside its `main` collection.
         And event at index 9 is of type "NodePropertiesWereSet" with payload:
             | Key                                                 | Expected             |
@@ -628,6 +687,17 @@ Feature: Automatic retranslation on workspace publish
             | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
             | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
             | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+
+        # Initial stale state after setting up the content in content-user.
+        And I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | content-user  | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user  | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user  | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | content-user  | {"language":"es"}         | page-home       | ["title"]                                                         |
+            | content-user  | {"language":"de"}         | page-home-main  | []                                                                |
+            | content-user  | {"language":"es"}         | page-home-main  | []                                                                |
+
         When the command PublishWorkspace is executed with payload:
             | Key                | Value                  |
             | workspaceName      | "content-user"         |
@@ -639,6 +709,26 @@ Feature: Automatic retranslation on workspace publish
         # No NodePeerVariantWasCreated and no NodePropertiesWereSet are appended: the document is not
         # auto-created, and the content's document is absent from es, so the content is skipped too.
         Then I expect exactly 4 events to be published on stream "ContentStream:content-review-cs-id"
+
+        # Final stale state. content-review has the full set of replicated stale rows (de + es for
+        # every node), and content-user mirrors it because replaceWorkspaceEntries ran after the
+        # publish replication. Critically, NO row was cleared by the sync — Content scope refused to
+        # adopt the document and therefore skipped the content underneath it too. The empty
+        # content-collection rows survive too (their variant was never created).
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | content-review | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-review | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-review | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | content-review | {"language":"es"}         | page-home       | ["title"]                                                         |
+            | content-review | {"language":"de"}         | page-home-main  | []                                                                |
+            | content-review | {"language":"es"}         | page-home-main  | []                                                                |
+            | content-user   | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user   | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user   | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | content-user   | {"language":"es"}         | page-home       | ["title"]                                                         |
+            | content-user   | {"language":"de"}         | page-home-main  | []                                                                |
+            | content-user   | {"language":"es"}         | page-home-main  | []                                                                |
 
     Scenario: Content-scope auto-sync fills in content below a document that already exists in the target
         # The `content-review` rule is Content scope. Once a Document has been manually adopted into
@@ -668,6 +758,18 @@ Feature: Automatic retranslation on workspace publish
         And the following CreateNodeAggregateWithNode commands are executed:
             | nodeAggregateId | parentNodeAggregateId | nodeTypeName                                                         | initialPropertyValues                                                                  |
             | intro-text      | page-home-main        | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |
+
+        # Pre-publish stale state. page-home/es and page-home-main/es are absent — the manual
+        # adoption cleared them (cascade's NodePropertiesWereSet for page-home/es title, variant
+        # event for the empty page-home-main/es). intro-text was just created, so it is fresh-stale
+        # in both target dimensions.
+        And I expect exactly the following stale translations:
+            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | content-user  | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user  | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user  | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | content-user  | {"language":"de"}         | page-home-main  | []                                                                |
+
         When the command PublishWorkspace is executed with payload:
             | Key                | Value                  |
             | workspaceName      | "content-user"         |
@@ -696,3 +798,279 @@ Feature: Automatic retranslation on workspace publish
             | nodeAggregateId            | "page-home"        |
             | originDimensionSpacePoint  | {"language": "es"} |
             | propertyValues.title.value | "Home translated"  |
+
+        # Final stale state. content-review/es is fully cleared: intro-text was synced, and page-home
+        # plus its content collection were already adopted to es before the publish. The de rows
+        # survive (no rule covers de). content-user keeps intro-text/es — replaceWorkspaceEntries
+        # copied content-review's rows back before the auto-sync hook scrubbed es (the same idiom as
+        # the other publish-on-* scenarios). page-home/es and page-home-main/es are absent from
+        # content-user too: the manual adoption already cleared them there before the publish.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+            | content-review | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-review | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | content-review | {"language":"de"}         | page-home-main  | []                                                                |
+            | content-user   | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user   | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | content-user   | {"language":"de"}         | page-home       | ["title"]                                                         |
+            | content-user   | {"language":"de"}         | page-home-main  | []                                                                |
+
+    Scenario: Partial publish auto-syncs only the published subtree
+        # PublishIndividualNodesFromWorkspace publishes only the selected nodes (plus their tethered
+        # descendants). The auto-sync hook fires on the publish target (live), but the stale set on
+        # live only contains the partially-published nodes — so only their es variants are created
+        # and translated. The unpublished sibling subtree (nody-mc-nodeface + nodenberg) stays in
+        # user-workspace alone.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} | {"tethered": "nodewyn-tetherton"}  |
+            | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Face Text", "autoTranslatableStringProperty": "Face Other"}  | {"tethered": "nodenberg"}          |
+
+        # Initial stale state after setting up both sibling subtrees.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When the command PublishIndividualNodesFromWorkspace is executed with payload:
+            | Key            | Value                      |
+            | workspaceName  | "user-workspace"           |
+            | nodesToPublish | ["sir-david-nodenborough"] |
+
+        # cs-identifier event timeline:
+        #   0   ContentStreamWasCreated (Background)
+        #   1   RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-3 NodeAggregateWithNodeWasCreated (sir-david + tethered nodewyn-tetherton — only the
+        #                                       partially-published subtree replicates; nody-mc-nodeface
+        #                                       and its tethered nodenberg stay in user-workspace)
+        #   4-5 NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→es, partial-publish auto-sync)
+        #   6-7 NodePropertiesWereSet     (sir-david es + nodewyn-tetherton es translated, cascade)
+        Then I expect exactly 8 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 6 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                   |
+            | nodeAggregateId                                     | "sir-david-nodenborough"   |
+            | originDimensionSpacePoint                           | {"language": "es"}         |
+            | propertyValues.inlineEditableStringProperty.value   | "My Text translated"       |
+            | propertyValues.autoTranslatableStringProperty.value | "My Other Text translated" |
+        And event at index 7 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                     |
+            | nodeAggregateId                                     | "nodewyn-tetherton"          |
+            | originDimensionSpacePoint                           | {"language": "es"}           |
+            | propertyValues.autoTranslatableStringProperty.value | "autoTranslateMe translated" |
+
+        # Final stale state. live ends up with the published nodes' de rows only (es cleared by the
+        # auto-sync, de has no rule). user-workspace keeps its full 8-row set — partial publish does
+        # not propagate the source workspace's stale rows back, unlike a full publish.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodenberg              | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    Scenario: Partial publish of a Document.Page and some of its content mirrors both into the target dimension
+        # Partial publish of a Document.Page TOGETHER with nested content under it. Under Document
+        # scope the auto-sync hook must still order ancestor-before-descendant: the document's
+        # variant creation (which materialises the tethered `main`) precedes the content's variant
+        # creation, so the content's parent collection exists in es by the time intro-text's
+        # CreateNodeVariant runs. The content id ("intro-text") sorts BEFORE the document id
+        # ("page-home") to expose any ordering bug.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                             | tetheredDescendantNodeAggregateIds |
+            | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                                 | {"main": "page-home-main"}         |
+            | page-home-2     | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home 2"}                                                                               | {"main": "page-home-main-2"}       |
+            | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"}            |                                    |
+            | sibling-text    | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Sibling Text", "autoTranslatableStringProperty": "Article"}     |                                    |
+            | intro-text-2    | page-home-main-2       | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome 2", "autoTranslatableStringProperty": "Intro 2"}        |                                    |
+            | sibling-text-2  | page-home-main-2       | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Sibling Text 2", "autoTranslatableStringProperty": "Article 2"} |                                    |
+
+        # Initial stale state after setting up both document subtrees.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | intro-text-2     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text-2     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home        | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home        | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-2      | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home-2      | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main   | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main   | []                                                                |
+            | user-workspace | {"language":"de"}         | page-home-main-2 | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main-2 | []                                                                |
+            | user-workspace | {"language":"de"}         | sibling-text     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sibling-text-2   | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text-2   | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When the command PublishIndividualNodesFromWorkspace is executed with payload:
+            | Key            | Value                       |
+            | workspaceName  | "user-workspace"            |
+            | nodesToPublish | ["page-home", "intro-text"] |
+
+        # cs-identifier event timeline (Document-scope auto-sync, partial publish):
+        #   0   ContentStreamWasCreated (Background)
+        #   1   RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-3 NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main, replicated)
+        #   4   NodeAggregateWithNodeWasCreated (intro-text, replicated)
+        #   5   NodePeerVariantWasCreated (page-home en→es — document created first, ancestor-before-descendant)
+        #   6   NodePeerVariantWasCreated (page-home-main en→es, the tethered collection materialises with it)
+        #   7   NodePropertiesWereSet     (page-home es title translated; the collection has no translatable properties)
+        #   8   NodePeerVariantWasCreated (intro-text en→es — the nested content, dispatched after its parent collection exists)
+        #   9   NodePropertiesWereSet     (intro-text es translated)
+        Then I expect exactly 10 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 7 is of type "NodePropertiesWereSet" with payload:
+            | Key                        | Expected           |
+            | nodeAggregateId            | "page-home"        |
+            | originDimensionSpacePoint  | {"language": "es"} |
+            | propertyValues.title.value | "Home translated"  |
+        And event at index 9 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected             |
+            | nodeAggregateId                                     | "intro-text"         |
+            | originDimensionSpacePoint                           | {"language": "es"}   |
+            | propertyValues.inlineEditableStringProperty.value   | "Welcome translated" |
+            | propertyValues.autoTranslatableStringProperty.value | "Intro translated"   |
+
+        # Final stale state. live's es rows are fully cleared (document title, content properties AND
+        # the empty content-collection record cleared by its variant event). live keeps only its de
+        # rows for the published nodes (no rule covers de). user-workspace retains its full 16-row
+        # set — partial publish does not propagate stale rows back to the source, and the entire
+        # page-home-2 subtree (plus the unpublished sibling-text under page-home) is left alone.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                                                     |
+            | live           | {"language":"de"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | page-home        | ["title"]                                                         |
+            | live           | {"language":"de"}         | page-home-main   | []                                                                |
+            | user-workspace | {"language":"de"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | intro-text-2     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text-2     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home        | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home        | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-2      | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home-2      | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main   | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main   | []                                                                |
+            | user-workspace | {"language":"de"}         | page-home-main-2 | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main-2 | []                                                                |
+            | user-workspace | {"language":"de"}         | sibling-text     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text     | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sibling-text-2   | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text-2   | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    Scenario: Publishing a Document via Publish button on Document publishes Document and its content
+        # PublishChangesInDocument is the application-level "Publish" button on a document in the
+        # Neos UI ({@see Neos\Neos\Ui\Application\PublishChangesInDocument\PublishChangesInDocumentCommand}).
+        # It resolves the document's subtree (document + descendants up to but not crossing nested
+        # documents) and partial-publishes those. So publishing `page-home` here must mirror only
+        # page-home + its tethered `main` + the two content nodes inside it to live (and translate
+        # them to es), leaving the entire `page-home-2` subtree untouched in user-workspace.
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                             | tetheredDescendantNodeAggregateIds |
+            | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                                 | {"main": "page-home-main"}         |
+            | page-home-2     | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home 2"}                                                                               | {"main": "page-home-main-2"}       |
+            | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"}            |                                    |
+            | sibling-text    | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Sibling Text", "autoTranslatableStringProperty": "Article"}     |                                    |
+            | intro-text-2    | page-home-main-2       | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome 2", "autoTranslatableStringProperty": "Intro 2"}        |                                    |
+            | sibling-text-2  | page-home-main-2       | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Sibling Text 2", "autoTranslatableStringProperty": "Article 2"} |                                    |
+
+        # Initial stale state — all 8 freshly created node aggregates are stale in BOTH target dims
+        # (de + es). The tethered `main` collections are recorded with an empty property list.
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                                                     |
+            | user-workspace | {"language":"de"}         | intro-text        | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text        | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | intro-text-2      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text-2      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home         | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home         | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-2       | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home-2       | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main    | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main    | []                                                                |
+            | user-workspace | {"language":"de"}         | page-home-main-2  | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main-2  | []                                                                |
+            | user-workspace | {"language":"de"}         | sibling-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sibling-text-2    | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text-2    | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+        When the command PublishChangesInDocument is executed with payload:
+            | Key           | Value            |
+            | workspaceName | "user-workspace" |
+            | documentId    | "page-home"      |
+
+        # cs-identifier event timeline (Document scope auto-sync, document-level partial publish):
+        #   0     ContentStreamWasCreated (Background)
+        #   1     RootNodeAggregateWithNodeWasCreated (Background)
+        #   2-5   NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main + intro-text +
+        #                                         sibling-text — only the page-home subtree replicates;
+        #                                         page-home-2 and its descendants stay in user-workspace)
+        #   6     NodePeerVariantWasCreated (page-home en→es — document created first)
+        #   7     NodePeerVariantWasCreated (page-home-main en→es — the tethered collection materialises with it)
+        #   8     NodePropertiesWereSet     (page-home es title translated)
+        #   9     NodePeerVariantWasCreated (intro-text en→es)
+        #   10    NodePropertiesWereSet     (intro-text es translated)
+        #   11    NodePeerVariantWasCreated (sibling-text en→es)
+        #   12    NodePropertiesWereSet     (sibling-text es translated)
+        Then I expect exactly 13 events to be published on stream "ContentStream:cs-identifier"
+        And event at index 8 is of type "NodePropertiesWereSet" with payload:
+            | Key                        | Expected           |
+            | nodeAggregateId            | "page-home"        |
+            | originDimensionSpacePoint  | {"language": "es"} |
+            | propertyValues.title.value | "Home translated"  |
+        And event at index 10 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected             |
+            | nodeAggregateId                                     | "intro-text"         |
+            | originDimensionSpacePoint                           | {"language": "es"}   |
+            | propertyValues.inlineEditableStringProperty.value   | "Welcome translated" |
+            | propertyValues.autoTranslatableStringProperty.value | "Intro translated"   |
+        And event at index 12 is of type "NodePropertiesWereSet" with payload:
+            | Key                                                 | Expected                  |
+            | nodeAggregateId                                     | "sibling-text"            |
+            | originDimensionSpacePoint                           | {"language": "es"}        |
+            | propertyValues.inlineEditableStringProperty.value   | "Sibling Text translated" |
+            | propertyValues.autoTranslatableStringProperty.value | "Article translated"      |
+
+        # Final stale state. live has the page-home subtree's de rows only (es cleared by auto-sync;
+        # de unsynced). page-home-2 and its descendants never reached live. user-workspace retains
+        # its full 16-row set — like ordinary partial publish, the document-level publish does not
+        # propagate stale rows back to the source workspace.
+        Then I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                                                     |
+            | live           | {"language":"de"}         | intro-text        | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"de"}         | page-home         | ["title"]                                                         |
+            | live           | {"language":"de"}         | page-home-main    | []                                                                |
+            | live           | {"language":"de"}         | sibling-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | intro-text        | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text        | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | intro-text-2      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | intro-text-2      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | page-home         | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home         | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-2       | ["title"]                                                         |
+            | user-workspace | {"language":"es"}         | page-home-2       | ["title"]                                                         |
+            | user-workspace | {"language":"de"}         | page-home-main    | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main    | []                                                                |
+            | user-workspace | {"language":"de"}         | page-home-main-2  | []                                                                |
+            | user-workspace | {"language":"es"}         | page-home-main-2  | []                                                                |
+            | user-workspace | {"language":"de"}         | sibling-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"de"}         | sibling-text-2    | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"es"}         | sibling-text-2    | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |

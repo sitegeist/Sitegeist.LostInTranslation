@@ -9,6 +9,7 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
+use Neos\Neos\Domain\Service\WorkspacePublishingService;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
@@ -97,9 +98,34 @@ trait StaleTranslations
     }
 
     /**
+     * Application-level "Publish" button on a document in the Neos UI — publishes the document
+     * itself together with the content nodes below it, leaving sibling documents alone. Delegates to
+     * {@see WorkspacePublishingService::publishChangesInDocument()} which under the hood emits a
+     * {@see \Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace}
+     * for the resolved document subtree.
+     *
+     * @When the command PublishChangesInDocument is executed with payload:
+     * @throws \Exception
+     */
+    public function theCommandPublishChangesInDocumentIsExecutedWithPayload(TableNode $payloadTable): void
+    {
+        $payload = $this->readPayloadTable($payloadTable);
+        $this->getObject(WorkspacePublishingService::class)->publishChangesInDocument(
+            $this->currentContentRepository->id,
+            WorkspaceName::fromString($payload['workspaceName']),
+            NodeAggregateId::fromString($payload['documentId']),
+        );
+    }
+
+    /**
      * @template T ob object
      * @param class-string<T> $className
      * @return T
      */
     abstract protected function getObject(string $className): object;
+
+    /**
+     * @return array<string,mixed>
+     */
+    abstract protected function readPayloadTable(TableNode $payloadTable): array;
 }
