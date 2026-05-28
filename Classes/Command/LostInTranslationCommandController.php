@@ -22,6 +22,7 @@ use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
+use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\PerNodeSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
@@ -211,6 +212,69 @@ class LostInTranslationCommandController extends CommandController
                 $result->totalSkippedNodes(),
             ],
         );
+    }
+
+    /**
+     * Remove stale-translation rows whose node aggregate no longer exists in the ContentGraph for the
+     * given workspace. The projection only cleans up the directly-removed aggregate on
+     * NodeAggregateWasRemoved; descendants (e.g. a Document's tethered content collection or nested
+     * content nodes) cascade away in the ContentGraph but leave orphan rows behind here. Run this after
+     * bulk deletes to prune them.
+     *
+     * @param string $workspace Workspace whose stale rows will be reconciled.
+     * @param string $contentRepository Content repository id (defaults to "default").
+     * @param bool $dryRun If set, report the orphans without DELETing anything.
+     */
+    public function reconcileCommand(
+        string $workspace = 'live',
+        string $contentRepository = 'default',
+        bool $dryRun = false,
+    ): void {
+        $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepository));
+        $workspaceName = WorkspaceName::fromString($workspace);
+        if ($cr->findWorkspaceByName($workspaceName) === null) {
+            $this->outputLine('Workspace "%s" not found in content repository "%s".', [$workspace, $contentRepository]);
+            $this->quit(1);
+        }
+        $contentGraph = $cr->getContentGraph($workspaceName);
+        $readModel = $cr->projectionState(StaleTranslationReadModel::class);
+
+        // Aggregate orphans across all (workspace, nodeAggregateId) — a single aggregate can have multiple
+        // stale rows (one per target dimension) and a single DELETE drops them all at once.
+        /** @var array<string, NodeAggregateId> $orphans */
+        $orphans = [];
+        foreach ($readModel->staleTranslationFinder->findAll() as $stale) {
+            if (!$stale->workspaceName->equals($workspaceName)) {
+                continue;
+            }
+            if (isset($orphans[$stale->nodeAggregateId->value])) {
+                continue;
+            }
+            if ($contentGraph->findNodeAggregateById($stale->nodeAggregateId) === null) {
+                $orphans[$stale->nodeAggregateId->value] = $stale->nodeAggregateId;
+            }
+        }
+
+        if ($orphans === []) {
+            $this->outputLine('No orphaned stale-translation rows in workspace "%s".', [$workspace]);
+            return;
+        }
+
+        $deletedRows = 0;
+        foreach ($orphans as $nodeAggregateId) {
+            if ($dryRun) {
+                $this->outputLine('  - %s: would prune', [$nodeAggregateId->value]);
+                continue;
+            }
+            $deletedRows += $readModel->staleTranslationMaintenance->removeStaleRowsForNodeAggregate($workspaceName, $nodeAggregateId);
+            $this->outputLine('  - %s: pruned', [$nodeAggregateId->value]);
+        }
+
+        if ($dryRun) {
+            $this->outputLine('Dry run: %d orphaned node aggregate(s) in workspace "%s" would be pruned.', [count($orphans), $workspace]);
+            return;
+        }
+        $this->outputLine('Pruned %d row(s) for %d orphaned node aggregate(s) in workspace "%s".', [$deletedRows, count($orphans), $workspace]);
     }
 
     private function formatPerNodeLine(PerNodeSynchronizationResult $perNode, bool $dryRun): string

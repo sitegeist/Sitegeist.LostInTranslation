@@ -136,10 +136,10 @@ class FullWorkspaceSynchronizer
         }
 
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
-        $staleByNodeId = $this->collectStaleByNodeId($cr, $targetWorkspaceName, $targetOrigin);
+        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
+        $staleByNodeId = $this->collectStaleByNodeId($cr, $contentGraph, $targetWorkspaceName, $targetOrigin);
         $nodeTypeManager = $cr->getNodeTypeManager();
 
-        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
         $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
         $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
 
@@ -274,12 +274,14 @@ class FullWorkspaceSynchronizer
 
     /**
      * Pre-fetch the stale records for the (targetWorkspace, targetDSP) slice, keyed by node aggregate id. Used only for
-     * the `skipExisting` decision.
+     * the `skipExisting` decision. Orphan rows (whose aggregate no longer exists in the ContentGraph) are filtered out
+     * so they cannot contaminate the lookup — see `staletranslations:reconcile` for the cleanup path.
      *
      * @return array<string, StaleTranslation>
      */
     private function collectStaleByNodeId(
         ContentRepository $cr,
+        \Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface $contentGraph,
         WorkspaceName $targetWorkspaceName,
         OriginDimensionSpacePoint $targetOrigin,
     ): array {
@@ -290,6 +292,9 @@ class FullWorkspaceSynchronizer
                 continue;
             }
             if ($stale->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
+                continue;
+            }
+            if ($contentGraph->findNodeAggregateById($stale->nodeAggregateId) === null) {
                 continue;
             }
             $staleByNodeId[$stale->nodeAggregateId->value] = $stale;

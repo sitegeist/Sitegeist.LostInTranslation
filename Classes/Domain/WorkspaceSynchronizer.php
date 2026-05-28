@@ -81,6 +81,7 @@ class WorkspaceSynchronizer
 
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
         $finder = $cr->projectionState(StaleTranslationReadModel::class)->staleTranslationFinder;
+        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
 
         $perNodeResults = [];
         foreach ($finder->findAll() as $entry) {
@@ -88,6 +89,11 @@ class WorkspaceSynchronizer
                 continue;
             }
             if ($entry->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
+                continue;
+            }
+            // Skip orphaned stale rows whose aggregate no longer exists in the ContentGraph (the projection
+            // does not cascade descendant cleanup on node removal — see `staletranslations:reconcile`).
+            if ($contentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
                 continue;
             }
             if ($dryRun) {

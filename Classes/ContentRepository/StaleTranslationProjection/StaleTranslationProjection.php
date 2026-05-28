@@ -77,7 +77,11 @@ class StaleTranslationProjection implements ProjectionInterface
                 tableName: $this->nodeAggregateTypeTableName,
                 workspaceHierarchyTableName: $this->workspaceHierarchyTableName,
                 nodeTypeManager: $nodeTypeManager,
-            )
+            ),
+            staleTranslationMaintenance: new StaleTranslationMaintenance(
+                dbal: $this->dbal,
+                tableName: $this->itemTableName,
+            ),
         );
     }
 
@@ -181,8 +185,10 @@ class StaleTranslationProjection implements ProjectionInterface
             NodePropertiesWereSet::class => $this->whenNodePropertiesWereSet($event),
             // @todo reference properties are still missing generally
             #NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
-            // We deliberately ignore hierarchy due to complexity reasons until depending projections are implemented.
-            #NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
+            // Drops the directly-removed aggregate's stale rows scoped to the affected dimensions.
+            // Descendants are NOT cascaded — the CR does not emit follow-up removal events for
+            // children, so descendant stale rows linger until their own removal event arrives.
+            NodeAggregateWasRemoved::class => $this->whenNodeAggregateWasRemoved($event),
             NodeAggregateTypeWasChanged::class => $this->whenNodeAggregateTypeWasChanged($event),
 
             WorkspaceWasCreated::class => $this->whenWorkspaceWasCreated($event),
@@ -450,6 +456,33 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodeAggregateWasRemoved(NodeAggregateWasRemoved $event): void
     {
+        // Stale rows are written at TARGET dimensions (e.g. "de" when "en" is the source). The event's
+        // affectedCoveredDimensionSpacePoints lists the DSPs the aggregate physically covered, which may
+        // be only the source DSP if no variant was created. Expand each affected DSP to also include its
+        // referenceLanguage targets so we catch the stale row regardless of whether the user removed a
+        // source-only aggregate or an already-translated variant.
+        $affectedHashes = [];
+        foreach ($event->affectedCoveredDimensionSpacePoints as $dimensionSpacePoint) {
+            $affectedHashes[$dimensionSpacePoint->hash] = true;
+            foreach ($this->referenceDimensionSpacePointResolver->findAllTargetDimensionSpacePoints($dimensionSpacePoint) as $targetDimensionSpacePoint) {
+                $affectedHashes[$targetDimensionSpacePoint->hash] = true;
+            }
+        }
+        if ($affectedHashes === []) {
+            return;
+        }
+        $this->dbal->executeStatement(
+            'DELETE FROM ' . $this->itemTableName
+                . ' WHERE workspaceName = :workspaceName
+                    AND nodeAggregateId = :nodeAggregateId
+                    AND originDimensionSpacePointHash IN (:affectedDimensionSpacePointHashes)',
+            [
+                'workspaceName' => $event->workspaceName->value,
+                'nodeAggregateId' => $event->nodeAggregateId->value,
+                'affectedDimensionSpacePointHashes' => array_keys($affectedHashes),
+            ],
+            ['affectedDimensionSpacePointHashes' => Connection::PARAM_STR_ARRAY],
+        );
     }
 
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void

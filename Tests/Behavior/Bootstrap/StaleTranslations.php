@@ -98,6 +98,36 @@ trait StaleTranslations
     }
 
     /**
+     * Mirrors the `flow staletranslations:reconcile` CLI: walk the stale-translation rows for the given workspace and
+     * prune those whose node aggregate no longer exists in the ContentGraph (orphans left behind because the projection
+     * does not cascade descendant cleanup on node removal).
+     *
+     * @When /^I reconcile stale translations in workspace "([^"]*)"$/
+     * @throws Exception
+     */
+    public function iReconcileStaleTranslationsInWorkspace(string $workspaceName): void
+    {
+        $workspaceNameVo = WorkspaceName::fromString($workspaceName);
+        $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
+        $contentGraph = $cr->getContentGraph($workspaceNameVo);
+        $readModel = $cr->projectionState(StaleTranslationReadModel::class);
+
+        $seen = [];
+        foreach ($readModel->staleTranslationFinder->findAll() as $stale) {
+            if (!$stale->workspaceName->equals($workspaceNameVo)) {
+                continue;
+            }
+            if (isset($seen[$stale->nodeAggregateId->value])) {
+                continue;
+            }
+            $seen[$stale->nodeAggregateId->value] = true;
+            if ($contentGraph->findNodeAggregateById($stale->nodeAggregateId) === null) {
+                $readModel->staleTranslationMaintenance->removeStaleRowsForNodeAggregate($workspaceNameVo, $stale->nodeAggregateId);
+            }
+        }
+    }
+
+    /**
      * Application-level "Publish" button on a document in the Neos UI — publishes the document itself together with the
      * content nodes below it, leaving sibling documents alone. Delegates to
      * {@see WorkspacePublishingService::publishChangesInDocument()} which under the hood emits a
