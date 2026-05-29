@@ -1373,3 +1373,84 @@ Feature: Automatic retranslation on workspace publish
       | de-review     | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+  Scenario: Full sync prunes a no-op stale row whose source properties were all unset
+    # FullWorkspaceSynchronizer counterpart of the Retranslator no-op pruning: a stale node whose every translatable
+    # source property is unset yields no SetNodeProperties (StalePropertyCommandBuilder returns null), so no
+    # NodePropertiesWereSet ever clears its row. The full walk must prune the now-unsatisfiable row directly instead
+    # of leaving it to re-no-op on every run.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                          |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+    And I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # First full sync en→de creates + translates the de variant, clearing the de stale row.
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Unset every translatable source property on en — the de stale row reappears, but nothing is left to translate.
+    When I am in workspace "live"
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                                          |
+      | nodeAggregateId           | "sir-david-nodenborough"                                                       |
+      | originDimensionSpacePoint | {"language": "en"}                                                             |
+      | propertyValues            | {"inlineEditableStringProperty": null, "autoTranslatableStringProperty": null} |
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Full sync again en→de — the de variant exists and is stale, but every source property is unset, so the builder
+    # produces no command. The de stale row must be pruned rather than lingering.
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+  Scenario: Auto-sync on publish prunes a no-op stale row whose source properties were all unset
+    # SynchronizationCommandHook counterpart of the same no-op pruning: when the publish-driven auto-sync finds a
+    # stale row whose target variant exists but whose source has nothing translatable left to set, no command is
+    # emitted and no NodePropertiesWereSet clears the row. The hook must prune it directly so it does not re-no-op on
+    # every subsequent publish.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                          |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+
+    # First publish: the live (en → es) rule creates + translates the es variant; live/es clears, the rest survive.
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value                |
+      | workspaceName      | "user-workspace"     |
+      | newContentStreamId | "sync-source-cs-id2" |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Unset every translatable source property on en, then re-publish. replaceWorkspaceEntries copies the (still
+    # listed) es row back onto live; the auto-sync hook then finds the existing es variant but nothing translatable
+    # to set, so it must prune the live/es row rather than leave it dangling.
+    When I am in workspace "user-workspace"
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                                          |
+      | nodeAggregateId           | "sir-david-nodenborough"                                                       |
+      | originDimensionSpacePoint | {"language": "en"}                                                             |
+      | propertyValues            | {"inlineEditableStringProperty": null, "autoTranslatableStringProperty": null} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value                |
+      | workspaceName      | "user-workspace"     |
+      | newContentStreamId | "sync-source-cs-id3" |
+
+    # live/es pruned by the hook; live/de survives (no rule covers de); user-workspace rows copied back as usual.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |

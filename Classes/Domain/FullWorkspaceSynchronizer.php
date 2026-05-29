@@ -157,6 +157,7 @@ class FullWorkspaceSynchronizer
         // Stale records live alongside the source content (the projection records them in the workspace where the
         // source was edited), so the skip-existing lookup keys off the source workspace.
         $staleByNodeId = $this->collectStaleByNodeId($cr, $sourceContentGraph, $sourceWorkspaceName, $targetOrigin);
+        $staleTranslationMaintenance = $cr->projectionState(StaleTranslationReadModel::class)->staleTranslationMaintenance;
         $nodeTypeManager = $cr->getNodeTypeManager();
 
         $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
@@ -177,6 +178,19 @@ class FullWorkspaceSynchronizer
                 $useCache,
             );
             if ($command === null) {
+                // No command for this node. When it carries a stale row and its target variant already exists, there
+                // was nothing translatable to set (every source property unset, or held a value no connector handles):
+                // no SetNodeProperties — hence no NodePropertiesWereSet — would clear the row, so it would linger and
+                // re-no-op on every full sync. Prune it directly, mirroring the stale-driven Retranslator path. (A
+                // dry-run only reports, so it must not write.)
+                $stale = $staleByNodeId[$node->aggregateId->value] ?? null;
+                if (!$dryRun && $stale !== null && $targetSubgraph->findNodeById($node->aggregateId) !== null) {
+                    $staleTranslationMaintenance->removeStaleRow(
+                        $stale->workspaceName,
+                        $stale->nodeAggregateId,
+                        $stale->originDimensionSpacePoint,
+                    );
+                }
                 continue;
             }
             $isVariant = $command instanceof CreateNodeVariant;

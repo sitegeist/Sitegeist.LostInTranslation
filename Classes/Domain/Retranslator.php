@@ -20,6 +20,7 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
+use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 
@@ -148,7 +149,8 @@ class Retranslator
         // The finder takes the *source* subtree (for the node id list) but filters by the *target*
         // origin dsp hash — that's where stale records live.
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
-        $staleTranslations = $cr->projectionState(StaleTranslationReadModel::class)
+        $staleTranslationReadModel = $cr->projectionState(StaleTranslationReadModel::class);
+        $staleTranslations = $staleTranslationReadModel
             ->staleTranslationFinder
             ->findBySubtree($sourceSubtree, $targetOrigin);
         $staleByNodeAggregateId = [];
@@ -167,6 +169,8 @@ class Retranslator
         $nodeTypeManager = $cr->getNodeTypeManager();
         $stalePropertyCommands = [];
         $variantCommands = [];
+        /** @var list<StaleTranslation> $satisfiedStaleRecords */
+        $satisfiedStaleRecords = [];
         $stack = [$sourceSubtree];
         while ($stack !== []) {
             $currentSubtree = array_pop($stack);
@@ -189,6 +193,12 @@ class Retranslator
                 );
                 if ($command !== null) {
                     $stalePropertyCommands[] = $command;
+                } else {
+                    // The target variant exists but there is nothing translatable to set (the source property was
+                    // unset, or holds a value no connector handles). No SetNodeProperties is dispatched, so the
+                    // projection never sees a NodePropertiesWereSet to clear this row — it would otherwise linger
+                    // forever and re-no-op on every run. The node is as in-sync as it can be, so prune the row.
+                    $satisfiedStaleRecords[] = $stale;
                 }
             }
 
@@ -212,6 +222,16 @@ class Retranslator
         }
         foreach ($variantCommands as $command) {
             $cr->handle($command);
+        }
+        // Prune stale rows that no command could satisfy — see the no-op branch above. Done after dispatch (these
+        // records never overlap the dispatched commands' nodes) via the maintenance API, the sanctioned escape hatch
+        // for cleanup the projection's event-driven apply() path cannot perform on its own.
+        foreach ($satisfiedStaleRecords as $stale) {
+            $staleTranslationReadModel->staleTranslationMaintenance->removeStaleRow(
+                $stale->workspaceName,
+                $stale->nodeAggregateId,
+                $stale->originDimensionSpacePoint,
+            );
         }
 
         return new RetranslationResult(

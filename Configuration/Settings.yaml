@@ -129,6 +129,24 @@ Sitegeist:
       # in practice means nodes whose translatable properties were set or that were freshly created upstream and have
       # just been replicated to the publish target.
       #
+      # Cross-workspace synchronization (`sourceWorkspaceName` != `targetWorkspaceName`, e.g. translating published
+      # `live` content into a separate `de-review` workspace):
+      #
+      #   - Publish-driven (these rules): the hook reads the SOURCE dimension from the TARGET workspace and acts on the
+      #     target workspace's own stale records. It does NOT rebase, and silently skips records whose source node is
+      #     not (yet) present in the target. So the target workspace must already hold the current source content — keep
+      #     it based on / rebased onto the source workspace, otherwise nodes are skipped or translated from a stale
+      #     source copy.
+      #
+      #   - Manual CLI `./flow lostintranslation:synchronize --source-workspace live --target-workspace de-review …`
+      #     (and `--full`): reads the source content from `--source-workspace`, but dispatches the translated commands
+      #     into `--target-workspace`. When the two differ it first FORCE-REBASES the target onto its base (which must be
+      #     the source workspace) so the target's source dimension is current and holds every source node — conflicting
+      #     target-side changes are dropped, non-conflicting target-dimension review edits are kept by the rebase replay.
+      #     The source workspace itself is never modified; its stale rows are not cleared (its own target variant is
+      #     still untranslated), so re-running stays idempotent. `--source-dimension` must equal the configured
+      #     `referenceLanguage` of `--target-dimension`.
+      #
       # Empty list (default) = feature off.
       #
       synchronization: []

@@ -76,7 +76,7 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  */
 final class SynchronizationCommandHook implements CommandHookInterface
 {
-    private ?StaleTranslationFinder $resolvedStaleTranslationFinder = null;
+    private ?StaleTranslationReadModel $resolvedStaleTranslationReadModel = null;
 
     /**
      * Commands we have queued from a publish-driven cascade. Tracked by object identity so we re-set the AI
@@ -102,15 +102,19 @@ final class SynchronizationCommandHook implements CommandHookInterface
         $this->pendingCascadeCommands = new \SplObjectStorage();
     }
 
+    private function staleTranslationReadModel(): StaleTranslationReadModel
+    {
+        if ($this->resolvedStaleTranslationReadModel === null) {
+            $this->resolvedStaleTranslationReadModel = $this->contentRepositoryRegistry
+                ->get($this->contentRepositoryId)
+                ->projectionState(StaleTranslationReadModel::class);
+        }
+        return $this->resolvedStaleTranslationReadModel;
+    }
+
     private function staleTranslationFinder(): StaleTranslationFinder
     {
-        if ($this->resolvedStaleTranslationFinder === null) {
-            $this->resolvedStaleTranslationFinder = $this->contentRepositoryRegistry
-                ->get($this->contentRepositoryId)
-                ->projectionState(StaleTranslationReadModel::class)
-                ->staleTranslationFinder;
-        }
-        return $this->resolvedStaleTranslationFinder;
+        return $this->staleTranslationReadModel()->staleTranslationFinder;
     }
 
     public function onBeforeHandle(CommandInterface $command): CommandInterface
@@ -271,6 +275,16 @@ final class SynchronizationCommandHook implements CommandHookInterface
                         'depth' => $this->treeDepthOf($sourceSubgraph, $stale->nodeAggregateId),
                         'command' => $command,
                     ];
+                } else {
+                    // Target variant exists but there is nothing translatable to set (the source property was unset,
+                    // or holds a value no connector handles): no SetNodeProperties — hence no NodePropertiesWereSet —
+                    // will ever fire to clear this row. The projection has already caught up for the publish, so prune
+                    // the now-satisfied row directly instead of letting it linger and re-no-op on every publish.
+                    $this->staleTranslationReadModel()->staleTranslationMaintenance->removeStaleRow(
+                        $stale->workspaceName,
+                        $stale->nodeAggregateId,
+                        $stale->originDimensionSpacePoint,
+                    );
                 }
                 continue;
             }

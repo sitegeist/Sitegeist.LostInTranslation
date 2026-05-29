@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection;
 
 use Doctrine\DBAL\Connection;
+use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
@@ -35,6 +36,32 @@ final readonly class StaleTranslationMaintenance
             [
                 'workspaceName' => $workspaceName->value,
                 'nodeAggregateId' => $nodeAggregateId->value,
+            ],
+        );
+    }
+
+    /**
+     * Remove the single stale row addressed by the full primary key (workspace, node aggregate, target origin).
+     *
+     * Used when a retranslation determines there is nothing translatable to set for a flagged node (e.g. the source
+     * property was unset, or holds a value no connector can translate). No `SetNodeProperties` — and therefore no
+     * `NodePropertiesWereSet` — is emitted in that case, so the projection's event-driven cleanup never fires; the
+     * driver prunes the now-satisfied row directly instead of letting it linger and re-no-op on every run.
+     */
+    public function removeStaleRow(
+        WorkspaceName $workspaceName,
+        NodeAggregateId $nodeAggregateId,
+        OriginDimensionSpacePoint $originDimensionSpacePoint,
+    ): int {
+        return (int)$this->dbal->executeStatement(
+            'DELETE FROM ' . $this->tableName
+                . ' WHERE workspaceName = :workspaceName
+                    AND nodeAggregateId = :nodeAggregateId
+                    AND originDimensionSpacePointHash = :originDimensionSpacePointHash',
+            [
+                'workspaceName' => $workspaceName->value,
+                'nodeAggregateId' => $nodeAggregateId->value,
+                'originDimensionSpacePointHash' => $originDimensionSpacePoint->hash,
             ],
         );
     }

@@ -775,3 +775,38 @@ Feature: Track the staleness state of translations and run retranslation on stal
     # Stale row cleared.
     Then I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+  Scenario: Retranslating a no-op stale node (nothing translatable to set) still clears its stale row
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                   |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Create the de variant so the target exists — the cascade translates and clears the stale row.
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value                    |
+      | nodeAggregateId | "sir-david-nodenborough" |
+      | sourceOrigin    | {"language":"en"}        |
+      | targetOrigin    | {"language":"de"}        |
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+    # Unset a translatable source property on en — the projection records a fresh stale row at de for it.
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                    |
+      | nodeAggregateId           | "sir-david-nodenborough"                 |
+      | originDimensionSpacePoint | {"language": "en"}                       |
+      | propertyValues            | {"autoTranslatableStringProperty": null} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    # Retranslate de — the source property is unset, so there is nothing to translate and no
+    # SetNodeProperties (hence no NodePropertiesWereSet) is emitted. The stale row must still be cleared
+    # rather than lingering forever and reporting the node as perpetually out of sync.
+    When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"}
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
