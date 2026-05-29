@@ -15,7 +15,6 @@ use Neos\ContentRepository\Core\EventStore\EventInterface;
 use Neos\ContentRepository\Core\Feature\DimensionSpaceAdjustment\Event\DimensionSpacePointWasMoved;
 use Neos\ContentRepository\Core\Feature\NodeCreation\Event\NodeAggregateWithNodeWasCreated;
 use Neos\ContentRepository\Core\Feature\NodeModification\Event\NodePropertiesWereSet;
-use Neos\ContentRepository\Core\Feature\NodeReferencing\Event\NodeReferencesWereSet;
 use Neos\ContentRepository\Core\Feature\NodeRemoval\Event\NodeAggregateWasRemoved;
 use Neos\ContentRepository\Core\Feature\NodeTypeChange\Event\NodeAggregateTypeWasChanged;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Event\NodeGeneralizationVariantWasCreated;
@@ -183,8 +182,7 @@ class StaleTranslationProjection implements ProjectionInterface
             NodeGeneralizationVariantWasCreated::class => $this->whenNodeGeneralizationVariantWasCreated($event),
             NodePeerVariantWasCreated::class => $this->whenNodePeerVariantWasCreated($event),
             NodePropertiesWereSet::class => $this->whenNodePropertiesWereSet($event),
-            // @todo reference properties are still missing generally
-            #NodeReferencesWereSet::class => $this->whenNodeReferencesWereSet($event),
+            // @todo reference properties are still missing generally — NodeReferencesWereSet not yet handled
             // Drops the directly-removed aggregate's stale rows scoped to the affected dimensions.
             // Descendants are NOT cascaded — the CR does not emit follow-up removal events for
             // children, so descendant stale rows linger until their own removal event arrives.
@@ -282,36 +280,28 @@ class StaleTranslationProjection implements ProjectionInterface
      * property list). Such records exist only to mirror structure (e.g. a tethered ContentCollection); once the variant
      * exists there is nothing left to do for them. Records that still list translatable properties are left untouched —
      * they are cleared by the subsequent translated {@see NodePropertiesWereSet}.
+     *
+     * Implemented as a single DELETE keyed by the full primary key plus an exact match on the serialized empty list.
+     * Project-wide we always write `propertyNames` via `json_encode($staleTranslations)`, and the empty array
+     * canonicalizes to exactly `'[]'`, so a string compare suffices and stays portable across MariaDB/MySQL and any
+     * other Doctrine platform the projection might run on.
      */
     private function clearStructuralStaleRecord(
         WorkspaceName $workspaceName,
         NodeAggregateId $nodeAggregateId,
         string $targetOriginDimensionSpacePointHash,
     ): void {
-        $record = $this->dbal->fetchAssociative(
-            'SELECT propertyNames FROM ' . $this->itemTableName
+        $this->dbal->executeStatement(
+            'DELETE FROM ' . $this->itemTableName
                 . ' WHERE workspaceName = :workspaceName
                     AND nodeAggregateId = :nodeAggregateId
-                    AND originDimensionSpacePointHash = :originDimensionSpacePointHash',
+                    AND originDimensionSpacePointHash = :originDimensionSpacePointHash
+                    AND propertyNames = :emptyPropertyNames',
             [
                 'workspaceName' => $workspaceName->value,
                 'nodeAggregateId' => $nodeAggregateId->value,
                 'originDimensionSpacePointHash' => $targetOriginDimensionSpacePointHash,
-            ],
-        );
-        if (!$record) {
-            return;
-        }
-        $propertyNames = \json_decode($record['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
-        if ($propertyNames !== []) {
-            return;
-        }
-        $this->dbal->delete(
-            $this->itemTableName,
-            [
-                'workspaceName' => $workspaceName->value,
-                'nodeAggregateId' => $nodeAggregateId->value,
-                'originDimensionSpacePointHash' => $targetOriginDimensionSpacePointHash,
+                'emptyPropertyNames' => '[]',
             ],
         );
     }
@@ -449,18 +439,17 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
-    private function whenNodeReferencesWereSet(NodeReferencesWereSet $event): void
-    {
-        // todo: track reference properties
-    }
-
     private function whenNodeAggregateWasRemoved(NodeAggregateWasRemoved $event): void
     {
-        // Stale rows are written at TARGET dimensions (e.g. "de" when "en" is the source). The event's
-        // affectedCoveredDimensionSpacePoints lists the DSPs the aggregate physically covered, which may
-        // be only the source DSP if no variant was created. Expand each affected DSP to also include its
-        // referenceLanguage targets so we catch the stale row regardless of whether the user removed a
-        // source-only aggregate or an already-translated variant.
+        // Stale rows live at TARGET dimensions (e.g. "de" when "en" is the source). The event's
+        // affectedCoveredDimensionSpacePoints lists the DSPs the aggregate physically covered — which differs depending
+        // on what the user removed:
+        //   - target variant only (e.g. an editor deletes the "de" variant): the target DSP is in the affected set,
+        //     matches the stale row directly.
+        //   - source-only aggregate (no variant ever created): only the source DSP is affected, and the stale row sits
+        //     at the unaffected target DSP — we must fan out via referenceLanguage to reach it.
+        //   - both: both DSPs are in the affected set; fan-out is a no-op but harmless.
+        // Unioning each affected DSP with its referenceLanguage targets covers all three cases in one DELETE.
         $affectedHashes = [];
         foreach ($event->affectedCoveredDimensionSpacePoints as $dimensionSpacePoint) {
             $affectedHashes[$dimensionSpacePoint->hash] = true;
@@ -487,7 +476,7 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void
     {
-        /** @var array<int,array{workspaceName: string, nodeAggregateId: string, propertyNames: string}> $affectedRecords */
+        /** @var array<int,array{workspaceName: string, nodeAggregateId: string, originDimensionSpacePointHash: string, propertyNames: string}> $affectedRecords */
         $affectedRecords = $this->dbal->executeQuery(
             'SELECT * FROM ' . $this->itemTableName . ' WHERE nodeAggregateId = :nodeAggregateId AND workspaceName = :workspaceName',
             [

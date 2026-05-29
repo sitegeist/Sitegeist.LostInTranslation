@@ -47,6 +47,9 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
  *
  * Sole entry point {@see self::synchronizeWorkspaceFull} (CLI `synchronize --full`) dispatches inline, delegating
  * per-node decisions to {@see self::decideCommandForNode} and traversal to {@see self::traverseSourceSubtrees}.
+ *
+ * TODO(cross-workspace): drop the `sourceWorkspace == targetWorkspace` constraint to support workflows like a full
+ * re-translation from published `live` into `de-review` without an intermediate publish.
  */
 class FullWorkspaceSynchronizer
 {
@@ -78,6 +81,7 @@ class FullWorkspaceSynchronizer
         bool $useCache = true,
         bool $dryRun = false,
     ): WorkspaceSynchronizationResult {
+        // TODO(cross-workspace): see class docblock.
         if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
             return WorkspaceSynchronizationResult::skipped(sprintf(
                 'cross-workspace full synchronization is not yet supported (source "%s" != target "%s")',
@@ -275,7 +279,7 @@ class FullWorkspaceSynchronizer
     /**
      * Pre-fetch the stale records for the (targetWorkspace, targetDSP) slice, keyed by node aggregate id. Used only for
      * the `skipExisting` decision. Orphan rows (whose aggregate no longer exists in the ContentGraph) are filtered out
-     * so they cannot contaminate the lookup — see `staletranslations:reconcile` for the cleanup path.
+     * so they cannot contaminate the lookup — see `lostintranslation:reconcile` for the cleanup path.
      *
      * @return array<string, StaleTranslation>
      */

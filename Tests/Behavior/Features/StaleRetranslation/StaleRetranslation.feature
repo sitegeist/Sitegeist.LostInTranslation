@@ -2,7 +2,7 @@
 Feature: Track the staleness state of translations and run retranslation on stale translations
     # Note: Hierarchy is NOT cascaded by the projection on node removal — the CR emits only one
     # NodeAggregateWasRemoved event for the directly removed aggregate. Descendant rows are pruned via
-    # `flow staletranslations:reconcile` (compares the projection with the graph projection), and the
+    # `flow lostintranslation:reconcile` (compares the projection with the graph projection), and the
     # workspace synchronizers skip orphans at read time so they cannot cause spurious retranslate calls.
 
   Background:

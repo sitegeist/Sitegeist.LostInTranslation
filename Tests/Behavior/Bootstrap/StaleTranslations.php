@@ -66,12 +66,18 @@ trait StaleTranslations
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
     ): void {
-        $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
+        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
             contentRepositoryId: $this->currentContentRepository->id,
             sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
             sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
             targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+        );
+        // Fail loudly if the synchronizer short-circuited via `skipped(...)` (e.g. mis-configured source/target).
+        // Without this a scenario that meant to exercise sync but mis-typed a dimension would silently pass.
+        Assert::assertNull(
+            $result->skippedReason,
+            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
         );
     }
 
@@ -87,7 +93,7 @@ trait StaleTranslations
         string $includingExisting = '',
     ): void {
         $skipExisting = $includingExisting === '';
-        $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
+        $result = $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
             contentRepositoryId: $this->currentContentRepository->id,
             sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
             sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
@@ -95,10 +101,14 @@ trait StaleTranslations
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
             skipExisting: $skipExisting,
         );
+        Assert::assertNull(
+            $result->skippedReason,
+            sprintf('FullWorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+        );
     }
 
     /**
-     * Mirrors the `flow staletranslations:reconcile` CLI: walk the stale-translation rows for the given workspace and
+     * Mirrors the `flow lostintranslation:reconcile` CLI: walk the stale-translation rows for the given workspace and
      * prune those whose node aggregate no longer exists in the ContentGraph (orphans left behind because the projection
      * does not cascade descendant cleanup on node removal).
      *

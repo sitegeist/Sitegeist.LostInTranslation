@@ -26,7 +26,6 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
-use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
@@ -61,6 +60,16 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  * flagged via {@see AISystemTranslationRuntimeState} so the returned commands' events are attributed to the AI service
  * rather than the publishing editor.
  *
+ * **AI authorship across the cascade.** {@see TranslationCommandHook::onAfterHandle} unconditionally resets the AI
+ * runtime state at the start of every entry; for `CreateNodeVariant` it then re-sets the state before cascading its
+ * own translated `SetNodeProperties`, but for a `SetNodeProperties` command it does not. If our cascade contains a
+ * `SetNodeProperties` (target variant exists branch) or two consecutive `CreateNodeVariant`s, the next command in the
+ * queue would otherwise be handled with a null AI state and attributed to the publishing editor.
+ *
+ * We close that gap by tracking the cascade commands we emit and re-setting the AI state in {@see self::onBeforeHandle}
+ * for as long as any of them are still pending. {@see self::onAfterHandle} detaches a command from the set once it is
+ * processed; when the set drains the cascade is over and no further re-set happens.
+ *
  * Walking the whole tree from the root (regardless of stale state) is deliberately NOT done here — that is the
  * separate, manual `synchronize --full` CLI command
  * ({@see \Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer}).
@@ -68,6 +77,14 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 final class SynchronizationCommandHook implements CommandHookInterface
 {
     private ?StaleTranslationFinder $resolvedStaleTranslationFinder = null;
+
+    /**
+     * Commands we have queued from a publish-driven cascade. Tracked by object identity so we re-set the AI
+     * runtime state in `onBeforeHandle` for each of them, regardless of what other hooks do in between.
+     *
+     * @var \SplObjectStorage<CommandInterface,null>
+     */
+    private \SplObjectStorage $pendingCascadeCommands;
 
     public function __construct(
         private readonly bool $enabled,
@@ -82,6 +99,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
         private readonly ContentDimension $languageDimension,
         private readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
     ) {
+        $this->pendingCascadeCommands = new \SplObjectStorage();
     }
 
     private function staleTranslationFinder(): StaleTranslationFinder
@@ -97,14 +115,28 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
     public function onBeforeHandle(CommandInterface $command): CommandInterface
     {
+        // Re-set the AI runtime state for every command while a publish-driven cascade is still in flight (see class
+        // docblock). TranslationCommandHook will reset it again at the start of its own `onAfterHandle`; we make sure
+        // it is set when the auth provider reads it during command handling.
+        if ($this->pendingCascadeCommands->count() > 0) {
+            $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
+        }
         return $command;
     }
 
     public function onAfterHandle(CommandInterface $command, PublishedEvents $events): Commands
     {
+        // A cascade command we previously queued has just been processed — drop it from the pending set so the count
+        // converges to zero once the cascade is fully drained.
+        if ($this->pendingCascadeCommands->contains($command)) {
+            $this->pendingCascadeCommands->detach($command);
+        }
+
         if (!$this->enabled || $this->rules->isEmpty()) {
             return Commands::createEmpty();
         }
+        // Both PublishWorkspace and PublishIndividualNodesFromWorkspace emit a WorkspaceWasPublished event with the
+        // publish target; we treat them identically here.
         if (!($command instanceof PublishWorkspace) && !($command instanceof PublishIndividualNodesFromWorkspace)) {
             return Commands::createEmpty();
         }
@@ -131,14 +163,24 @@ final class SynchronizationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
-        // Mark the cascade as AI-authored. The existing TranslationCommandHook resets the state at the start of every
-        // `onAfterHandle`, so the attribution is scoped to the dispatched commands themselves and does not leak to the
-        // next user-initiated command.
+        // Fresh publish — reset the pending tracker. Any leftovers from a prior cascade that aborted mid-flight (e.g.
+        // an exception) are discarded so they cannot keep the AI state set on this and subsequent user commands.
+        $this->pendingCascadeCommands = new \SplObjectStorage();
+        foreach ($additionalCommands as $cmd) {
+            $this->pendingCascadeCommands->attach($cmd);
+        }
+        // Initial AI attribution for the first command — `onBeforeHandle` would re-set it anyway, but doing it here
+        // makes the contract obvious without depending on hook ordering for the very first command in the cascade.
         $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
 
         return Commands::fromArray($additionalCommands);
     }
 
+    /**
+     * Both PublishWorkspace and PublishIndividualNodesFromWorkspace emit exactly one WorkspaceWasPublished event with
+     * the publish target workspace; we pick that up here. A publish that produced no event (or no
+     * WorkspaceWasPublished) cannot drive sync.
+     */
     private function findPublicationTarget(PublishedEvents $events): ?WorkspaceName
     {
         foreach ($events as $event) {
@@ -185,7 +227,6 @@ final class SynchronizationCommandHook implements CommandHookInterface
         /** @var list<array{depth:int,command:CommandInterface}> $plannedCommands */
         $plannedCommands = [];
         foreach ($this->staleTranslationFinder()->findAll() as $stale) {
-            assert($stale instanceof StaleTranslation);
             if (!$stale->workspaceName->equals($targetWorkspace)) {
                 continue;
             }
@@ -203,6 +244,10 @@ final class SynchronizationCommandHook implements CommandHookInterface
             // Document missing in the target is left alone (no auto-create), while one that already exists is still
             // (re-)translated when stale.
             if ($rule->scope === SynchronizationScope::Content) {
+                // `findClosestNode` walks `self -> ancestors` and returns the first match — so for a Document node it
+                // returns the node itself. A Document absent from the target therefore falls through to the `continue`
+                // (no auto-create), while a Document already present passes the gate and gets re-translated like any
+                // other matching node.
                 $documentNode = $sourceSubgraph->findClosestNode(
                     $sourceNode->aggregateId,
                     FindClosestNodeFilter::create(nodeTypes: 'Neos.Neos:Document'),

@@ -28,6 +28,9 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  *
  * Either mismatch short-circuits with {@see WorkspaceSynchronizationResult::skipped()} so the caller (typically the
  * `synchronize` CLI) can surface a clear error.
+ *
+ * TODO(cross-workspace): drop the `sourceWorkspace == targetWorkspace` constraint to support workflows like
+ * "retranslate from published `live` into `de-review`" without an intermediate publish.
  */
 class WorkspaceSynchronizer
 {
@@ -48,6 +51,7 @@ class WorkspaceSynchronizer
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $dryRun = false,
     ): WorkspaceSynchronizationResult {
+        // TODO(cross-workspace): see class docblock.
         if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
             return WorkspaceSynchronizationResult::skipped(sprintf(
                 'cross-workspace synchronization is not yet supported (source workspace "%s" != target workspace "%s")',
@@ -92,7 +96,7 @@ class WorkspaceSynchronizer
                 continue;
             }
             // Skip orphaned stale rows whose aggregate no longer exists in the ContentGraph (the projection
-            // does not cascade descendant cleanup on node removal — see `staletranslations:reconcile`).
+            // does not cascade descendant cleanup on node removal — see `lostintranslation:reconcile`).
             if ($contentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
                 continue;
             }

@@ -11,7 +11,7 @@ use Neos\Flow\Annotations as Flow;
 
 /**
  * Maintenance API for the StaleTranslation read model. Exposes the write operations needed by external
- * reconciliation flows (e.g. the `staletranslations:reconcile` CLI) so the projection's `apply()` path
+ * reconciliation flows (e.g. the `lostintranslation:reconcile` CLI) so the projection's `apply()` path
  * remains the only place that reacts to events, but operators can still prune orphans the projection
  * cannot detect (descendant rows after a parent removal).
  *

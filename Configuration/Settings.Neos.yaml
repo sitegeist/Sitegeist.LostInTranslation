@@ -19,9 +19,11 @@ Neos:
         commandHooks:
           'Sitegeist.LostInTranslation:TranslationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory
-          # Must come AFTER TranslationCommandHook: the publication hook sets the AI-authorship runtime state before
-          # returning commands, and TranslationCommandHook::onAfterHandle resets that state at the start of every entry.
-          # Reversing the order would wipe the AI attribution before the cascade ran.
+          # Order matters: SynchronizationCommandHook must come AFTER TranslationCommandHook. TranslationCommandHook
+          # unconditionally resets the AI runtime state at the top of every `onAfterHandle`; the sync hook sets the
+          # state again before returning its cascade commands, so if it ran first that initial set would be wiped.
+          # For follow-up commands within the cascade the sync hook re-sets the state in `onBeforeHandle` (see its
+          # docblock for the full ordering rationale).
           'Sitegeist.LostInTranslation:SynchronizationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\SynchronizationCommandHookFactory
         # Activate for content governance mode:

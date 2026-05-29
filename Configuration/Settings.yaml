@@ -123,7 +123,11 @@ Sitegeist:
       #     Document = mirror the whole Document and Content structure: create (and translate) the missing Document
       #                variants as well as Content variants.
       #
-      # NOTE: Only NodePropertiesWereSet and NodeAggregateWithNodeWasCreated source events drive sync.
+      # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
+      # hook then iterates the stale-translation records already recorded for the rule's
+      # `(targetWorkspaceName, targetDimension)` — i.e. anything that needs (re-)translation as of that moment, which
+      # in practice means nodes whose translatable properties were set or that were freshly created upstream and have
+      # just been replicated to the publish target.
       #
       # Empty list (default) = feature off.
       #

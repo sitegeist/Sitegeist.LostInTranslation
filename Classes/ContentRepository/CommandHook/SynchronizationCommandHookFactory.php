@@ -55,8 +55,10 @@ class SynchronizationCommandHookFactory implements CommandHookFactoryInterface
         // The CR is mid-construction during build(); resolve the stale-translation finder lazily (inside
         // `onAfterHandle`) to avoid the "Content repository was attempted to be build in recursion" guard. By the time
         // the hook actually fires, the CR is fully constructed.
-        // Positional args: Flow's proxy generator wraps `__construct` with a no-params shim that uses
-        // `func_get_args()`, so named parameters never reach the user-defined signature.
+        //
+        // Positional args, DO NOT "fix" to named: Flow's proxy generator wraps `__construct` with a no-params shim
+        // that uses `func_get_args()`, so named parameters never reach the user-defined signature — a named-args
+        // refactor compiles fine and then mis-binds every argument at runtime.
         return new SynchronizationCommandHook(
             $this->enabled,
             SynchronizationRules::fromArray($this->synchronization),
