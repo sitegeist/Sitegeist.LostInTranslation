@@ -143,13 +143,18 @@ class LostInTranslationCommandController extends CommandController
      *    translatable node, regardless of stale state. Nodes whose target variant already exists and have no stale
      *    row are kept untouched (manual edits are preserved).
      *
-     * Source workspace+dimension are accepted in both modes but must currently equal the target workspace and the
-     * configured `referenceLanguage` of the target dimension respectively (cross-workspace sync is not yet supported).
+     * Source and target workspace may differ (cross-workspace sync): the source content is read from
+     * --source-workspace while the resulting variant/property commands are dispatched into --target-workspace, e.g.
+     * preparing a `de` translation of published `live` content inside a forked `de-review` workspace. In that case the
+     * target workspace is first force-rebased onto its base (which must be the source workspace) so its source
+     * dimension is current and holds every source node; conflicting target-side changes are dropped, non-conflicting
+     * review edits are kept. --source-dimension must still equal the configured `referenceLanguage` of
+     * --target-dimension.
      *
-     * @param string $sourceWorkspace Source workspace name. Must equal --target-workspace for now.
+     * @param string $sourceWorkspace Source workspace name (content is read from here; may differ from --target-workspace).
      * @param string $sourceDimension Source language dimension value. Must equal the configured `referenceLanguage` of
      *                                --target-dimension.
-     * @param string $targetWorkspace Target workspace whose stale records will be processed.
+     * @param string $targetWorkspace Target workspace the translation commands are dispatched into.
      * @param string $targetDimension Target language dimension value (e.g. "de").
      * @param string $contentRepository Content repository id (defaults to "default").
      * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.

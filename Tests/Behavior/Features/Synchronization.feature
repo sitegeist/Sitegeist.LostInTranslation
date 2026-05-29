@@ -1297,3 +1297,79 @@ Feature: Automatic retranslation on workspace publish
     And event metadata at index 5 is:
       | Key              | Expected                     |
       | initiatingUserId | "initiating-user-identifier" |
+
+  Scenario: Full sync translates the CURRENT live source into a forked review workspace, even when the target lagged (cross-workspace)
+    # Cross-workspace full sync. `live` holds the en source; a `de-review` workspace forked from live is where the de
+    # translation is prepared WITHOUT publishing de back to live. The target's en lagged behind live (forked, then live
+    # changed). The synchronizer force-rebases de-review onto live first, so the CreateNodeVariant cascade — which reads
+    # the target workspace's own en — translates live's CURRENT source, not the stale fork-time copy. `live` itself is
+    # never modified.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                          |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+
+    # Fork de-review while en == "My Text", THEN change live's en. de-review now lags behind live.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    When I am in workspace "live"
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                                                               |
+      | nodeAggregateId           | "sir-david-nodenborough"                                                                            |
+      | originDimensionSpacePoint | {"language": "en"}                                                                                  |
+      | propertyValues            | {"inlineEditableStringProperty": "Updated Text", "autoTranslatableStringProperty": "Updated Other"} |
+
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+
+    # The de variant in de-review is translated from live's CURRENT en ("Updated …"), not the fork-time "My Text".
+    Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "inlineEditableStringProperty" with value "Updated Text translated"
+    And I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "Updated Other translated"
+
+    # `live` is untouched: its en still reads "Updated …" and it has no de variant of its own.
+    And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"en"} to have property "inlineEditableStringProperty" with value "Updated Text"
+    And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
+
+    # Stale state: live keeps its own de/es rows (the sync wrote into de-review, not live). de-review picked up copies
+    # of live's rows during the force-rebase; the synced de row was then cleared by the translation, leaving only its
+    # es row.
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | de-review     | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+  Scenario: Stale-driven sync creates a review-workspace variant for a node the target had never seen (cross-workspace)
+    # Cross-workspace stale-driven sync where the source node did not exist in the target at all: de-review was forked
+    # BEFORE the node was created in live. Without the force-rebase, dispatching CreateNodeVariant into de-review would
+    # abort with "node aggregate does currently not exist". The synchronizer rebases de-review onto live first, which
+    # materialises the node, so the variant can be created and translated.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                          |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+
+    And I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+
+    # The node now exists in de-review (rebased in) and its de variant is created + translated — no crash.
+    Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "inlineEditableStringProperty" with value "My Text translated"
+    And I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Other Text translated"
+
+    # live keeps its own de/es stale rows; de-review keeps the rebase-copied es row (only de was synced).
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | de-review     | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |

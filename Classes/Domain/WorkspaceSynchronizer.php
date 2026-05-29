@@ -7,6 +7,8 @@ namespace Sitegeist\LostInTranslation\Domain;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
+use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
+use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
@@ -21,16 +23,21 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  * that clears child stale records causes later iterations to come back as `RetranslationResult::isNoOp()` rather than
  * re-translating.
  *
- * Source workspace + source dimension are part of the public API in anticipation of future cross-workspace
- * synchronization. For now the only supported shape is:
- *  - sourceWorkspace == targetWorkspace
- *  - sourceDimension equals the configured `referenceLanguage` of targetDimension
+ * Source and target workspace may differ. The projection records stale rows in the workspace where the source content
+ * was edited, so the stale records driving the run are read from `sourceWorkspaceName`; every retranslation command is
+ * dispatched into `targetWorkspaceName`. This supports workflows like "retranslate from published `live` into
+ * `de-review`" without an intermediate publish.
  *
- * Either mismatch short-circuits with {@see WorkspaceSynchronizationResult::skipped()} so the caller (typically the
- * `synchronize` CLI) can surface a clear error.
+ * When source and target differ, the target workspace is first force-rebased onto its base (which must be the source
+ * workspace). This brings the target's source dimension current with the source workspace — so the translation always
+ * reads the latest source content (including via the `CreateNodeVariant` cascade, which reads the target's own source
+ * dimension) — and materialises any source nodes the target had not yet seen. Conflicting target-side changes are
+ * dropped (force); non-conflicting target-dimension review edits survive the rebase replay, which is the intended
+ * source↔target divergence.
  *
- * TODO(cross-workspace): drop the `sourceWorkspace == targetWorkspace` constraint to support workflows like
- * "retranslate from published `live` into `de-review`" without an intermediate publish.
+ * `sourceDimension` must equal the configured `referenceLanguage` of `targetDimension`; a mismatch short-circuits with
+ * {@see WorkspaceSynchronizationResult::skipped()} so the caller (typically the `synchronize` CLI) can surface a clear
+ * error.
  */
 class WorkspaceSynchronizer
 {
@@ -51,15 +58,6 @@ class WorkspaceSynchronizer
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $dryRun = false,
     ): WorkspaceSynchronizationResult {
-        // TODO(cross-workspace): see class docblock.
-        if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
-            return WorkspaceSynchronizationResult::skipped(sprintf(
-                'cross-workspace synchronization is not yet supported (source workspace "%s" != target workspace "%s")',
-                $sourceWorkspaceName->value,
-                $targetWorkspaceName->value,
-            ));
-        }
-
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
         $resolver = new ReferenceDimensionSpacePointResolver(
@@ -83,13 +81,25 @@ class WorkspaceSynchronizer
             ));
         }
 
+        // Cross-workspace only: bring the target current with its base (the source workspace) before reading it, so
+        // the source content the translation reads from the target matches the source workspace and every source node
+        // exists in the target. Conflicting target-side changes are dropped; review edits are preserved by the replay.
+        if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
+            $cr->handle(
+                RebaseWorkspace::create($targetWorkspaceName)
+                    ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
+            );
+        }
+
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
         $finder = $cr->projectionState(StaleTranslationReadModel::class)->staleTranslationFinder;
-        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
+        // Stale rows are flagged against the workspace the source content was edited in, so they drive the run from
+        // the source side; existence is checked there too. In the single-workspace case source == target.
+        $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
 
         $perNodeResults = [];
         foreach ($finder->findAll() as $entry) {
-            if (!$entry->workspaceName->equals($targetWorkspaceName)) {
+            if (!$entry->workspaceName->equals($sourceWorkspaceName)) {
                 continue;
             }
             if ($entry->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
@@ -97,7 +107,7 @@ class WorkspaceSynchronizer
             }
             // Skip orphaned stale rows whose aggregate no longer exists in the ContentGraph (the projection
             // does not cascade descendant cleanup on node removal — see `lostintranslation:reconcile`).
-            if ($contentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
+            if ($sourceContentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
                 continue;
             }
             if ($dryRun) {
@@ -112,6 +122,7 @@ class WorkspaceSynchronizer
                 workspaceName: $targetWorkspaceName,
                 nodeAggregateId: $entry->nodeAggregateId,
                 targetDimensionSpacePoint: $targetDimensionSpacePoint,
+                sourceWorkspaceName: $sourceWorkspaceName,
             );
             $perNodeResults[] = new PerNodeSynchronizationResult($entry->nodeAggregateId, $result);
         }

@@ -10,6 +10,8 @@ use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
+use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
+use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
@@ -48,8 +50,15 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
  * Sole entry point {@see self::synchronizeWorkspaceFull} (CLI `synchronize --full`) dispatches inline, delegating
  * per-node decisions to {@see self::decideCommandForNode} and traversal to {@see self::traverseSourceSubtrees}.
  *
- * TODO(cross-workspace): drop the `sourceWorkspace == targetWorkspace` constraint to support workflows like a full
- * re-translation from published `live` into `de-review` without an intermediate publish.
+ * Source and target workspace may differ: the source subtree is read from `sourceWorkspaceName` while every emitted
+ * command (variant creation, property update) is dispatched into `targetWorkspaceName`. This supports workflows like a
+ * full re-translation from published `live` into a `de-review` workspace without an intermediate publish.
+ *
+ * When source and target differ, the target workspace is first force-rebased onto its base (which must be the source
+ * workspace). That brings the target's source dimension current with the source workspace — so the `CreateNodeVariant`
+ * cascade (which reads the target's own source dimension) translates the latest source content — and materialises any
+ * source nodes the target had not yet seen, so a node present only in the source no longer aborts the run. Conflicting
+ * target-side changes are dropped (force); non-conflicting target-dimension review edits survive the rebase replay.
  */
 class FullWorkspaceSynchronizer
 {
@@ -81,15 +90,6 @@ class FullWorkspaceSynchronizer
         bool $useCache = true,
         bool $dryRun = false,
     ): WorkspaceSynchronizationResult {
-        // TODO(cross-workspace): see class docblock.
-        if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
-            return WorkspaceSynchronizationResult::skipped(sprintf(
-                'cross-workspace full synchronization is not yet supported (source "%s" != target "%s")',
-                $sourceWorkspaceName->value,
-                $targetWorkspaceName->value,
-            ));
-        }
-
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
         $languageDimension = $cr->getContentDimensionSource()->getDimension($languageDimensionId);
@@ -139,19 +139,35 @@ class FullWorkspaceSynchronizer
             ));
         }
 
+        // Cross-workspace only: bring the target current with its base (the source workspace) before reading it, so
+        // the CreateNodeVariant cascade reads the latest source content and every source node exists in the target.
+        // Conflicting target-side changes are dropped; review edits are preserved by the replay.
+        if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
+            $cr->handle(
+                RebaseWorkspace::create($targetWorkspaceName)
+                    ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
+            );
+        }
+
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
-        $contentGraph = $cr->getContentGraph($targetWorkspaceName);
-        $staleByNodeId = $this->collectStaleByNodeId($cr, $contentGraph, $targetWorkspaceName, $targetOrigin);
+        // Source structure + content are read from the source workspace; the target workspace only supplies the
+        // "does the variant already exist" answer. They are the same graph in the common single-workspace case.
+        $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
+        $targetContentGraph = $cr->getContentGraph($targetWorkspaceName);
+        // Stale records live alongside the source content (the projection records them in the workspace where the
+        // source was edited), so the skip-existing lookup keys off the source workspace.
+        $staleByNodeId = $this->collectStaleByNodeId($cr, $sourceContentGraph, $sourceWorkspaceName, $targetOrigin);
         $nodeTypeManager = $cr->getNodeTypeManager();
 
-        $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
-        $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
 
         $perNodeResults = [];
-        foreach ($this->traverseSourceSubtrees($contentGraph, $sourceSubgraph) as $node) {
+        foreach ($this->traverseSourceSubtrees($sourceContentGraph, $sourceSubgraph) as $node) {
             $command = $this->decideCommandForNode(
                 $nodeTypeManager,
                 $node,
+                $targetWorkspaceName,
                 $targetSubgraph,
                 $targetOrigin,
                 $staleByNodeId,
@@ -190,6 +206,7 @@ class FullWorkspaceSynchronizer
     private function decideCommandForNode(
         NodeTypeManager $nodeTypeManager,
         Node $node,
+        WorkspaceName $targetWorkspaceName,
         ContentSubgraphInterface $targetSubgraph,
         OriginDimensionSpacePoint $targetOrigin,
         array $staleByNodeId,
@@ -214,9 +231,10 @@ class FullWorkspaceSynchronizer
             if ($node->classification->isTethered()) {
                 return null;
             }
-            // The cascade also translates the full property set of the new variant.
+            // The cascade also translates the full property set of the new variant. Dispatch into the target
+            // workspace, varying from the source-dimension node that the target workspace shares with the source.
             return CreateNodeVariant::create(
-                $node->workspaceName,
+                $targetWorkspaceName,
                 $node->aggregateId,
                 $node->originDimensionSpacePoint,
                 $targetOrigin,
@@ -243,6 +261,7 @@ class FullWorkspaceSynchronizer
             sourceDeeplLanguage: $sourceDeepl,
             targetDeeplLanguage: $targetDeepl,
             useCache: $useCache,
+            targetWorkspaceName: $targetWorkspaceName,
         );
     }
 

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use Behat\Gherkin\Node\TableNode;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
+use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
@@ -104,6 +106,61 @@ trait StaleTranslations
         Assert::assertNull(
             $result->skippedReason,
             sprintf('FullWorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+        );
+    }
+
+    /**
+     * Read a node's property directly from a (workspace, dimension) subgraph by workspace NAME — robust to content
+     * stream id changes (e.g. after a cross-workspace sync force-rebases the target workspace, which mints a new
+     * content stream). Use this instead of event-stream assertions when the target content stream id is not
+     * deterministic.
+     *
+     * @When /^I expect node "([^"]*)" in workspace "([^"]*)" dimension space point (\{[^}]+\}) to have property "([^"]*)" with value "([^"]*)"$/
+     * @throws Exception
+     */
+    public function iExpectNodeToHaveProperty(
+        string $nodeAggregateId,
+        string $workspaceName,
+        string $dimensionSpacePoint,
+        string $propertyName,
+        string $expectedValue,
+    ): void {
+        $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
+        $subgraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName))->getSubgraph(
+            DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+            VisibilityConstraints::withoutRestrictions(),
+        );
+        $node = $subgraph->findNodeById(NodeAggregateId::fromString($nodeAggregateId));
+        Assert::assertNotNull(
+            $node,
+            sprintf('Node "%s" not found in %s@%s', $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
+        );
+        Assert::assertSame(
+            $expectedValue,
+            $node->getProperty(PropertyName::fromString($propertyName)),
+            sprintf('Property "%s" of node "%s" in %s@%s does not match', $propertyName, $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
+        );
+    }
+
+    /**
+     * Assert a node aggregate is entirely absent from a (workspace, dimension) subgraph by workspace NAME.
+     *
+     * @When /^I expect node "([^"]*)" to be absent in workspace "([^"]*)" dimension space point (\{[^}]+\})$/
+     * @throws Exception
+     */
+    public function iExpectNodeToBeAbsent(
+        string $nodeAggregateId,
+        string $workspaceName,
+        string $dimensionSpacePoint,
+    ): void {
+        $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
+        $subgraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName))->getSubgraph(
+            DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+            VisibilityConstraints::withoutRestrictions(),
+        );
+        Assert::assertNull(
+            $subgraph->findNodeById(NodeAggregateId::fromString($nodeAggregateId)),
+            sprintf('Node "%s" unexpectedly present in %s@%s', $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
         );
     }
 

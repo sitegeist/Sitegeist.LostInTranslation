@@ -60,6 +60,11 @@ class Retranslator
      * preset — callers do not pass it. Calling with the source language itself (no `referenceLanguage`)
      * is a legitimate no-op, returning `RetranslationResult::skipped(...)` rather than throwing.
      *
+     * `$sourceWorkspaceName` defaults to `$workspaceName`. When it differs, the source subtree (and the stale
+     * records flagged against it) are read from `$sourceWorkspaceName`, while every emitted command is dispatched
+     * into `$workspaceName` — the cross-workspace case (e.g. read `live`, write `de-review`). The target workspace
+     * must contain the source-dimension nodes (true when forked from the source workspace).
+     *
      * Best-effort: every misconfiguration returns `skipped`; callers distinguish real work from
      * no-ops via the dispatch counts on the returned {@see RetranslationResult}. Repeated invocations
      * are idempotent.
@@ -69,7 +74,9 @@ class Retranslator
         WorkspaceName $workspaceName,
         NodeAggregateId $nodeAggregateId,
         DimensionSpacePoint $targetDimensionSpacePoint,
+        ?WorkspaceName $sourceWorkspaceName = null,
     ): RetranslationResult {
+        $sourceWorkspaceName ??= $workspaceName;
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
 
@@ -112,9 +119,12 @@ class Retranslator
             ));
         }
 
-        $contentGraph = $cr->getContentGraph($workspaceName);
-        $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
-        $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        // Source subtree is read from the source workspace; target-variant existence from the (possibly different)
+        // target workspace. They are the same graph in the common single-workspace case.
+        $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
+        $targetContentGraph = $cr->getContentGraph($workspaceName);
+        $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
 
         // Scope to the current document: nested documents are out of scope for a retranslation run.
         // The entry node itself is always returned by `findSubtree`, so a document entry still gets its own properties retranslated.
@@ -175,6 +185,7 @@ class Retranslator
                     targetOrigin: $stale->originDimensionSpacePoint,
                     sourceDeeplLanguage: $sourceDeeplLanguage,
                     targetDeeplLanguage: $targetDeeplLanguage,
+                    targetWorkspaceName: $workspaceName,
                 );
                 if ($command !== null) {
                     $stalePropertyCommands[] = $command;
@@ -183,7 +194,7 @@ class Retranslator
 
             if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
                 $variantCommands[] = CreateNodeVariant::create(
-                    $sourceNode->workspaceName,
+                    $workspaceName,
                     $sourceNode->aggregateId,
                     $sourceNode->originDimensionSpacePoint,
                     OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),

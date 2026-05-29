@@ -10,6 +10,7 @@ use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWri
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
@@ -45,6 +46,11 @@ class StalePropertyCommandBuilder
     #[Flow\InjectConfiguration(path: 'nodeTranslation.experimental-applyHtmlEntityDecodeAfterTranslation')]
     protected bool $experimentalApplyHtmlEntityDecodeAfterTranslation = false;
 
+    /**
+     * The emitted command targets `$targetWorkspaceName` when given, else the workspace the source node was read from.
+     * They differ only for cross-workspace synchronization, where source content is read from one workspace and the
+     * translated `SetNodeProperties` is dispatched into another (e.g. read `live`, write `de-review`).
+     */
     public function buildSetNodeProperties(
         NodeTypeManager $nodeTypeManager,
         Node $sourceNode,
@@ -53,7 +59,9 @@ class StalePropertyCommandBuilder
         string $sourceDeeplLanguage,
         string $targetDeeplLanguage,
         bool $useCache = true,
+        ?WorkspaceName $targetWorkspaceName = null,
     ): ?SetNodeProperties {
+        $targetWorkspaceName ??= $sourceNode->workspaceName;
         $nodeType = $nodeTypeManager->getNodeType($sourceNode->nodeTypeName);
         // Defensive: projection guarantees the node type existed when the record was written. If it's since been
         // removed, we can't resolve the connector for non-string props.
@@ -102,7 +110,7 @@ class StalePropertyCommandBuilder
 
         if ($propertiesToTranslate === []) {
             return SetNodeProperties::create(
-                workspaceName: $sourceNode->workspaceName,
+                workspaceName: $targetWorkspaceName,
                 nodeAggregateId: $sourceNode->aggregateId,
                 originDimensionSpacePoint: $targetOrigin,
                 propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
@@ -158,7 +166,7 @@ class StalePropertyCommandBuilder
         }
 
         return SetNodeProperties::create(
-            workspaceName: $sourceNode->workspaceName,
+            workspaceName: $targetWorkspaceName,
             nodeAggregateId: $sourceNode->aggregateId,
             originDimensionSpacePoint: $targetOrigin,
             propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
