@@ -3,6 +3,8 @@ import { NeosContext, type IGlobalRegistry } from '@sitegeist/lostintranslation-
 import { SynchronousRegistry } from '@neos-project/neos-ui-extensibility';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RetranslateView } from './RetranslateView';
+import { watchPublishSucceeded } from './postPublishSync/saga';
+import { SyncDialog } from './postPublishSync/SyncDialog';
 
 const queryClient = new QueryClient();
 
@@ -50,4 +52,24 @@ export function registerRetranslateView(globalRegistry: IGlobalRegistry): void {
         'Sitegeist.LostInTranslation/Inspector/Views/RetranslateDocumentView',
         'document'
     );
+}
+
+/**
+ * Registers the post-publish "sync now" prompt for `ask`-mode synchronization rules: a saga that checks for out-of-sync
+ * translations after a successful publish, and the dialog (mounted via the `Modals` container) it opens.
+ */
+export function registerPostPublishSync(globalRegistry: IGlobalRegistry): void {
+    const sagasRegistry = globalRegistry.get('sagas');
+    if (sagasRegistry) {
+        sagasRegistry.set('Sitegeist.LostInTranslation/watchPublishSucceeded', { saga: watchPublishSucceeded });
+    } else {
+        console.warn('[Sitegeist.LostInTranslation]: Could not find sagas registry; post-publish sync prompt disabled.');
+    }
+
+    const containersRegistry = globalRegistry.get('containers');
+    if (containersRegistry) {
+        containersRegistry.set('Modals/LostInTranslationSyncDialog', SyncDialog);
+    } else {
+        console.warn('[Sitegeist.LostInTranslation]: Could not find containers registry; post-publish sync dialog disabled.');
+    }
 }

@@ -30,6 +30,7 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
+use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
@@ -158,6 +159,12 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
         $additionalCommands = [];
         foreach ($matchingRules as $rule) {
+            // `ask` rules are synchronized out-of-band (Neos UI prompt / backend module "sync now") via
+            // WorkspaceSynchronizer, so the publish itself stays fast and atomic. Their stale rows are left untouched
+            // here and picked up by the deferred run.
+            if ($rule->mode === SynchronizationMode::Ask) {
+                continue;
+            }
             foreach ($this->commandsForRule($rule) as $cmd) {
                 $additionalCommands[] = $cmd;
             }

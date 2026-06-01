@@ -15,3 +15,21 @@
     '@controller': 'Retranslation'
     '@action': 'retranslateNode'
   httpMethods: ['POST']
+
+-
+  name:  'LostInTranslation - Synchronization Pending'
+  uriPattern: 'lostintranslation/synchronization/pending'
+  defaults:
+    '@package': 'Sitegeist.LostInTranslation'
+    '@controller': 'WorkspaceSynchronization'
+    '@action': 'pending'
+  httpMethods: ['GET']
+
+-
+  name:  'LostInTranslation - Synchronization Synchronize'
+  uriPattern: 'lostintranslation/synchronization/synchronize'
+  defaults:
+    '@package': 'Sitegeist.LostInTranslation'
+    '@controller': 'WorkspaceSynchronization'
+    '@action': 'synchronize'
+  httpMethods: ['POST']

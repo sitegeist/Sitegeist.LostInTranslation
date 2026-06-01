@@ -1,0 +1,68 @@
+prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(Neos.Fusion:Component) {
+  renderer = afx`
+    <div class="neos-content neos-container-fluid">
+        <Neos.Fusion:Link.Action href.action="index" class="neos-button">
+            <i class="fas fa-language"></i>&nbsp;Glossaries
+        </Neos.Fusion:Link.Action>
+        &nbsp;
+        <Neos.Fusion:Link.Action href.action="showStatus" class="neos-button">
+            <i class="fas fa-cog"></i>&nbsp;API-Status
+        </Neos.Fusion:Link.Action>
+        &nbsp;
+        <Neos.Fusion:Link.Action href.action="synchronizationStatus" class="neos-button neos-active">
+            <i class="fas fa-sync"></i>&nbsp;Synchronization
+        </Neos.Fusion:Link.Action>
+    </div>
+
+    <legend>Synchronization</legend>
+
+    <div @if={!rules}>
+        <p>No synchronization rules are configured. Add rules under
+          <code>Sitegeist.LostInTranslation.nodeTranslation.synchronization</code>.</p>
+    </div>
+
+    <Neos.Fusion:Fragment @if={rules}>
+      <table class="neos-table">
+        <thead>
+        <tr>
+          <th>Source</th>
+          <th>Target</th>
+          <th>Scope</th>
+          <th>Mode</th>
+          <th>Out of sync</th>
+          <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <Neos.Fusion:Loop items={rules} itemName="rule">
+          <tr>
+            <td>{rule.sourceWorkspaceName} / {rule.sourceDimension}</td>
+            <td>{rule.targetWorkspaceName} / {rule.targetDimension}</td>
+            <td>{rule.scope}</td>
+            <td>{rule.mode}</td>
+            <td>
+              <i class="fas fa-check-circle" style="color:green;" @if={rule.pendingCount < 1}></i>
+              <i class="fas fa-exclamation-triangle" style="color:#ffae00;" @if={rule.pendingCount > 0}></i>
+              &nbsp;{rule.pendingCount > 0 ? rule.pendingCount + ' translation(s) pending' : 'up to date'}
+            </td>
+            <td class="neos-action">
+              <Neos.Fusion.Form:Form form.target.action="synchronizeRule" attributes.class="neos-inline neos-pull-right">
+                <Neos.Fusion.Form:Hidden field.name="ruleIndex" field.value={rule.index}/>
+                <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">
+                  <i class="fas fa-sync"></i> Sync now
+                </Neos.Fusion.Form:Button>
+              </Neos.Fusion.Form:Form>
+            </td>
+          </tr>
+        </Neos.Fusion:Loop>
+        </tbody>
+      </table>
+
+      <Neos.Fusion.Form:Form form.target.action="synchronizeAllRules" attributes.class="neos-inline">
+        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">
+          <i class="fas fa-sync"></i> Sync all rules ({pendingTotal} pending)
+        </Neos.Fusion.Form:Button>
+      </Neos.Fusion.Form:Form>
+    </Neos.Fusion:Fragment>
+  `
+}

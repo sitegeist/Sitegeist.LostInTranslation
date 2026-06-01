@@ -1454,3 +1454,27 @@ Feature: Automatic retranslation on workspace publish
       | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+  Scenario: An `ask`-mode rule defers translation to a manual synchronization instead of running on publish
+    # The (live, en) → (live, de) rule is configured with `mode: ask`, so publishing to `live` must NOT create or
+    # translate the de variant; that is left to a manual synchronization — the same `WorkspaceSynchronizer` path the
+    # post-publish "sync now" prompt and the backend module invoke. (Assertions are deliberately scoped to the de
+    # variant so the scenario does not depend on what any other rule does on publish.)
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                          |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "ask-cs-id"      |
+
+    # `ask` deferred it: publishing did not create the de variant.
+    Then I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
+
+    # A manual synchronization (what the post-publish "sync now" prompt and the backend module trigger) now creates and
+    # translates the deferred de variant — proving the deferred path completes what the `ask` publish skipped.
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "inlineEditableStringProperty" with value "My Text translated"
+    And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Other Text translated"

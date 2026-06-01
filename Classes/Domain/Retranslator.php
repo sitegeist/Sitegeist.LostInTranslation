@@ -18,6 +18,7 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Security\Context as SecurityContext;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
@@ -50,6 +51,9 @@ class Retranslator
 
     #[Flow\Inject]
     protected StalePropertyCommandBuilder $stalePropertyCommandBuilder;
+
+    #[Flow\Inject]
+    protected SecurityContext $securityContext;
 
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
@@ -231,13 +235,19 @@ class Retranslator
             }
         }
 
-        foreach ($stalePropertyCommands as $command) {
-            // Mark commands as "triggered by AI"
-            $this->dispatchAsAi($cr, $command);
-        }
-        foreach ($variantCommands as $command) {
-            $cr->handle($command);
-        }
+        // AI synchronization is a system operation: it must write the translations into the target workspace
+        // regardless of the workspace role of whoever triggered it (an editor publishing, or clicking "sync now",
+        // need not have write access to e.g. `live`). We therefore dispatch with CR authorization checks disabled.
+        // The writes remain bounded to translation commands for the configured/stale nodes.
+        $this->securityContext->withoutAuthorizationChecks(function () use ($cr, $stalePropertyCommands, $variantCommands): void {
+            foreach ($stalePropertyCommands as $command) {
+                // Mark commands as "triggered by AI"
+                $this->dispatchAsAi($cr, $command);
+            }
+            foreach ($variantCommands as $command) {
+                $cr->handle($command);
+            }
+        });
         // Prune stale rows that no command could satisfy — see the no-op branch above. Done after dispatch (these
         // records never overlap the dispatched commands' nodes) via the maintenance API, the sanctioned escape hatch
         // for cleanup the projection's event-driven apply() path cannot perform on its own.

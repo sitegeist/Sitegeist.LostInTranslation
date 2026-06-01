@@ -9,6 +9,10 @@ prototype(Sitegeist.LostInTranslation:Views.ShowStatus) < prototype(Neos.Fusion:
         <Neos.Fusion:Link.Action href.action="showStatus" class="neos-button  neos-active">
             <i class="fas fa-cog"></i>&nbsp;API-Status
         </Neos.Fusion:Link.Action>
+        &nbsp;
+        <Neos.Fusion:Link.Action href.action="synchronizationStatus" class="neos-button">
+            <i class="fas fa-sync"></i>&nbsp;Synchronization
+        </Neos.Fusion:Link.Action>
     </div>
 
     <legend>API-Status</legend>

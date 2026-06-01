@@ -4,12 +4,21 @@ Sitegeist:
     nodeTranslation:
       synchronization:
         # Document scope: mirror documents AND content on publish to `live`. Exercised by the publish-on-live scenarios
-        # (en → es is auto-synced; de has no rule).
+        # (en → es is auto-synced; de has no auto rule).
         - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: live
           targetDimension: es
           scope: Document
+        # `ask` mode: publishing to `live` must NOT auto-translate into `de`; the stale rows survive until a manual
+        # synchronization runs (the "ask mode" scenario). `de` was already left untouched by the auto scenarios, so
+        # adding this rule does not change their expectations — it only adds the manual-sync path under test.
+        - sourceWorkspaceName: live
+          sourceDimension: en
+          targetWorkspaceName: live
+          targetDimension: de
+          scope: Document
+          mode: ask
         # Content scope: only fill in content below documents that already exist in the target dimension; never create
         # documents automatically. Fires on publish to `content-review`.
         - sourceWorkspaceName: content-review

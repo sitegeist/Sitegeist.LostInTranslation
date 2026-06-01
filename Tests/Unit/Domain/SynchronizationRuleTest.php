@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Tests\Unit\Domain;
 
 use Neos\Flow\Tests\UnitTestCase;
+use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 
@@ -34,6 +35,32 @@ class SynchronizationRuleTest extends UnitTestCase
         self::assertSame('live', $rule->targetWorkspaceName);
         self::assertSame('es', $rule->targetDimension);
         self::assertSame(SynchronizationScope::Document, $rule->scope);
+    }
+
+    /** @test */
+    public function fromArrayDefaultsModeToAuto(): void
+    {
+        $rule = SynchronizationRule::fromArray($this->requiredFields());
+
+        self::assertSame(SynchronizationMode::Auto, $rule->mode);
+    }
+
+    /** @test */
+    public function fromArrayParsesAskMode(): void
+    {
+        $rule = SynchronizationRule::fromArray(['mode' => 'ask'] + $this->requiredFields());
+
+        self::assertSame(SynchronizationMode::Ask, $rule->mode);
+    }
+
+    /** @test */
+    public function fromArrayRejectsUnknownMode(): void
+    {
+        $fields = $this->requiredFields();
+        $fields['mode'] = 'maybe';
+
+        $this->expectException(\InvalidArgumentException::class);
+        SynchronizationRule::fromArray($fields);
     }
 
     /** @test */

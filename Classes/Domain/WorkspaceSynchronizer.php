@@ -50,6 +50,26 @@ class WorkspaceSynchronizer
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
 
+    /**
+     * Convenience wrapper that runs {@see self::synchronizeWorkspace()} for a configured {@see SynchronizationRule},
+     * deriving the source/target {@see DimensionSpacePoint}s from the rule's dimension values and the configured
+     * language dimension. Shared by the publish-driven UI prompt and the backend module "sync now".
+     */
+    public function synchronizeRule(
+        ContentRepositoryId $contentRepositoryId,
+        SynchronizationRule $rule,
+        bool $dryRun = false,
+    ): WorkspaceSynchronizationResult {
+        return $this->synchronizeWorkspace(
+            contentRepositoryId: $contentRepositoryId,
+            sourceWorkspaceName: WorkspaceName::fromString($rule->sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $rule->sourceDimension]),
+            targetWorkspaceName: WorkspaceName::fromString($rule->targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $rule->targetDimension]),
+            dryRun: $dryRun,
+        );
+    }
+
     public function synchronizeWorkspace(
         ContentRepositoryId $contentRepositoryId,
         WorkspaceName $sourceWorkspaceName,

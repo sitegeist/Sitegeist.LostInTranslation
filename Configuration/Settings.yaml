@@ -123,6 +123,17 @@ Sitegeist:
       #     Document = mirror the whole Document and Content structure: create (and translate) the missing Document
       #                variants as well as Content variants.
       #
+      # Each rule may set an optional `mode` (default `auto`):
+      #
+      #   mode: auto | ask   (optional, default: auto)
+      #     auto = synchronize inline during the publish (the command hook emits the translation commands as part of
+      #            the publish). No editor action needed, but the publish blocks on DeepL and a partial cascade can be
+      #            interrupted by concurrent publishes.
+      #     ask  = do NOT synchronize on publish. After a successful publish the Neos UI prompts the editor with the
+      #            number of out-of-sync translations and a "sync now" action; the backend module lists the rule too.
+      #            The synchronization then runs in its own request via `WorkspaceSynchronizer`, so the publish stays
+      #            fast and atomic. Regardless of mode, the backend module can always trigger a manual "sync now".
+      #
       # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
       # hook then iterates the stale-translation records already recorded for the rule's
       # `(targetWorkspaceName, targetDimension)` — i.e. anything that needs (re-)translation as of that moment, which
@@ -155,6 +166,7 @@ Sitegeist:
       #    targetWorkspaceName: de-review
       #    targetDimension: de
       #    scope: Document
+      #    mode: auto
 
 Neos:
   Flow:
@@ -168,6 +180,8 @@ Neos:
         providers:
           # Protect the retranslation endpoints with the standard Neos backend
           # authentication. Without this, anyone could POST to retranslateNode.
+          # NOTE: the authoritative request patterns (incl. WorkspaceSynchronizationController) live in
+          # Settings.Authentication.yaml, which wins the merge for this key.
           'Neos.Neos:Backend':
             requestPatterns:
               'Sitegeist.LostInTranslation:Retranslation':

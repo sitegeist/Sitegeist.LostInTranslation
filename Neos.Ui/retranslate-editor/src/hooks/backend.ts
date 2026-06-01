@@ -27,8 +27,25 @@ export type TranslateResponse = {
     skippedReason: string | null;
 };
 
+export type PendingSynchronizationResponse = {
+    pendingCount: number;
+    perRule: {
+        targetWorkspaceName: string;
+        targetDimension: string;
+        count: number;
+    }[];
+};
+
+export type SynchronizeResponse = {
+    stalePropertyCommandsDispatched: number;
+    variantCommandsDispatched: number;
+    skippedNodes: number;
+};
+
 const CONTENT_INFO_ENDPOINT = '/lostintranslation/retranslation/getmetadata';
 const TRANSLATE_ENDPOINT = '/lostintranslation/retranslation/retranslatenode';
+const SYNCHRONIZATION_PENDING_ENDPOINT = '/lostintranslation/synchronization/pending';
+const SYNCHRONIZATION_SYNCHRONIZE_ENDPOINT = '/lostintranslation/synchronization/synchronize';
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
@@ -58,6 +75,31 @@ export const endpoints = () => ({
 
         return parseJsonResponse<TranslateResponse>(
             await fetch(TRANSLATE_ENDPOINT, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Flow-Csrftoken': csrfToken,
+                },
+                body: JSON.stringify(payload)
+            })
+        );
+    },
+    getPending: async (payload: { workspaceName: string }): Promise<PendingSynchronizationResponse> => {
+        const searchParams = new URLSearchParams({ workspaceName: payload.workspaceName });
+
+        return parseJsonResponse<PendingSynchronizationResponse>(
+            await fetch(`${SYNCHRONIZATION_PENDING_ENDPOINT}?${searchParams.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin'
+            })
+        );
+    },
+    synchronize: async (payload: { workspaceName: string }): Promise<SynchronizeResponse> => {
+        const csrfToken = document.getElementById('appContainer')!.dataset.csrfToken as string;
+
+        return parseJsonResponse<SynchronizeResponse>(
+            await fetch(SYNCHRONIZATION_SYNCHRONIZE_ENDPOINT, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {

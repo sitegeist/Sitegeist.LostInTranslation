@@ -17,6 +17,11 @@ use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\Model\GlossaryEntry;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryEntryRepository;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
+use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizationResult;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryService;
@@ -45,11 +50,23 @@ class LostInTranslationModuleController extends AbstractModuleController
     #[Flow\Inject]
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
+    #[Flow\Inject]
+    protected SynchronizationStatusProvider $synchronizationStatusProvider;
+
+    #[Flow\Inject]
+    protected WorkspaceSynchronizer $workspaceSynchronizer;
+
     #[Flow\InjectConfiguration(path: "nodeTranslation.contentRepositoryIdentifier")]
     protected string $contentRepositoryIdentifier;
 
     #[Flow\InjectConfiguration(path: "nodeTranslation.languageDimensionName")]
     protected string $languageDimensionName;
+
+    /**
+     * @var array<int,array<string,string>>
+     */
+    #[Flow\InjectConfiguration(path: "nodeTranslation.synchronization")]
+    protected array $synchronization = [];
 
     /**
      * @var FusionView
@@ -68,6 +85,88 @@ class LostInTranslationModuleController extends AbstractModuleController
     {
         $status = $this->translationService->getStatus();
         $this->view->assign('status', $status);
+    }
+
+    /**
+     * Overview of all configured synchronization rules and how many translations are currently out of sync for each,
+     * with a per-rule and a "sync all" manual trigger. Unlike the publish-driven prompt this is mode-agnostic — it
+     * lists and can synchronize `auto` and `ask` rules alike.
+     */
+    public function synchronizationStatusAction(): void
+    {
+        $contentRepositoryId = ContentRepositoryId::fromString($this->contentRepositoryIdentifier);
+        $rules = SynchronizationRules::fromArray($this->synchronization);
+
+        $rows = [];
+        foreach ($this->synchronizationStatusProvider->forRules($contentRepositoryId, $rules) as $index => $status) {
+            $rows[] = [
+                'index' => $index,
+                'sourceWorkspaceName' => $status->rule->sourceWorkspaceName,
+                'sourceDimension' => $status->rule->sourceDimension,
+                'targetWorkspaceName' => $status->rule->targetWorkspaceName,
+                'targetDimension' => $status->rule->targetDimension,
+                'scope' => $status->rule->scope->value,
+                'mode' => $status->rule->mode->value,
+                'pendingCount' => $status->pendingCount,
+            ];
+        }
+
+        $this->view->assign('rules', $rows);
+        $this->view->assign('pendingTotal', array_sum(array_column($rows, 'pendingCount')));
+    }
+
+    public function synchronizeRuleAction(int $ruleIndex): void
+    {
+        $rules = SynchronizationRules::fromArray($this->synchronization);
+        $rule = $rules->items[$ruleIndex] ?? null;
+        if (!$rule instanceof SynchronizationRule) {
+            $this->addFlashMessage('Synchronization rule not found.', '', Message::SEVERITY_ERROR);
+            $this->forward('synchronizationStatus');
+        }
+
+        $result = $this->workspaceSynchronizer->synchronizeRule(
+            ContentRepositoryId::fromString($this->contentRepositoryIdentifier),
+            $rule,
+        );
+        $this->addSynchronizationResultFlashMessage(
+            sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension),
+            $result,
+        );
+        $this->forward('synchronizationStatus');
+    }
+
+    public function synchronizeAllRulesAction(): void
+    {
+        $contentRepositoryId = ContentRepositoryId::fromString($this->contentRepositoryIdentifier);
+        foreach (SynchronizationRules::fromArray($this->synchronization) as $rule) {
+            $result = $this->workspaceSynchronizer->synchronizeRule($contentRepositoryId, $rule);
+            $this->addSynchronizationResultFlashMessage(
+                sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension),
+                $result,
+            );
+        }
+        $this->forward('synchronizationStatus');
+    }
+
+    private function addSynchronizationResultFlashMessage(string $label, WorkspaceSynchronizationResult $result): void
+    {
+        if ($result->skippedReason !== null) {
+            $this->addFlashMessage(
+                sprintf('%s: skipped (%s)', $label, $result->skippedReason),
+                '',
+                Message::SEVERITY_WARNING,
+            );
+            return;
+        }
+        $this->addFlashMessage(sprintf(
+            '%s: %d propert%s and %d variant%s translated, %d skipped.',
+            $label,
+            $result->totalStalePropertyCommandsDispatched(),
+            $result->totalStalePropertyCommandsDispatched() === 1 ? 'y' : 'ies',
+            $result->totalVariantCommandsDispatched(),
+            $result->totalVariantCommandsDispatched() === 1 ? '' : 's',
+            $result->totalSkippedNodes(),
+        ));
     }
 
     // Renders the fusion view for the form to store a custom deepl key
