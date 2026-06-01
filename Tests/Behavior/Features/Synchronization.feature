@@ -1478,3 +1478,33 @@ Feature: Automatic retranslation on workspace publish
     When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
     Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "inlineEditableStringProperty" with value "My Text translated"
     And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Other Text translated"
+
+  Scenario: Stale-mode sync into a not-yet-existing target creates it as a shared workspace based on live
+    # WorkspaceSynchronizer (stale-driven) targeting a workspace that does not exist yet — e.g. a config rule whose
+    # `targetWorkspaceName` "de-review" has never been created — must create it on the fly as a SHARED review workspace
+    # based on `live`, then translate the stale nodes into it.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
+      | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
+
+    # de-review does not exist yet — synchronizing must bring it into being.
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+
+    # It was created as a shared workspace based on live …
+    Then I expect workspace "de-review" to exist with base workspace "live" and classification "SHARED"
+    # … and the stale node was translated into it.
+    And I expect node "parent-doc" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "Doc Text translated"
+
+  Scenario: Full sync into a not-yet-existing target creates it as a shared workspace based on live
+    # Same auto-creation guarantee for FullWorkspaceSynchronizer (`synchronize --full`): the target workspace is created
+    # as a SHARED review workspace based on `live` before the full subtree walk dispatches its translations into it.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
+      | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
+
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review-full" dimension space point {"language":"de"}
+
+    Then I expect workspace "de-review-full" to exist with base workspace "live" and classification "SHARED"
+    And I expect node "parent-doc" in workspace "de-review-full" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "Doc Text translated"

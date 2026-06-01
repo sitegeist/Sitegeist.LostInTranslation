@@ -47,6 +47,9 @@ class WorkspaceSynchronizer
     #[Flow\Inject]
     protected Retranslator $retranslator;
 
+    #[Flow\Inject]
+    protected ReviewWorkspaceProvisioner $reviewWorkspaceProvisioner;
+
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
 
@@ -101,10 +104,20 @@ class WorkspaceSynchronizer
             ));
         }
 
+        // Auto-create the target on first sync: a config rule (e.g. targetWorkspaceName "de-review") may point at a
+        // workspace that does not exist yet. Create it as a shared review workspace based on live. In dry-run we leave
+        // the CR untouched and just skip the dependent rebase below.
+        $targetWorkspaceExists = $cr->findWorkspaceByName($targetWorkspaceName) !== null;
+        if (!$targetWorkspaceExists && !$dryRun) {
+            $this->reviewWorkspaceProvisioner->createSharedReviewWorkspace($contentRepositoryId, $targetWorkspaceName);
+            $targetWorkspaceExists = true;
+        }
+
         // Cross-workspace only: bring the target current with its base (the source workspace) before reading it, so
         // the source content the translation reads from the target matches the source workspace and every source node
         // exists in the target. Conflicting target-side changes are dropped; review edits are preserved by the replay.
-        if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
+        // A freshly auto-created workspace is already current with its base, so the rebase is a harmless no-op there.
+        if ($targetWorkspaceExists && !$sourceWorkspaceName->equals($targetWorkspaceName)) {
             $cr->handle(
                 RebaseWorkspace::create($targetWorkspaceName)
                     ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)

@@ -77,6 +77,9 @@ class FullWorkspaceSynchronizer
     #[Flow\Inject]
     protected NodeTypeTranslationDirectiveFactory $nodeTypeTranslationDirectiveFactory;
 
+    #[Flow\Inject]
+    protected ReviewWorkspaceProvisioner $reviewWorkspaceProvisioner;
+
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
 
@@ -139,9 +142,27 @@ class FullWorkspaceSynchronizer
             ));
         }
 
+        // Auto-create the target on first sync: a config rule (e.g. targetWorkspaceName "de-review") may point at a
+        // workspace that does not exist yet. Create it as a shared review workspace based on live. In dry-run we leave
+        // the CR untouched and just skip the dependent rebase below.
+        $targetWorkspaceExists = $cr->findWorkspaceByName($targetWorkspaceName) !== null;
+        if (!$targetWorkspaceExists && !$dryRun) {
+            $this->reviewWorkspaceProvisioner->createSharedReviewWorkspace($contentRepositoryId, $targetWorkspaceName);
+            $targetWorkspaceExists = true;
+        }
+        if (!$targetWorkspaceExists) {
+            // dry-run against a not-yet-created target: the full walk below reads the target ContentGraph to decide
+            // which variants exist, which would fault on a missing workspace. Report that it would be created instead.
+            return WorkspaceSynchronizationResult::skipped(sprintf(
+                'target workspace "%s" does not exist yet; it would be created as a shared review workspace based on live',
+                $targetWorkspaceName->value,
+            ));
+        }
+
         // Cross-workspace only: bring the target current with its base (the source workspace) before reading it, so
         // the CreateNodeVariant cascade reads the latest source content and every source node exists in the target.
-        // Conflicting target-side changes are dropped; review edits are preserved by the replay.
+        // Conflicting target-side changes are dropped; review edits are preserved by the replay. A freshly auto-created
+        // workspace is already current with its base, so the rebase is a harmless no-op there.
         if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
             $cr->handle(
                 RebaseWorkspace::create($targetWorkspaceName)

@@ -5,19 +5,71 @@ declare(strict_types=1);
 use Behat\Gherkin\Node\TableNode;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
+use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
+use Neos\Neos\Domain\Repository\WorkspaceMetadataAndRoleRepository;
 use Neos\Neos\Domain\Service\WorkspacePublishingService;
+use Neos\Neos\Domain\Service\WorkspaceService;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 trait StaleTranslations
 {
+    /**
+     * Workspace metadata and role assignments live in the `neos_neos_workspace_metadata` / `neos_neos_workspace_role`
+     * tables, which Neos lists under `ignoredTables` so they are NOT truncated by the `@flowEntities` reset (the same
+     * way `cr_*` tables are preserved). Prune them per scenario so an auto-created shared review workspace from one
+     * scenario (or a previous suite run) cannot collide with the next via a duplicate-metadata insert.
+     *
+     * @BeforeScenario
+     */
+    public function pruneWorkspaceMetadataAndRoles(): void
+    {
+        $repository = $this->getObject(WorkspaceMetadataAndRoleRepository::class);
+        $contentRepositoryId = ContentRepositoryId::fromString('default');
+        $repository->pruneWorkspaceMetadata($contentRepositoryId);
+        $repository->pruneRoleAssignments($contentRepositoryId);
+    }
+
+    /**
+     * Assert that a workspace exists with the given base workspace and Neos classification (PERSONAL/SHARED/ROOT).
+     * Existence and base are read from the ContentRepository; the classification comes from the Neos workspace
+     * metadata written by {@see WorkspaceService::createSharedWorkspace()}.
+     *
+     * @Then /^I expect workspace "([^"]*)" to exist with base workspace "([^"]*)" and classification "([^"]*)"$/
+     * @throws Exception
+     */
+    public function iExpectWorkspaceToExistWithBaseAndClassification(
+        string $workspaceName,
+        string $baseWorkspaceName,
+        string $classification,
+    ): void {
+        $contentRepositoryId = $this->currentContentRepository->id;
+        $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
+        $workspace = $cr->findWorkspaceByName(WorkspaceName::fromString($workspaceName));
+        Assert::assertNotNull($workspace, sprintf('Workspace "%s" does not exist', $workspaceName));
+        Assert::assertSame(
+            $baseWorkspaceName,
+            $workspace->baseWorkspaceName?->value,
+            sprintf('Workspace "%s" has unexpected base workspace', $workspaceName),
+        );
+        $metadata = $this->getObject(WorkspaceService::class)->getWorkspaceMetadata(
+            $contentRepositoryId,
+            WorkspaceName::fromString($workspaceName),
+        );
+        Assert::assertSame(
+            $classification,
+            $metadata->classification->value,
+            sprintf('Workspace "%s" has unexpected classification', $workspaceName),
+        );
+    }
+
     /**
      * @Then /^I expect exactly the following stale translations:$/
      * @param TableNode $payloadTable
