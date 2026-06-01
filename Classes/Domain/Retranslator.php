@@ -200,6 +200,21 @@ class Retranslator
                     // forever and re-no-op on every run. The node is as in-sync as it can be, so prune the row.
                     $satisfiedStaleRecords[] = $stale;
                 }
+            } elseif (
+                $stale !== null
+                && $sourceNode->classification->isTethered()
+                && $stale->propertyNames->isEmpty()
+            ) {
+                // Tethered node with a stale row but no target variant (the `$existsInTarget` arm above did not fire)
+                // and no flagged properties. Its variant can only be materialised by a non-tethered ancestor's
+                // CreateNodeVariant cascade — so when that ancestor already exists in the target, nothing will ever
+                // create this node, and with no properties there is nothing to set anyway. No event will clear the
+                // row; it would linger and re-no-op on every run. Treat as a no-op and prune it, consistent with the
+                // target-exists escape hatch above.
+                $parentNode = $sourceSubgraph->findParentNode($sourceNode->aggregateId);
+                if ($parentNode !== null && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null) {
+                    $satisfiedStaleRecords[] = $stale;
+                }
             }
 
             if (!$existsInTarget && !$sourceNode->classification->isTethered()) {

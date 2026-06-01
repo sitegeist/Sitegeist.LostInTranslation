@@ -291,6 +291,23 @@ final class SynchronizationCommandHook implements CommandHookInterface
             // Tethered children are created together with their non-tethered ancestor's variant — the existing
             // TranslationCommandHook handles the cascade, so we don't emit a CreateNodeVariant for them ourselves.
             if ($sourceNode->classification->isTethered()) {
+                // When the tethered node's target variant is absent yet its ancestor already exists in the target, no
+                // CreateNodeVariant will ever materialise it (the cascade only fires from a non-tethered ancestor's
+                // creation, and that ancestor is already present). With no properties flagged there is nothing to set
+                // either — the row can never be cleared by an event and would re-no-op on every publish. Prune it
+                // directly, consistent with the target-exists escape hatch above.
+                $parentNode = $sourceSubgraph->findParentNode($sourceNode->aggregateId);
+                if (
+                    $stale->propertyNames->isEmpty()
+                    && $parentNode !== null
+                    && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null
+                ) {
+                    $this->staleTranslationReadModel()->staleTranslationMaintenance->removeStaleRow(
+                        $stale->workspaceName,
+                        $stale->nodeAggregateId,
+                        $stale->originDimensionSpacePoint,
+                    );
+                }
                 continue;
             }
             $plannedCommands[] = [

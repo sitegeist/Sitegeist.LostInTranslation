@@ -178,18 +178,30 @@ class FullWorkspaceSynchronizer
                 $useCache,
             );
             if ($command === null) {
-                // No command for this node. When it carries a stale row and its target variant already exists, there
-                // was nothing translatable to set (every source property unset, or held a value no connector handles):
-                // no SetNodeProperties — hence no NodePropertiesWereSet — would clear the row, so it would linger and
-                // re-no-op on every full sync. Prune it directly, mirroring the stale-driven Retranslator path. (A
-                // dry-run only reports, so it must not write.)
+                // No command for this node. Two situations leave a stale row that no future event will ever clear, so
+                // it would linger and re-no-op on every full sync — prune it directly, mirroring the stale-driven
+                // Retranslator path. (A dry-run only reports, so it must not write.)
+                //   (a) target variant exists but there was nothing translatable to set (every source property unset,
+                //       or held a value no connector handles): no SetNodeProperties — hence no NodePropertiesWereSet.
+                //   (b) tethered node whose target variant is absent while its ancestor already exists in the target,
+                //       and the row flags no properties: no CreateNodeVariant will materialise it (tethered nodes only
+                //       come along with a non-tethered ancestor's cascade, and that ancestor is already present), and
+                //       there is nothing to set.
                 $stale = $staleByNodeId[$node->aggregateId->value] ?? null;
-                if (!$dryRun && $stale !== null && $targetSubgraph->findNodeById($node->aggregateId) !== null) {
-                    $staleTranslationMaintenance->removeStaleRow(
-                        $stale->workspaceName,
-                        $stale->nodeAggregateId,
-                        $stale->originDimensionSpacePoint,
-                    );
+                if (!$dryRun && $stale !== null) {
+                    $targetExists = $targetSubgraph->findNodeById($node->aggregateId) !== null;
+                    $parentNode = !$targetExists && $node->classification->isTethered() && $stale->propertyNames->isEmpty()
+                        ? $sourceSubgraph->findParentNode($node->aggregateId)
+                        : null;
+                    $tetheredMissingNoop = $parentNode !== null
+                        && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null;
+                    if ($targetExists || $tetheredMissingNoop) {
+                        $staleTranslationMaintenance->removeStaleRow(
+                            $stale->workspaceName,
+                            $stale->nodeAggregateId,
+                            $stale->originDimensionSpacePoint,
+                        );
+                    }
                 }
                 continue;
             }
