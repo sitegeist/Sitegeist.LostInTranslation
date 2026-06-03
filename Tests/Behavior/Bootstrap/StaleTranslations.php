@@ -17,6 +17,9 @@ use Neos\Neos\Domain\Service\WorkspacePublishingService;
 use Neos\Neos\Domain\Service\WorkspaceService;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
+use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
+use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 trait StaleTranslations
@@ -132,6 +135,106 @@ trait StaleTranslations
         Assert::assertNull(
             $result->skippedReason,
             sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+        );
+    }
+
+    /**
+     * Assert that a (stale-driven) synchronization gracefully short-circuits via `skipped(...)` instead of running —
+     * e.g. because the target workspace does not exist or is not based on the source workspace. The skip reason must
+     * contain the given fragment, mirroring the error the CLI / Neos UI surfaces to the user.
+     *
+     * @Then /^synchronizing translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) is skipped because of "([^"]*)"$/
+     * @throws Exception
+     */
+    public function synchronizingIsSkippedBecauseOf(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        string $expectedReasonFragment,
+    ): void {
+        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+        );
+        Assert::assertNotNull($result->skippedReason, 'Expected synchronization to be skipped, but it ran');
+        Assert::assertStringContainsString($expectedReasonFragment, $result->skippedReason);
+    }
+
+    /**
+     * Same as {@see self::synchronizingIsSkippedBecauseOf()} for the full synchronizer (`synchronize --full`).
+     *
+     * @Then /^full-synchronizing translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) is skipped because of "([^"]*)"$/
+     * @throws Exception
+     */
+    public function fullSynchronizingIsSkippedBecauseOf(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        string $expectedReasonFragment,
+    ): void {
+        $result = $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+        );
+        Assert::assertNotNull($result->skippedReason, 'Expected full synchronization to be skipped, but it ran');
+        Assert::assertStringContainsString($expectedReasonFragment, $result->skippedReason);
+    }
+
+    /**
+     * Assert the backend module's "out of sync" count for a synchronization rule (source → target). The count is
+     * computed by {@see SynchronizationStatusProvider::pendingCountForRule()} and must reflect the TARGET workspace's
+     * stale rows. Scope/mode do not affect the count, so we use defaults here.
+     *
+     * @Then /^the out-of-sync count from workspace "([^"]*)" dimension "([^"]*)" to workspace "([^"]*)" dimension "([^"]*)" is (\d+)$/
+     * @throws Exception
+     */
+    public function theOutOfSyncCountIs(
+        string $sourceWorkspaceName,
+        string $sourceDimension,
+        string $targetWorkspaceName,
+        string $targetDimension,
+        int $expectedCount,
+    ): void {
+        $rule = new SynchronizationRule(
+            sourceWorkspaceName: $sourceWorkspaceName,
+            sourceDimension: $sourceDimension,
+            targetWorkspaceName: $targetWorkspaceName,
+            targetDimension: $targetDimension,
+            scope: SynchronizationScope::Content,
+        );
+        $actual = $this->getObject(SynchronizationStatusProvider::class)->pendingCountForRule(
+            $this->currentContentRepository->id,
+            $rule,
+        );
+        Assert::assertSame($expectedCount, $actual, sprintf(
+            'Expected out-of-sync count %d for %s/%s -> %s/%s, got %d',
+            $expectedCount,
+            $sourceWorkspaceName,
+            $sourceDimension,
+            $targetWorkspaceName,
+            $targetDimension,
+            $actual,
+        ));
+    }
+
+    /**
+     * @Then /^I expect workspace "([^"]*)" to not exist$/
+     * @throws Exception
+     */
+    public function iExpectWorkspaceToNotExist(string $workspaceName): void
+    {
+        $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
+        Assert::assertNull(
+            $cr->findWorkspaceByName(WorkspaceName::fromString($workspaceName)),
+            sprintf('Workspace "%s" unexpectedly exists', $workspaceName),
         );
     }
 

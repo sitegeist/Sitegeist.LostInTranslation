@@ -77,8 +77,15 @@ class WorkspaceSynchronizationController extends ActionController
         $stalePropertyCommandsDispatched = 0;
         $variantCommandsDispatched = 0;
         $skippedNodes = 0;
+        // A rule may short-circuit entirely (e.g. its target workspace does not exist or is not based on the source).
+        // Collect those reasons so the UI can raise an error notification instead of silently reporting "0 synced".
+        $errors = [];
         foreach ($rules as $rule) {
             $result = $this->workspaceSynchronizer->synchronizeRule($contentRepositoryIdObject, $rule);
+            if ($result->skippedReason !== null) {
+                $errors[] = sprintf('%s → %s: %s', $rule->sourceWorkspaceName, $rule->targetWorkspaceName, $result->skippedReason);
+                continue;
+            }
             $stalePropertyCommandsDispatched += $result->totalStalePropertyCommandsDispatched();
             $variantCommandsDispatched += $result->totalVariantCommandsDispatched();
             $skippedNodes += $result->totalSkippedNodes();
@@ -88,6 +95,7 @@ class WorkspaceSynchronizationController extends ActionController
             'stalePropertyCommandsDispatched' => $stalePropertyCommandsDispatched,
             'variantCommandsDispatched' => $variantCommandsDispatched,
             'skippedNodes' => $skippedNodes,
+            'errors' => $errors,
         ]);
     }
 

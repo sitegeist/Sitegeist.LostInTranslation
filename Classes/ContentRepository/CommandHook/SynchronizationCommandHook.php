@@ -15,6 +15,8 @@ use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
+use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
+use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
@@ -210,7 +212,33 @@ final class SynchronizationCommandHook implements CommandHookInterface
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDsp);
+        $sourceWorkspace = WorkspaceName::fromString($rule->sourceWorkspaceName);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
+
+        // Cross-workspace rules (targetWorkspaceName != the publish target) fire on every publish that lands on the
+        // rule's source workspace — even before the review/target workspace has been provisioned. The workspace is
+        // never auto-created here: materialising a workspace on every publish is the deliberate, manual editor/admin
+        // path's job, not the inline publish hook's. When the target workspace is absent there is nothing to
+        // (re-)translate into, so skip the rule rather than letting `getContentGraph()` throw `WorkspaceDoesNotExist`.
+        $targetWorkspaceModel = $this->contentGraphReadModel->findWorkspaceByName($targetWorkspace);
+        if ($targetWorkspaceModel === null) {
+            return [];
+        }
+
+        // Cross-workspace sync: the target must be based on the source workspace, and is force-rebased onto it before we
+        // read it. The rebase brings the target's source dimension current with the just-published source content (so
+        // every source node exists in the target and the translation reads the latest source) and replays the target's
+        // own review edits on top. Conflicting target-side changes are dropped — the published source wins. A target
+        // that is not based on the source cannot be reconciled this way, so the rule is skipped.
+        if (!$targetWorkspace->equals($sourceWorkspace)) {
+            if ($targetWorkspaceModel->baseWorkspaceName === null || !$targetWorkspaceModel->baseWorkspaceName->equals($sourceWorkspace)) {
+                return [];
+            }
+            $this->contentRepositoryRegistry->get($this->contentRepositoryId)->handle(
+                RebaseWorkspace::create($targetWorkspace)
+                    ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
+            );
+        }
 
         $sourceDeepl = $this->dimensionValueDirectiveFactory
             ->tryCreateForDimensionAndOriginDimensionSpacePoint(

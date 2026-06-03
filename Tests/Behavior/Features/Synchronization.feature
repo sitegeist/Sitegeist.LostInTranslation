@@ -666,153 +666,68 @@ Feature: Automatic retranslation on workspace publish
       | propertyValues.inlineEditableStringProperty.value   | "Welcome translated" |
       | propertyValues.autoTranslatableStringProperty.value | "Intro translated"   |
 
-  Scenario: Content-scope auto-sync never creates documents and skips content whose document is missing in the target
-    # The `content-review` rule is Content scope: it must NOT create Document variants automatically, and only fills
-    # in content whose containing Document already exists in the target dimension. Here neither the document nor its
-    # content exists in es yet, so publishing creates nothing in es — adopting the document into es stays a manual
-    # editor action.
+  Scenario: Content-scope cross-workspace sync never creates documents and skips content whose document is missing in the target
+    # The `content-review` rule is cross-workspace Content scope (live/en → content-review/es): on publish to live it
+    # force-rebases content-review onto live and only fills content whose containing Document already exists in
+    # content-review/es — it never creates Document variants. Here content-review/es has no page-home yet (the document
+    # rule's live/es translation is dispatched only after this hook returns, so the rebase cannot have mirrored it in
+    # yet), so publishing a page with content to live mirrors nothing into content-review/es.
     When the command CreateWorkspace is executed with payload:
       | Key                | Value                  |
       | workspaceName      | "content-review"       |
       | baseWorkspaceName  | "live"                 |
       | newContentStreamId | "content-review-cs-id" |
-    And the command CreateWorkspace is executed with payload:
-      | Key                | Value                |
-      | workspaceName      | "content-user"       |
-      | baseWorkspaceName  | "content-review"     |
-      | newContentStreamId | "content-user-cs-id" |
-    When I am in workspace "content-user"
+    When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
       | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
       | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
-
-    # Initial stale state after setting up the content in content-user.
-    And I expect exactly the following stale translations:
-      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
-      | content-user  | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user  | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user  | {"language":"de"}         | page-home       | ["title"]                                                         |
-      | content-user  | {"language":"es"}         | page-home       | ["title"]                                                         |
-      | content-user  | {"language":"de"}         | page-home-main  | []                                                                |
-      | content-user  | {"language":"es"}         | page-home-main  | []                                                                |
-
     When the command PublishWorkspace is executed with payload:
-      | Key                | Value                  |
-      | workspaceName      | "content-user"         |
-      | newContentStreamId | "content-user-cs-id-2" |
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
 
-    # content-review-cs-id event timeline — Content scope synced nothing:
-    #   0   ContentStreamWasForked (CreateWorkspace content-review)
-    #   1-3 NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main + intro-text, replicated by
-    #                                        publish)
-    # No NodePeerVariantWasCreated and no NodePropertiesWereSet are appended: the document is not auto-created, and
-    # the content's document is absent from es, so the content is skipped too.
-    Then I expect exactly 4 events to be published on stream "ContentStream:content-review-cs-id"
+    # Content scope never creates the document in content-review/es, and the content below a (still) missing document
+    # is skipped too.
+    Then I expect node "page-home" to be absent in workspace "content-review" dimension space point {"language":"es"}
+    And I expect node "intro-text" to be absent in workspace "content-review" dimension space point {"language":"es"}
 
-    # Final stale state. content-review has the full set of replicated stale rows (de + es for every node), and
-    # content-user mirrors it because replaceWorkspaceEntries ran after the publish replication. Critically, NO row
-    # was cleared by the sync — Content scope refused to adopt the document and therefore skipped the content
-    # underneath it too. The empty content-collection rows survive too (their variant was never created).
-    Then I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
-      | content-review | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-review | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-review | {"language":"de"}         | page-home       | ["title"]                                                         |
-      | content-review | {"language":"es"}         | page-home       | ["title"]                                                         |
-      | content-review | {"language":"de"}         | page-home-main  | []                                                                |
-      | content-review | {"language":"es"}         | page-home-main  | []                                                                |
-      | content-user   | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user   | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user   | {"language":"de"}         | page-home       | ["title"]                                                         |
-      | content-user   | {"language":"es"}         | page-home       | ["title"]                                                         |
-      | content-user   | {"language":"de"}         | page-home-main  | []                                                                |
-      | content-user   | {"language":"es"}         | page-home-main  | []                                                                |
-
-  Scenario: Content-scope auto-sync fills in content below a document that already exists in the target
-    # The `content-review` rule is Content scope. Once a Document has been manually adopted into the target
-    # dimension, publishing fresh content inside it auto-creates and translates the content's es variant — while
-    # the manually-translated document itself is left untouched.
+  Scenario: Content-scope cross-workspace sync fills content under a document already present in the target
+    # Cross-workspace Content scope. Once content-review/es contains a Document (mirrored in from an earlier live
+    # publish via the force-rebase), publishing fresh content under that document to live fills the content into
+    # content-review/es on the next publish — while content scope itself never creates the Document.
     When the command CreateWorkspace is executed with payload:
       | Key                | Value                  |
       | workspaceName      | "content-review"       |
       | baseWorkspaceName  | "live"                 |
       | newContentStreamId | "content-review-cs-id" |
-    And the command CreateWorkspace is executed with payload:
-      | Key                | Value                |
-      | workspaceName      | "content-user"       |
-      | baseWorkspaceName  | "content-review"     |
-      | newContentStreamId | "content-user-cs-id" |
-    When I am in workspace "content-user"
+    # First publish the document to live. The Document-scope live→live/es rule translates page-home into live/es.
+    When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                              | initialPropertyValues | tetheredDescendantNodeAggregateIds |
       | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page | {"title": "Home"}     | {"main": "page-home-main"}         |
-    # The editor manually adopts the document into the es dimension (the deliberate manual action).
-    When the command CreateNodeVariant is executed with payload:
-      | Key             | Value             |
-      | nodeAggregateId | "page-home"       |
-      | sourceOrigin    | {"language":"en"} |
-      | targetOrigin    | {"language":"es"} |
-    # Now add content inside the already-adopted document.
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+
+    # Now add content under the document and publish again. By this publish live/es already has page-home, so the
+    # force-rebase mirrors the document into content-review/es; content scope then fills intro-text/es because its
+    # containing document now exists there.
+    When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId | parentNodeAggregateId | nodeTypeName                                                         | initialPropertyValues                                                                  |
       | intro-text      | page-home-main        | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |
-
-    # Pre-publish stale state. page-home/es and page-home-main/es are absent — the manual adoption cleared them
-    # (cascade's NodePropertiesWereSet for page-home/es title, variant event for the empty page-home-main/es).
-    # intro-text was just created, so it is fresh-stale in both target dimensions.
-    And I expect exactly the following stale translations:
-      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
-      | content-user  | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user  | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user  | {"language":"de"}         | page-home       | ["title"]                                                         |
-      | content-user  | {"language":"de"}         | page-home-main  | []                                                                |
-
     When the command PublishWorkspace is executed with payload:
-      | Key                | Value                  |
-      | workspaceName      | "content-user"         |
-      | newContentStreamId | "content-user-cs-id-2" |
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
 
-    # content-review-cs-id event timeline:
-    #   0   ContentStreamWasForked (CreateWorkspace content-review)
-    #   1-2 NodeAggregateWithNodeWasCreated (page-home + tethered page-home-main, replicated by publish)
-    #   3-4 NodePeerVariantWasCreated (page-home + page-home-main en→es — the manual adoption, replicated)
-    #   5   NodePropertiesWereSet     (page-home es title translated — the manual adoption's cascade, replicated)
-    #   6   NodeAggregateWithNodeWasCreated (intro-text, replicated by publish)
-    #   7   NodePeerVariantWasCreated (intro-text en→es — Content scope fills it in because its document exists
-    #                                  in es)
-    #   8   NodePropertiesWereSet     (intro-text es translated)
-    Then I expect exactly 9 events to be published on stream "ContentStream:content-review-cs-id"
-    # The content was created + translated in es because its document exists there …
-    And event at index 8 is of type "NodePropertiesWereSet" with payload:
-      | Key                                                 | Expected             |
-      | nodeAggregateId                                     | "intro-text"         |
-      | originDimensionSpacePoint                           | {"language": "es"}   |
-      | propertyValues.inlineEditableStringProperty.value   | "Welcome translated" |
-      | propertyValues.autoTranslatableStringProperty.value | "Intro translated"   |
-    # … and the manually-adopted document keeps its translation: the only NodePropertiesWereSet for page-home/es is
-    # the replicated manual one (index 5) — the content sync never re-touched it.
-    And event at index 5 is of type "NodePropertiesWereSet" with payload:
-      | Key                        | Expected           |
-      | nodeAggregateId            | "page-home"        |
-      | originDimensionSpacePoint  | {"language": "es"} |
-      | propertyValues.title.value | "Home translated"  |
-
-    # Final stale state. content-review/es is fully cleared: intro-text was synced, and page-home plus its content
-    # collection were already adopted to es before the publish. The de rows survive (no rule covers de).
-    # content-user keeps intro-text/es — replaceWorkspaceEntries copied content-review's rows back before the
-    # auto-sync hook scrubbed es (the same idiom as the other publish-on-* scenarios). page-home/es and
-    # page-home-main/es are absent from content-user too: the manual adoption already cleared them there before
-    # the publish.
-    Then I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
-      | content-review | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-review | {"language":"de"}         | page-home       | ["title"]                                                         |
-      | content-review | {"language":"de"}         | page-home-main  | []                                                                |
-      | content-user   | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user   | {"language":"es"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | content-user   | {"language":"de"}         | page-home       | ["title"]                                                         |
-      | content-user   | {"language":"de"}         | page-home-main  | []                                                                |
+    # The content was filled into content-review/es because its document exists there …
+    Then I expect node "intro-text" in workspace "content-review" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+    And I expect node "intro-text" in workspace "content-review" dimension space point {"language":"es"} to have property "inlineEditableStringProperty" with value "Welcome translated"
+    # … and the document itself is present (mirrored by the rebase) with its translated title.
+    And I expect node "page-home" in workspace "content-review" dimension space point {"language":"es"} to have property "title" with value "Home translated"
 
   Scenario: Partial publish auto-syncs only the published subtree
     # PublishIndividualNodesFromWorkspace publishes only the selected nodes (plus their tethered descendants). The
@@ -1479,32 +1394,107 @@ Feature: Automatic retranslation on workspace publish
     Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "inlineEditableStringProperty" with value "My Text translated"
     And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Other Text translated"
 
-  Scenario: Stale-mode sync into a not-yet-existing target creates it as a shared workspace based on live
+  Scenario: Stale-mode sync into a not-yet-existing target is skipped instead of auto-creating it
     # WorkspaceSynchronizer (stale-driven) targeting a workspace that does not exist yet — e.g. a config rule whose
-    # `targetWorkspaceName` "de-review" has never been created — must create it on the fly as a SHARED review workspace
-    # based on `live`, then translate the stale nodes into it.
+    # `targetWorkspaceName` "de-review" has never been created — must NOT materialise it. Creating workspaces is a
+    # deliberate editor/admin action, so the sync short-circuits gracefully and the caller (CLI / Neos UI) surfaces an
+    # error notification. The workspace stays absent.
     When I am in workspace "live"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
       | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
 
-    # de-review does not exist yet — synchronizing must bring it into being.
+    # de-review does not exist yet — synchronizing must be skipped, not auto-create it.
+    Then synchronizing translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"} is skipped because of "does not exist"
+    And I expect workspace "de-review" to not exist
+
+  Scenario: Full sync into a not-yet-existing target is skipped instead of auto-creating it
+    # Same guarantee for FullWorkspaceSynchronizer (`synchronize --full`): a missing target workspace is reported as a
+    # graceful skip rather than being created.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
+      | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
+
+    Then full-synchronizing translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review-full" dimension space point {"language":"de"} is skipped because of "does not exist"
+    And I expect workspace "de-review-full" to not exist
+
+  Scenario: Cross-workspace sync into a target not based on the source workspace is skipped
+    # A cross-workspace synchronization requires the target workspace to be based on the source workspace (so the rebase
+    # can bring it current with the source). `other-user-workspace` exists but is based on `live`, not on the requested
+    # source `user-workspace`, so the sync short-circuits with a clear error instead of dispatching against a target it
+    # cannot reconcile with the source.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
+      | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
+
+    Then synchronizing translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "other-user-workspace" dimension space point {"language":"de"} is skipped because of "must be based on source workspace"
+
+  Scenario: Publishing the source force-rebases the target onto it, conflicting target edits are dropped (source wins)
+    # When the source workspace (live) is published, the cross-workspace rule force-rebases the target (content-review)
+    # onto it. Non-conflicting target review edits are preserved by the replay, but a genuine conflict drops the target
+    # change — the published source wins. Here the target edited a node that the source removed: the target's edit
+    # cannot replay onto a base without that node, so it is dropped and the source's removal wins.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Original"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # content-review forks from live with sir-david present.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value                  |
+      | workspaceName      | "content-review"       |
+      | baseWorkspaceName  | "live"                 |
+      | newContentStreamId | "content-review-cs-id" |
+    # Target edits the node ...
+    When I am in workspace "content-review"
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                             |
+      | nodeAggregateId           | "sir-david-nodenborough"                          |
+      | originDimensionSpacePoint | {"language": "en"}                                |
+      | propertyValues            | {"autoTranslatableStringProperty": "Review edit"} |
+    # ... while the source removes it, then publishes.
+    When I am in workspace "user-workspace"
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allVariants"            |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    # The force-rebase cannot replay the target's edit onto a base where the node is gone — the conflicting target
+    # change is dropped, the source's removal wins.
+    Then I expect node "sir-david-nodenborough" to be absent in workspace "content-review" dimension space point {"language":"en"}
+
+  Scenario: The out-of-sync count reflects the target workspace, not the source
+    # Regression: the backend module's "out of sync" count for a cross-workspace rule must be measured on the TARGET. A
+    # node published to live leaves a persistent `live/de` stale row (the live→live/de rule is `ask`, so publishing does
+    # not translate de). A rule that synchronizes live → de-review/de must NOT report that lingering source row: once
+    # de-review is synchronized its own rows are cleared, so the count is zero. Counting the source workspace's rows
+    # (the old behaviour) would keep reporting the rule as out of sync forever.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # live carries a lingering de stale row, but de-review (the target) is untouched — so the rule reads as in sync.
+    Then the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0
+    # Synchronizing into de-review translates the node and the count stays at zero (the live/de row is never counted).
     When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
-
-    # It was created as a shared workspace based on live …
-    Then I expect workspace "de-review" to exist with base workspace "live" and classification "SHARED"
-    # … and the stale node was translated into it.
-    And I expect node "parent-doc" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "Doc Text translated"
-
-  Scenario: Full sync into a not-yet-existing target creates it as a shared workspace based on live
-    # Same auto-creation guarantee for FullWorkspaceSynchronizer (`synchronize --full`): the target workspace is created
-    # as a SHARED review workspace based on `live` before the full subtree walk dispatches its translations into it.
-    When I am in workspace "live"
-    And the following CreateNodeAggregateWithNode commands are executed:
-      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                          |
-      | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
-
-    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review-full" dimension space point {"language":"de"}
-
-    Then I expect workspace "de-review-full" to exist with base workspace "live" and classification "SHARED"
-    And I expect node "parent-doc" in workspace "de-review-full" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "Doc Text translated"
+    Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    And the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0

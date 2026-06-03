@@ -195,7 +195,7 @@ class LostInTranslationCommandController extends CommandController
             );
 
         if ($result->skippedReason !== null) {
-            $this->outputLine('Synchronization skipped: %s', [$result->skippedReason]);
+            $this->outputLine('<error>Synchronization skipped: %s</error>', [$result->skippedReason]);
             $this->quit(1);
         }
 

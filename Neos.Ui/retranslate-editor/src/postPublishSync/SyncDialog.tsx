@@ -31,6 +31,17 @@ export const SyncDialog: React.FC = () => {
         setIsSyncing(true);
         try {
             const result = await endpoints().synchronize({ workspaceName: prompt.workspaceName });
+            // One or more rules short-circuited (e.g. their target workspace is missing or not based on the source).
+            // Surface those reasons as an error notification rather than silently reporting a partial success.
+            if (result.errors && result.errors.length > 0) {
+                dispatch(actions.UI.FlashMessages.add(
+                    `lost-in-translation-sync-error-${Date.now()}`,
+                    `Translation synchronization could not run: ${result.errors.join('; ')}`,
+                    'error'
+                ));
+                setPrompt(null);
+                return;
+            }
             const translated = result.stalePropertyCommandsDispatched + result.variantCommandsDispatched;
             dispatch(actions.UI.FlashMessages.add(
                 `lost-in-translation-sync-${Date.now()}`,

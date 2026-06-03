@@ -21,7 +21,7 @@ Sitegeist:
           mode: ask
         # Content scope: only fill in content below documents that already exist in the target dimension; never create
         # documents automatically. Fires on publish to `content-review`.
-        - sourceWorkspaceName: content-review
+        - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: content-review
           targetDimension: es

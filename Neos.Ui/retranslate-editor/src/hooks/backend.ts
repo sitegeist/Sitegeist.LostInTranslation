@@ -40,6 +40,8 @@ export type SynchronizeResponse = {
     stalePropertyCommandsDispatched: number;
     variantCommandsDispatched: number;
     skippedNodes: number;
+    // Per-rule short-circuit reasons (e.g. target workspace missing or not based on source). Empty when all rules ran.
+    errors: string[];
 };
 
 const CONTENT_INFO_ENDPOINT = '/lostintranslation/retranslation/getmetadata';

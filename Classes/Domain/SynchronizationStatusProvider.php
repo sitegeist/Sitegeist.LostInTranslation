@@ -17,11 +17,15 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  * post-publish prompt) and the {@see \Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController} backend
  * overview so both report identical numbers.
  *
- * The count deliberately mirrors {@see WorkspaceSynchronizer::synchronizeWorkspace()}'s own stale-row filter
- * (stale rows flagged against the rule's `sourceWorkspaceName` at the target origin whose aggregate still exists) so the
- * number shown equals what a subsequent "sync now" will actually process. It does NOT rebase the target (which the real
- * run does in the cross-workspace case) because a status read must stay side-effect free; in that case the number is a
- * lower bound that excludes source nodes not yet materialised in the target.
+ * "Out of sync" is measured on the TARGET: the count is the number of stale-translation rows flagged against the rule's
+ * `targetWorkspaceName` at the `targetDimension` origin whose aggregate still exists in the target. Once a sync has
+ * (re-)translated the target those rows are cleared, so the number drops to zero — which is what the backend module and
+ * the UI prompt need to reflect. (Counting the SOURCE workspace instead would never reach zero for a cross-workspace
+ * rule, since translating into the target leaves the source's own stale rows untouched.)
+ *
+ * The read is side-effect free: it does NOT rebase the target (which the real cross-workspace run does), so for a target
+ * that has not yet been rebased onto the source the number is a lower bound — it only sees source changes already
+ * materialised in the target.
  */
 #[Flow\Scope('singleton')]
 class SynchronizationStatusProvider
@@ -47,16 +51,21 @@ class SynchronizationStatusProvider
     public function pendingCountForRule(ContentRepositoryId $contentRepositoryId, SynchronizationRule $rule): int
     {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
-        $sourceWorkspaceName = WorkspaceName::fromString($rule->sourceWorkspaceName);
+        $targetWorkspaceName = WorkspaceName::fromString($rule->targetWorkspaceName);
+        // A target workspace that does not exist cannot be out of sync (synchronizing into it is skipped — see
+        // WorkspaceSynchronizer); report zero rather than faulting on a missing workspace.
+        if ($cr->findWorkspaceByName($targetWorkspaceName) === null) {
+            return 0;
+        }
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint(
             DimensionSpacePoint::fromArray([$this->languageDimensionName => $rule->targetDimension])
         );
         $finder = $cr->projectionState(StaleTranslationReadModel::class)->staleTranslationFinder;
-        $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
+        $targetContentGraph = $cr->getContentGraph($targetWorkspaceName);
 
         $count = 0;
         foreach ($finder->findAll() as $entry) {
-            if (!$entry->workspaceName->equals($sourceWorkspaceName)) {
+            if (!$entry->workspaceName->equals($targetWorkspaceName)) {
                 continue;
             }
             if ($entry->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
@@ -64,7 +73,7 @@ class SynchronizationStatusProvider
             }
             // Skip orphaned stale rows whose aggregate no longer exists (the projection does not cascade descendant
             // cleanup on removal — see `lostintranslation:reconcile`); WorkspaceSynchronizer skips them too.
-            if ($sourceContentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
+            if ($targetContentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
                 continue;
             }
             $count++;
