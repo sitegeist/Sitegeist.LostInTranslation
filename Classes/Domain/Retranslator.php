@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain;
 
-use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
-use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
@@ -20,7 +18,6 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Security\Context as SecurityContext;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
-use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
@@ -35,8 +32,8 @@ use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
  *    {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
  *    then cascades translation onto the freshly-created variant (including tethered children).
  *
- * Stale-property commands are dispatched while {@see AISystemTranslationRuntimeState} marks the AI
- * as the actor so event metadata is attributed to the AI service, not the editor.
+ * Commands are dispatched via {@see AiCommandDispatcher} so their event metadata is attributed to the AI service,
+ * not the editor who triggered the run.
  */
 class Retranslator
 {
@@ -44,10 +41,7 @@ class Retranslator
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
     #[Flow\Inject]
-    protected TranslationServiceInterface $translationService;
-
-    #[Flow\Inject]
-    protected AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState;
+    protected AiCommandDispatcher $aiCommandDispatcher;
 
     #[Flow\Inject]
     protected StalePropertyCommandBuilder $stalePropertyCommandBuilder;
@@ -247,10 +241,10 @@ class Retranslator
         // the within-`$variantCommands` pre-order (ancestor before descendant) matters and is preserved by the walk.
         $this->securityContext->withoutAuthorizationChecks(function () use ($cr, $stalePropertyCommands, $variantCommands): void {
             foreach ($stalePropertyCommands as $command) {
-                $this->dispatchAsAi($cr, $command);
+                $this->aiCommandDispatcher->dispatch($cr, $command);
             }
             foreach ($variantCommands as $command) {
-                $this->dispatchAsAi($cr, $command);
+                $this->aiCommandDispatcher->dispatch($cr, $command);
             }
         });
         // Prune stale rows that no command could satisfy — see the no-op branch above. Done after dispatch (these
@@ -274,19 +268,5 @@ class Retranslator
             stalePropertyCommandsDispatched: count($stalePropertyCommands),
             variantCommandsDispatched: count($variantCommands),
         );
-    }
-
-    /**
-     * Dispatch a command with AI authorship active. `try/finally` is load-bearing: an exception
-     * inside `handle()` must still reset the singleton runtime state.
-     */
-    private function dispatchAsAi(ContentRepository $cr, CommandInterface $command): void
-    {
-        $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
-        try {
-            $cr->handle($command);
-        } finally {
-            $this->aiSystemTranslationRuntimeState->resetActiveAIServiceId();
-        }
     }
 }

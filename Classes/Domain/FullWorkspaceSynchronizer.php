@@ -24,7 +24,6 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
-use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
@@ -66,10 +65,7 @@ class FullWorkspaceSynchronizer
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
     #[Flow\Inject]
-    protected TranslationServiceInterface $translationService;
-
-    #[Flow\Inject]
-    protected AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState;
+    protected AiCommandDispatcher $aiCommandDispatcher;
 
     #[Flow\Inject]
     protected StalePropertyCommandBuilder $stalePropertyCommandBuilder;
@@ -243,7 +239,7 @@ class FullWorkspaceSynchronizer
                     ),
             );
             if (!$dryRun) {
-                $this->dispatchAsAi($cr, $command);
+                $this->aiCommandDispatcher->dispatch($cr, $command);
             }
         }
 
@@ -376,15 +372,5 @@ class FullWorkspaceSynchronizer
             $staleByNodeId[$stale->nodeAggregateId->value] = $stale;
         }
         return $staleByNodeId;
-    }
-
-    private function dispatchAsAi(ContentRepository $cr, CommandInterface $command): void
-    {
-        $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
-        try {
-            $cr->handle($command);
-        } finally {
-            $this->aiSystemTranslationRuntimeState->resetActiveAIServiceId();
-        }
     }
 }

@@ -9,11 +9,8 @@ use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
-use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
-use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
-use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
@@ -167,7 +164,7 @@ class WorkspaceSynchronizer
                 continue;
             }
             $plannedEntries[] = [
-                'depth' => $this->treeDepthOf($sourceSubgraph, $entry->nodeAggregateId),
+                'depth' => NodeTreeDepth::of($sourceSubgraph, $entry->nodeAggregateId),
                 'entry' => $entry,
             ];
         }
@@ -194,14 +191,5 @@ class WorkspaceSynchronizer
         }
 
         return new WorkspaceSynchronizationResult($perNodeResults);
-    }
-
-    /**
-     * Distance of the node from its root aggregate in the source subgraph (root = 0, its children = 1, …). Used purely
-     * to order synchronization ancestor-before-descendant so a parent document's variant is created before its child's.
-     */
-    private function treeDepthOf(ContentSubgraphInterface $sourceSubgraph, NodeAggregateId $nodeAggregateId): int
-    {
-        return $sourceSubgraph->findAncestorNodes($nodeAggregateId, FindAncestorNodesFilter::create())->count();
     }
 }

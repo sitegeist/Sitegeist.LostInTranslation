@@ -19,18 +19,16 @@ use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
-use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
-use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
-use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
+use Sitegeist\LostInTranslation\Domain\NodeTreeDepth;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
@@ -326,7 +324,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
                 );
                 if ($command !== null) {
                     $plannedCommands[] = [
-                        'depth' => $this->treeDepthOf($sourceSubgraph, $stale->nodeAggregateId),
+                        'depth' => NodeTreeDepth::of($sourceSubgraph, $stale->nodeAggregateId),
                         'command' => $command,
                     ];
                 } else {
@@ -365,7 +363,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
                 continue;
             }
             $plannedCommands[] = [
-                'depth' => $this->treeDepthOf($sourceSubgraph, $stale->nodeAggregateId),
+                'depth' => NodeTreeDepth::of($sourceSubgraph, $stale->nodeAggregateId),
                 'command' => CreateNodeVariant::create(
                     $targetWorkspace,
                     $stale->nodeAggregateId,
@@ -382,14 +380,5 @@ final class SynchronizationCommandHook implements CommandHookInterface
         usort($plannedCommands, static fn (array $a, array $b): int => $a['depth'] <=> $b['depth']);
 
         return array_map(static fn (array $planned): CommandInterface => $planned['command'], $plannedCommands);
-    }
-
-    /**
-     * Distance of the node from its root aggregate in the source subgraph (root = 0, its children = 1, …). Used
-     * purely to order the synchronization commands ancestor-before-descendant.
-     */
-    private function treeDepthOf(ContentSubgraphInterface $sourceSubgraph, NodeAggregateId $nodeAggregateId): int
-    {
-        return $sourceSubgraph->findAncestorNodes($nodeAggregateId, FindAncestorNodesFilter::create())->count();
     }
 }
