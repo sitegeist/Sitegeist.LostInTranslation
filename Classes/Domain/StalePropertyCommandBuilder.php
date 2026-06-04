@@ -12,7 +12,6 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
-use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
@@ -39,9 +38,6 @@ class StalePropertyCommandBuilder
 
     #[Flow\Inject]
     protected TranslationServiceInterface $translationService;
-
-    #[Flow\Inject]
-    protected NodeUriPathSegmentGenerator $nodeUriPathSegmentGenerator;
 
     #[Flow\InjectConfiguration(path: 'nodeTranslation.experimental-applyHtmlEntityDecodeAfterTranslation')]
     protected bool $experimentalApplyHtmlEntityDecodeAfterTranslation = false;
@@ -135,14 +131,6 @@ class StalePropertyCommandBuilder
         $translatedProperties = ArrayFlatteningUtility::enflate($translatedDeflated);
 
         foreach ($translatedProperties as $name => $translatedValue) {
-            // uriPathSegment has strict charset; DeepL routinely violates it.
-            if (
-                $name === 'uriPathSegment'
-                && is_string($translatedValue)
-                && !preg_match('/^[a-z0-9\-]+$/i', $translatedValue)
-            ) {
-                $translatedValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $translatedValue);
-            }
             $targetValue = null;
             if (is_array($translatedValue)) {
                 $translatable = $directive->translatablePropertyNames->findByName($name);
@@ -154,6 +142,12 @@ class StalePropertyCommandBuilder
                     }
                 }
             } else {
+                // Apply the optional per-property post-processor (e.g. coerce a translated uriPathSegment back into a
+                // valid slug) to the scalar translated value.
+                $postProcessor = $directive->translatablePropertyNames->findByName($name)?->postProcessor;
+                if (is_string($translatedValue) && $postProcessor !== null) {
+                    $translatedValue = $postProcessor->process($translatedValue);
+                }
                 $targetValue = $translatedValue;
             }
             if ($targetValue !== null) {

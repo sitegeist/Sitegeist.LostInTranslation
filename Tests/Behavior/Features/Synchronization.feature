@@ -112,6 +112,17 @@ Feature: Automatic retranslation on workspace publish
               type: string
           options:
             automaticTranslation: true
+        # A Document whose `uriPathSegment` is opted into automatic translation, to exercise the strict-charset
+        # post-processing on the sync path (StalePropertyCommandBuilder). Only used by the uriPathSegment scenario.
+        'Sitegeist.LostInTranslation.Testing:PageWithUriPathSegment':
+          superTypes:
+            'Neos.Neos:Document': true
+          properties:
+            uriPathSegment:
+              type: string
+              options:
+                automaticTranslation: true
+                translationPostProcessor: 'Sitegeist\LostInTranslation\Domain\PostProcessor\UriPathSegmentPostProcessor'
         """
     And using identifier "default", I define a content repository
     And I am in content repository "default"
@@ -401,6 +412,40 @@ Feature: Automatic retranslation on workspace publish
       | nodeAggregateId                                     | "child-doc"             |
       | originDimensionSpacePoint                           | {"language": "de"}      |
       | propertyValues.autoTranslatableStringProperty.value | "Child Text translated" |
+
+  Scenario: Synchronization translates a stale uriPathSegment and keeps it a valid slug
+    # The stale-driven sync path (WorkspaceSynchronizer -> Retranslator -> StalePropertyCommandBuilder) must apply the
+    # same strict-charset post-processing to uriPathSegment as the create-variant cascade: a translated segment
+    # ("my-test-uri-path translated", containing a space) is re-slugified to "my-test-uri-path-translated".
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                               | initialPropertyValues                  |
+      | my-document     | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:PageWithUriPathSegment | {"uriPathSegment": "initial-path"}     |
+    # Create + translate the de variant first, so the later sync exercises the SetNodeProperties (existing-variant) path
+    # rather than CreateNodeVariant.
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value             |
+      | nodeAggregateId | "my-document"     |
+      | sourceOrigin    | {"language":"en"} |
+      | targetOrigin    | {"language":"de"} |
+    # Change the source uriPathSegment so the de translation goes stale again.
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                  |
+      | nodeAggregateId           | "my-document"                          |
+      | originDimensionSpacePoint | {"language": "en"}                     |
+      | propertyValues            | {"uriPathSegment": "my-test-uri-path"} |
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames      |
+      | user-workspace | {"language":"de"}         | my-document     | ["uriPathSegment"] |
+      | user-workspace | {"language":"es"}         | my-document     | ["uriPathSegment"] |
+
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+
+    # The de variant's uriPathSegment is the re-slugified translation; the de stale row is cleared, es survives.
+    Then I expect node "my-document" in workspace "user-workspace" dimension space point {"language":"de"} to have property "uriPathSegment" with value "my-test-uri-path-translated"
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames      |
+      | user-workspace | {"language":"es"}         | my-document     | ["uriPathSegment"] |
 
   Scenario: Full sync into an empty target dimension creates variants across the whole subtree
     # The `synchronize --full` mode (FullWorkspaceSynchronizer) walks every translatable node from the root down,

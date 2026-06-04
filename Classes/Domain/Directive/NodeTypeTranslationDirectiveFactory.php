@@ -9,6 +9,7 @@ use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\ObjectManagement\ObjectManagerInterface;
+use Sitegeist\LostInTranslation\Domain\PostProcessor\TranslatedPropertyPostProcessorInterface;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 class NodeTypeTranslationDirectiveFactory
@@ -55,7 +56,7 @@ class NodeTypeTranslationDirectiveFactory
                 continue;
             }
 
-            $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ]  ?? null;
+            $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ] ?? null;
             $isInlineEditable = $propertyDefinition['ui']['inlineEditable'] ?? false;
             $translationConnector = $this->translationConnectors[$type] ?? null;
 
@@ -63,14 +64,19 @@ class NodeTypeTranslationDirectiveFactory
                 continue;
             }
 
+            // Optional per-property post-processor (e.g. coerce a translated uriPathSegment back into a valid slug),
+            // configured via `properties.<name>.options.translationPostProcessor`. Applied to the translated scalar
+            // value by the translation pipeline.
+            $postProcessor = $this->resolvePostProcessor($propertyDefinition['options']['translationPostProcessor'] ?? null);
+
             if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
-                $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName));
+                $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName), null, $postProcessor);
             } elseif ($type === "string" && $automaticTranslationIsEnabled === true) {
-                $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName));
+                $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName), null, $postProcessor);
             } elseif ($translationConnector && ($this->translateTypesWithConnectors || $automaticTranslationIsEnabled)) {
                 $translationConnectorInstance = $this->objectManager->get($translationConnector);
                 assert($translationConnectorInstance instanceof TranslationConnectorInterface);
-                $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName), $translationConnectorInstance);
+                $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName), $translationConnectorInstance, $postProcessor);
             }
         }
 
@@ -81,5 +87,15 @@ class NodeTypeTranslationDirectiveFactory
         );
 
         return $this->firstLevelCache[$nodeType->name->value];
+    }
+
+    private function resolvePostProcessor(mixed $postProcessorClassName): ?TranslatedPropertyPostProcessorInterface
+    {
+        if (!is_string($postProcessorClassName) || $postProcessorClassName === '') {
+            return null;
+        }
+        $postProcessor = $this->objectManager->get($postProcessorClassName);
+        assert($postProcessor instanceof TranslatedPropertyPostProcessorInterface);
+        return $postProcessor;
     }
 }

@@ -20,7 +20,6 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
-use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
@@ -39,7 +38,6 @@ final class TranslationCommandHook implements CommandHookInterface
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
         private readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
-        private readonly NodeUriPathSegmentGenerator $nodeUriPathSegmentGenerator,
         private readonly bool $experimentalApplyHtmlEntityDecodeAfterTranslation,
     ) {
     }
@@ -230,10 +228,6 @@ final class TranslationCommandHook implements CommandHookInterface
         $propertiesToSet = [];
         foreach ($translatedProperties as $propertyName => $translatedValue) {
             $targetValue = null;
-            // Make sure the uriPathSegment is valid
-            if ($propertyName === 'uriPathSegment' && is_string($translatedValue) && !preg_match('/^[a-z0-9\-]+$/i', $translatedValue)) {
-                $translatedValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $translatedValue);
-            }
             if (is_array($translatedValue)) {
                 $translatablePropertyName = $translationDirective->translatablePropertyNames->findByName($propertyName);
                 if (
@@ -246,6 +240,12 @@ final class TranslationCommandHook implements CommandHookInterface
                     }
                 }
             } else {
+                // Apply the optional per-property post-processor (e.g. coerce a translated uriPathSegment back into a
+                // valid slug) to the scalar translated value.
+                $postProcessor = $translationDirective->translatablePropertyNames->findByName($propertyName)?->postProcessor;
+                if (is_string($translatedValue) && $postProcessor !== null) {
+                    $translatedValue = $postProcessor->process($translatedValue);
+                }
                 $targetValue = $translatedValue;
             }
             if ($targetValue !== null) {

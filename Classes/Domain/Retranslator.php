@@ -245,6 +245,8 @@ class Retranslator
                 $this->dispatchAsAi($cr, $command);
             }
             foreach ($variantCommands as $command) {
+                // TODO: Why variant commands after property commands?
+                // TODO: Why not dispatch these as AI as well?
                 $cr->handle($command);
             }
         });

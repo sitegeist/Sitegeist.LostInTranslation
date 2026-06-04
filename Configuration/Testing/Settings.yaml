@@ -64,13 +64,9 @@ Neos:
               - en
               - de
             uriSegment: 'en'
-            options:
-              translationStrategy: 'sync'
           it:
             label: Italiano
             values:
               - it
               - de
             uriSegment: 'it'
-            options:
-              translationStrategy: 'once'

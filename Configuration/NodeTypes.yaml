@@ -17,6 +17,11 @@
 
 'Neos.Neos:Document':
   properties:
+    # uriPathSegment is not auto-translated by default; when an integrator opts it in
+    # (options.automaticTranslation: true) the post-processor coerces the translation back into a valid slug.
+    uriPathSegment:
+      options:
+        translationPostProcessor: 'Sitegeist\LostInTranslation\Domain\PostProcessor\UriPathSegmentPostProcessor'
     title:
       options:
         automaticTranslation: true

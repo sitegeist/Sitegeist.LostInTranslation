@@ -23,6 +23,25 @@ Feature: Create node variant and let the AI translate the properties
             inlineEditable: true
         stringProperty:
           type: string
+    # A Document type whose `uriPathSegment` is opted into automatic translation, to exercise the strict-charset
+    # post-processing (a translated segment must stay a valid slug).
+    'Neos.Neos:Document':
+      abstract: true
+      options:
+        automaticTranslation: true
+      properties:
+        uriPathSegment:
+          type: string
+          options:
+            automaticTranslation: true
+            translationPostProcessor: 'Sitegeist\LostInTranslation\Domain\PostProcessor\UriPathSegmentPostProcessor'
+        title:
+          type: string
+          options:
+            automaticTranslation: true
+    'Sitegeist.LostInTranslation.Testing:Page':
+      superTypes:
+        'Neos.Neos:Document': true
     """
     And using identifier "default", I define a content repository
     And I am in content repository "default"
@@ -104,3 +123,24 @@ Feature: Create node variant and let the AI translate the properties
     And event metadata at index 5 is:
       | Key              | Expected                     |
       | initiatingUserId | "initiating-user-identifier" |
+
+  Scenario: The uriPathSegment of a Document Node is translated and kept a valid slug
+    # uriPathSegment is auto-translatable but has a strict charset ([a-z0-9-]). The dummy translation service appends
+    # " translated", yielding "my-test-uri-path translated" — which violates the charset (it contains a space). The
+    # value must therefore be re-slugified back into a valid segment: "my-test-uri-path-translated".
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                 | initialPropertyValues                                       |
+      | my-document     | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:Page     | {"title": "My Title", "uriPathSegment": "my-test-uri-path"} |
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value             |
+      | nodeAggregateId | "my-document"     |
+      | sourceOrigin    | {"language":"en"} |
+      | targetOrigin    | {"language":"de"} |
+
+    When I am in dimension space point {"language": "de"}
+    Then I expect node aggregate identifier "my-document" to lead to node user-cs-id;my-document;{"language":"de"}
+    And I expect this node to have the following properties:
+      | Key            | Value                         |
+      | title          | "My Title translated"         |
+      | uriPathSegment | "my-test-uri-path-translated" |
