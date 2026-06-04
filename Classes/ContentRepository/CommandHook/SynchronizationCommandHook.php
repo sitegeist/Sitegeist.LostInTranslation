@@ -29,6 +29,7 @@ use Sitegeist\LostInTranslation\Domain\CrossWorkspaceSynchronizationTarget;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\NodeTreeDepth;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
+use Sitegeist\LostInTranslation\Domain\StaleRecordReconciler;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
@@ -303,38 +304,31 @@ final class SynchronizationCommandHook implements CommandHookInterface
                         'command' => $command,
                     ];
                 } else {
-                    // Target variant exists but there is nothing translatable to set (the source property was unset,
-                    // or holds a value no connector handles): no SetNodeProperties — hence no NodePropertiesWereSet —
-                    // will ever fire to clear this row. The projection has already caught up for the publish, so prune
-                    // the now-satisfied row directly instead of letting it linger and re-no-op on every publish.
-                    $this->staleTranslationReadModel()->staleTranslationMaintenance->removeStaleRow(
-                        $stale->workspaceName,
-                        $stale->nodeAggregateId,
-                        $stale->originDimensionSpacePoint,
+                    // Target variant exists but there is nothing translatable to set: no SetNodeProperties — hence no
+                    // NodePropertiesWereSet — will ever clear this row, so prune it (see StaleRecordReconciler).
+                    StaleRecordReconciler::pruneIfUnsatisfiable(
+                        $this->staleTranslationReadModel()->staleTranslationMaintenance,
+                        $targetWorkspace,
+                        $stale,
+                        $sourceNode,
+                        $sourceSubgraph,
+                        $targetSubgraph,
                     );
                 }
                 continue;
             }
             // Tethered children are created together with their non-tethered ancestor's variant — the existing
-            // TranslationCommandHook handles the cascade, so we don't emit a CreateNodeVariant for them ourselves.
+            // TranslationCommandHook handles the cascade, so we don't emit a CreateNodeVariant for them ourselves. When
+            // such a tethered no-op row can never be cleared by an event, StaleRecordReconciler prunes it.
             if ($sourceNode->classification->isTethered()) {
-                // When the tethered node's target variant is absent yet its ancestor already exists in the target, no
-                // CreateNodeVariant will ever materialise it (the cascade only fires from a non-tethered ancestor's
-                // creation, and that ancestor is already present). With no properties flagged there is nothing to set
-                // either — the row can never be cleared by an event and would re-no-op on every publish. Prune it
-                // directly, consistent with the target-exists escape hatch above.
-                $parentNode = $sourceSubgraph->findParentNode($sourceNode->aggregateId);
-                if (
-                    $stale->propertyNames->isEmpty()
-                    && $parentNode !== null
-                    && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null
-                ) {
-                    $this->staleTranslationReadModel()->staleTranslationMaintenance->removeStaleRow(
-                        $stale->workspaceName,
-                        $stale->nodeAggregateId,
-                        $stale->originDimensionSpacePoint,
-                    );
-                }
+                StaleRecordReconciler::pruneIfUnsatisfiable(
+                    $this->staleTranslationReadModel()->staleTranslationMaintenance,
+                    $targetWorkspace,
+                    $stale,
+                    $sourceNode,
+                    $sourceSubgraph,
+                    $targetSubgraph,
+                );
                 continue;
             }
             $plannedCommands[] = [

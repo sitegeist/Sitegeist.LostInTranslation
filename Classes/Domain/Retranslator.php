@@ -18,7 +18,6 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Security\Context as SecurityContext;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
-use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 
@@ -166,10 +165,9 @@ class Retranslator
         // Children are pushed onto the stack in reverse so they pop in declaration order
         // (preserves pre-order; matches event-index assertions in the Behat tests).
         $nodeTypeManager = $cr->getNodeTypeManager();
+        $staleTranslationMaintenance = $staleTranslationReadModel->staleTranslationMaintenance;
         $stalePropertyCommands = [];
         $variantCommands = [];
-        /** @var list<StaleTranslation> $satisfiedStaleRecords */
-        $satisfiedStaleRecords = [];
         $stack = [$sourceSubtree];
         while ($stack !== []) {
             $currentSubtree = array_pop($stack);
@@ -177,6 +175,7 @@ class Retranslator
             $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
             $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
+            $command = null;
             if ($stale !== null && $existsInTarget) {
                 $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
                     nodeTypeManager: $nodeTypeManager,
@@ -192,27 +191,6 @@ class Retranslator
                 );
                 if ($command !== null) {
                     $stalePropertyCommands[] = $command;
-                } else {
-                    // The target variant exists but there is nothing translatable to set (the source property was
-                    // unset, or holds a value no connector handles). No SetNodeProperties is dispatched, so the
-                    // projection never sees a NodePropertiesWereSet to clear this row — it would otherwise linger
-                    // forever and re-no-op on every run. The node is as in-sync as it can be, so prune the row.
-                    $satisfiedStaleRecords[] = $stale;
-                }
-            } elseif (
-                $stale !== null
-                && $sourceNode->classification->isTethered()
-                && $stale->propertyNames->isEmpty()
-            ) {
-                // Tethered node with a stale row but no target variant (the `$existsInTarget` arm above did not fire)
-                // and no flagged properties. Its variant can only be materialised by a non-tethered ancestor's
-                // CreateNodeVariant cascade — so when that ancestor already exists in the target, nothing will ever
-                // create this node, and with no properties there is nothing to set anyway. No event will clear the
-                // row; it would linger and re-no-op on every run. Treat as a no-op and prune it, consistent with the
-                // target-exists escape hatch above.
-                $parentNode = $sourceSubgraph->findParentNode($sourceNode->aggregateId);
-                if ($parentNode !== null && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null) {
-                    $satisfiedStaleRecords[] = $stale;
                 }
             }
 
@@ -222,6 +200,20 @@ class Retranslator
                     $sourceNode->aggregateId,
                     $sourceNode->originDimensionSpacePoint,
                     OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
+                );
+            }
+
+            // No SetNodeProperties was produced for this stale node — prune the row if no event will ever clear it
+            // (target variant exists with nothing translatable to set, or a tethered no-op). The reconciler leaves a
+            // target-absent non-tethered node alone, since its CreateNodeVariant cascade above will translate it.
+            if ($stale !== null && $command === null) {
+                StaleRecordReconciler::pruneIfUnsatisfiable(
+                    $staleTranslationMaintenance,
+                    $workspaceName,
+                    $stale,
+                    $sourceNode,
+                    $sourceSubgraph,
+                    $targetSubgraph,
                 );
             }
 
@@ -248,22 +240,6 @@ class Retranslator
                 $this->aiCommandDispatcher->dispatch($cr, $command);
             }
         });
-        // Prune stale rows that no command could satisfy — see the no-op branch above. Done after dispatch (these
-        // records never overlap the dispatched commands' nodes) via the maintenance API, the sanctioned escape hatch
-        // for cleanup the projection's event-driven apply() path cannot perform on its own.
-        //
-        // Prune the row in the TARGET workspace we are reconciling — NOT `$stale->workspaceName`. The stale records
-        // were read (via `findBySubtree`) from the SOURCE workspace, so in the cross-workspace case `$stale->workspaceName`
-        // is the source (e.g. `live`); pruning it there would wrongly clear the source's own pending translation, which
-        // this run never touched. In the single-workspace case source == target == `$workspaceName`, so this is
-        // unchanged there.
-        foreach ($satisfiedStaleRecords as $stale) {
-            $staleTranslationReadModel->staleTranslationMaintenance->removeStaleRow(
-                $workspaceName,
-                $stale->nodeAggregateId,
-                $stale->originDimensionSpacePoint,
-            );
-        }
 
         return new RetranslationResult(
             stalePropertyCommandsDispatched: count($stalePropertyCommands),

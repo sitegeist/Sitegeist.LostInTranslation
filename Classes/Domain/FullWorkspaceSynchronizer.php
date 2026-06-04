@@ -170,34 +170,18 @@ class FullWorkspaceSynchronizer
                 $useCache,
             );
             if ($command === null) {
-                // No command for this node. Two situations leave a stale row that no future event will ever clear, so
-                // it would linger and re-no-op on every full sync — prune it directly, mirroring the stale-driven
-                // Retranslator path. (A dry-run only reports, so it must not write.)
-                //   (a) target variant exists but there was nothing translatable to set (every source property unset,
-                //       or held a value no connector handles): no SetNodeProperties — hence no NodePropertiesWereSet.
-                //   (b) tethered node whose target variant is absent while its ancestor already exists in the target,
-                //       and the row flags no properties: no CreateNodeVariant will materialise it (tethered nodes only
-                //       come along with a non-tethered ancestor's cascade, and that ancestor is already present), and
-                //       there is nothing to set.
+                // No command for this node — prune the stale row if no future event will ever clear it (a dry run only
+                // reports, so it must not write). See StaleRecordReconciler for the two no-op cases.
                 $stale = $staleByNodeId[$node->aggregateId->value] ?? null;
                 if (!$dryRun && $stale !== null) {
-                    $targetExists = $targetSubgraph->findNodeById($node->aggregateId) !== null;
-                    $parentNode = !$targetExists && $node->classification->isTethered() && $stale->propertyNames->isEmpty()
-                        ? $sourceSubgraph->findParentNode($node->aggregateId)
-                        : null;
-                    $tetheredMissingNoop = $parentNode !== null
-                        && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null;
-                    if ($targetExists || $tetheredMissingNoop) {
-                        // Prune the row in the TARGET workspace being reconciled. The stale records were collected from
-                        // the SOURCE workspace (see `collectStaleByNodeId`), so in the cross-workspace case
-                        // `$stale->workspaceName` is the source (e.g. `live`); pruning it there would wrongly clear the
-                        // source's own pending translation this run never touched. Single-workspace: source == target.
-                        $staleTranslationMaintenance->removeStaleRow(
-                            $targetWorkspaceName,
-                            $stale->nodeAggregateId,
-                            $stale->originDimensionSpacePoint,
-                        );
-                    }
+                    StaleRecordReconciler::pruneIfUnsatisfiable(
+                        $staleTranslationMaintenance,
+                        $targetWorkspaceName,
+                        $stale,
+                        $node,
+                        $sourceSubgraph,
+                        $targetSubgraph,
+                    );
                 }
                 continue;
             }
