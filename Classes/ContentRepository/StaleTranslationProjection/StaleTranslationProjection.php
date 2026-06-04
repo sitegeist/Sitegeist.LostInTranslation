@@ -493,8 +493,13 @@ class StaleTranslationProjection implements ProjectionInterface
             ->getPropertyNames();
         $propertiesWithDefaultValue = [];
         foreach ($nodeType->getDefaultValuesForProperties() as $propertyName => $defaultValue) {
-            /** @todo implement default value translation for objects */
-            if (is_string($defaultValue)) {
+            // A default value makes its property a translation candidate when it actually carries content: a non-empty
+            // string, or a non-empty array/object — the latter being an object-typed property whose translatable
+            // leaves a TranslationConnector extracts. We do not gate on translatability here; the array_intersect with
+            // $translatablePropertyNames below discards any non-translatable property (so scalar non-string defaults
+            // such as int/bool, which never have a connector, are filtered out there).
+            $carriesContent = is_string($defaultValue) ? $defaultValue !== '' : !empty($defaultValue);
+            if ($carriesContent) {
                 $propertiesWithDefaultValue[] = $propertyName;
             }
         }

@@ -238,6 +238,30 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | Key              | Expected            |
       | initiatingUserId | "AI:dummy:my-dummy" |
 
+  Scenario: A translatable property left at its NodeType default value is translated
+    # `autoTranslatableStringProperty` is not set explicitly here, so it takes its NodeType default ("autoTranslateMe").
+    # Defaults are part of the node's initial property values, so the projection records the property stale and the
+    # CreateNodeVariant cascade translates the default just like an explicitly-set value.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value                    |
+      | nodeAggregateId | "sir-david-nodenborough" |
+      | sourceOrigin    | {"language":"en"}        |
+      | targetOrigin    | {"language":"de"}        |
+    When I am in dimension space point {"language": "de"}
+    Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node user-cs-id;sir-david-nodenborough;{"language":"de"}
+    And I expect this node to have the following properties:
+      | Key                            | Value                        |
+      | inlineEditableStringProperty   | "My Text translated"         |
+      | autoTranslatableStringProperty | "autoTranslateMe translated" |
+
   Scenario: Retranslate skips nested Document subtrees
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
