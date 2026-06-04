@@ -7,6 +7,7 @@ namespace Sitegeist\LostInTranslation\Domain\Directive;
 use Neos\ContentRepository\Core\CommandHandler\Commands;
 use Neos\ContentRepository\Core\Dimension\ContentDimension;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionValue;
+use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 
 class DimensionValueDirectiveFactory
@@ -43,5 +44,29 @@ class DimensionValueDirectiveFactory
         } else {
             return null;
         }
+    }
+
+    /**
+     * Resolve the DeepL source/target language pair for translating from `$sourceDimensionSpacePoint` into
+     * `$targetDimensionSpacePoint`. Returns null when either side has no resolvable DeepL language (e.g. translation
+     * disabled for the dimension value), which callers surface as a "skip" of the synchronization.
+     */
+    public function tryResolveLanguagePair(
+        ContentDimension $languageDimension,
+        DimensionSpacePoint $sourceDimensionSpacePoint,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+    ): ?DeeplLanguagePair {
+        $sourceLanguage = $this->tryCreateForDimensionAndOriginDimensionSpacePoint(
+            $languageDimension,
+            OriginDimensionSpacePoint::fromDimensionSpacePoint($sourceDimensionSpacePoint),
+        )?->deeplSourceId;
+        $targetLanguage = $this->tryCreateForDimensionAndOriginDimensionSpacePoint(
+            $languageDimension,
+            OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
+        )?->deeplTargetId;
+        if ($sourceLanguage === null || $targetLanguage === null) {
+            return null;
+        }
+        return new DeeplLanguagePair($sourceLanguage, $targetLanguage);
     }
 }

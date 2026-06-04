@@ -15,8 +15,6 @@ use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
-use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
-use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
@@ -27,6 +25,7 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
+use Sitegeist\LostInTranslation\Domain\CrossWorkspaceSynchronizationTarget;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\NodeTreeDepth;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
@@ -211,38 +210,17 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
     /**
      * Bring the rule's target workspace current with its source so the inline sync (and the stale-translation
-     * projection that the backend status reads) reflect the just-published source content. Returns false when the rule
-     * cannot run at all and the caller must skip it:
-     *  - the target workspace does not exist — it is NEVER auto-created here (materialising a workspace on every publish
-     *    is the deliberate, manual editor/admin path's job, not the inline hook's);
-     *  - (cross-workspace) the target is not based on the source, so it cannot be reconciled with it.
-     *
-     * For a same-workspace rule there is nothing to rebase. For a cross-workspace rule the target is force-rebased onto
-     * the source: this brings the target's source dimension current with the published source (every source node exists
-     * in the target, and the translation reads the latest source) and — via the projection's `replaceWorkspaceEntries`
-     * on `WorkspaceWasRebased` — refreshes the target's stale rows. The target's own review edits are replayed on top;
-     * genuinely-conflicting target changes are dropped (the published source wins).
+     * projection that the backend status reads) reflect the just-published source content — see
+     * {@see CrossWorkspaceSynchronizationTarget}. Returns false when the rule cannot run at all and the caller must
+     * skip it (target workspace missing, or — cross-workspace — not based on the source).
      */
     private function rebaseTargetOntoSource(SynchronizationRule $rule): bool
     {
-        $sourceWorkspace = WorkspaceName::fromString($rule->sourceWorkspaceName);
-        $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
-
-        $targetWorkspaceModel = $this->contentGraphReadModel->findWorkspaceByName($targetWorkspace);
-        if ($targetWorkspaceModel === null) {
-            return false;
-        }
-        if ($targetWorkspace->equals($sourceWorkspace)) {
-            return true;
-        }
-        if ($targetWorkspaceModel->baseWorkspaceName === null || !$targetWorkspaceModel->baseWorkspaceName->equals($sourceWorkspace)) {
-            return false;
-        }
-        $this->contentRepositoryRegistry->get($this->contentRepositoryId)->handle(
-            RebaseWorkspace::create($targetWorkspace)
-                ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
-        );
-        return true;
+        return CrossWorkspaceSynchronizationTarget::prepare(
+            $this->contentRepositoryRegistry->get($this->contentRepositoryId),
+            WorkspaceName::fromString($rule->sourceWorkspaceName),
+            WorkspaceName::fromString($rule->targetWorkspaceName),
+        ) === null;
     }
 
     /**
@@ -257,19 +235,16 @@ final class SynchronizationCommandHook implements CommandHookInterface
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDsp);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
 
-        $sourceDeepl = $this->dimensionValueDirectiveFactory
-            ->tryCreateForDimensionAndOriginDimensionSpacePoint(
-                $this->languageDimension,
-                OriginDimensionSpacePoint::fromDimensionSpacePoint($sourceDsp),
-            )?->deeplSourceId;
-        $targetDeepl = $this->dimensionValueDirectiveFactory
-            ->tryCreateForDimensionAndOriginDimensionSpacePoint(
-                $this->languageDimension,
-                $targetOrigin,
-            )?->deeplTargetId;
-        if ($sourceDeepl === null || $targetDeepl === null) {
+        $languagePair = $this->dimensionValueDirectiveFactory->tryResolveLanguagePair(
+            $this->languageDimension,
+            $sourceDsp,
+            $targetDsp,
+        );
+        if ($languagePair === null) {
             return [];
         }
+        $sourceDeepl = $languagePair->sourceLanguage;
+        $targetDeepl = $languagePair->targetLanguage;
 
         $sourceSubgraph = $this->contentGraphReadModel
             ->getContentGraph($targetWorkspace)

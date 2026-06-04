@@ -7,8 +7,6 @@ namespace Sitegeist\LostInTranslation\Domain;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
-use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
-use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
@@ -103,36 +101,11 @@ class WorkspaceSynchronizer
             ));
         }
 
-        // The target workspace is never auto-created: a config rule may point at a workspace that does not exist yet,
-        // but materialising workspaces is a deliberate editor/admin action, not a side effect of synchronization. Fail
-        // gracefully so the caller (CLI / Neos UI) can surface a clear error notification instead of faulting on a
-        // missing workspace further down.
-        $targetWorkspace = $cr->findWorkspaceByName($targetWorkspaceName);
-        if ($targetWorkspace === null) {
-            return WorkspaceSynchronizationResult::skipped(sprintf(
-                'target workspace "%s" does not exist',
-                $targetWorkspaceName->value,
-            ));
-        }
-        // Cross-workspace synchronization requires the target to be based on the source workspace, so the rebase below
-        // can bring it current with the source. A target that is neither the source itself nor based on it cannot be
-        // synchronized this way.
-        if (!$sourceWorkspaceName->equals($targetWorkspaceName)) {
-            if ($targetWorkspace->baseWorkspaceName === null || !$targetWorkspace->baseWorkspaceName->equals($sourceWorkspaceName)) {
-                return WorkspaceSynchronizationResult::skipped(sprintf(
-                    'target workspace "%s" must be based on source workspace "%s" for cross-workspace synchronization',
-                    $targetWorkspaceName->value,
-                    $sourceWorkspaceName->value,
-                ));
-            }
-            // Bring the target current with its base (the source workspace) before reading it, so the source content
-            // the translation reads from the target matches the source workspace and every source node exists in the
-            // target. Conflicting target-side changes are dropped (force); non-conflicting target-dimension review
-            // edits survive the rebase replay.
-            $cr->handle(
-                RebaseWorkspace::create($targetWorkspaceName)
-                    ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
-            );
+        // Validate the target workspace (never auto-created) and, cross-workspace, force-rebase it onto the source so
+        // the translation reads the latest source content. Fail gracefully with a skip reason the CLI / Neos UI shows.
+        $skipReason = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName);
+        if ($skipReason !== null) {
+            return WorkspaceSynchronizationResult::skipped($skipReason);
         }
 
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);

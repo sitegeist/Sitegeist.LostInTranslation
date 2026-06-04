@@ -47,6 +47,9 @@ class Retranslator
     protected StalePropertyCommandBuilder $stalePropertyCommandBuilder;
 
     #[Flow\Inject]
+    protected DimensionValueDirectiveFactory $dimensionValueDirectiveFactory;
+
+    #[Flow\Inject]
     protected SecurityContext $securityContext;
 
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
@@ -101,22 +104,20 @@ class Retranslator
             ));
         }
 
-        $dimensionValueDirectiveFactory = new DimensionValueDirectiveFactory();
-        $sourceDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
+        $languagePair = $this->dimensionValueDirectiveFactory->tryResolveLanguagePair(
             $languageDimension,
-            OriginDimensionSpacePoint::fromDimensionSpacePoint($sourceDimensionSpacePoint),
-        )?->deeplSourceId;
-        $targetDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
-            $languageDimension,
-            OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
-        )?->deeplTargetId;
-        if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
+            $sourceDimensionSpacePoint,
+            $targetDimensionSpacePoint,
+        );
+        if ($languagePair === null) {
             return RetranslationResult::skipped(sprintf(
                 'DeepL language not resolvable for source %s or target %s',
                 $sourceDimensionSpacePoint->toJson(),
                 $targetDimensionSpacePoint->toJson(),
             ));
         }
+        $sourceDeeplLanguage = $languagePair->sourceLanguage;
+        $targetDeeplLanguage = $languagePair->targetLanguage;
 
         // Source subtree is read from the source workspace; target-variant existence from the (possibly different)
         // target workspace. They are the same graph in the common single-workspace case.
