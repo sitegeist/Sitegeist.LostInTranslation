@@ -317,7 +317,8 @@ class StaleTranslationProjection implements ProjectionInterface
         }
         $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
             ->getPropertyNames();
-        $this->dbal->transactional(function () use ($event, $translatablePropertyNames) {
+        $targetDimensionSpacePoints = $this->referenceDimensionSpacePointResolver->findAllTargetDimensionSpacePoints($event->originDimensionSpacePoint->toDimensionSpacePoint());
+        $this->dbal->transactional(function () use ($event, $translatablePropertyNames, $targetDimensionSpacePoints) {
             $record = $this->dbal->executeQuery(
                 'SELECT propertyNames FROM ' . $this->itemTableName
                     . ' WHERE workspaceName = :workspaceName
@@ -365,11 +366,8 @@ class StaleTranslationProjection implements ProjectionInterface
                     );
                 }
             }
-        });
 
-        $targetDimensionSpacePoints = $this->referenceDimensionSpacePointResolver->findAllTargetDimensionSpacePoints($event->originDimensionSpacePoint->toDimensionSpacePoint());
-        foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
-            $this->dbal->transactional(function () use ($event, $targetDimensionSpacePoint, $translatablePropertyNames) {
+            foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
                 $record = $this->dbal->executeQuery(
                     'SELECT propertyNames FROM ' . $this->itemTableName
                     . ' WHERE workspaceName = :workspaceName
@@ -435,8 +433,8 @@ class StaleTranslationProjection implements ProjectionInterface
                         );
                     }
                 }
-            });
-        }
+            }
+        });
     }
 
     private function whenNodeAggregateWasRemoved(NodeAggregateWasRemoved $event): void
@@ -507,13 +505,13 @@ class StaleTranslationProjection implements ProjectionInterface
         foreach ($affectedRecords as $affectedRecord) {
             $currentStaleProperties = \json_decode($affectedRecord['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
             $newStaleProperties = array_merge($currentStaleProperties, $propertiesWithDefaultValue);
-            $newStaleProperties = array_intersect(
+            $newStaleProperties = array_values(array_unique(array_intersect(
                 $newStaleProperties,
                 array_map(
                     fn (PropertyName $propertyName): string => $propertyName->value,
                     iterator_to_array($translatablePropertyNames),
                 )
-            );
+            )));
             if ($newStaleProperties != $currentStaleProperties) {
                 $this->dbal->update(
                     $this->itemTableName,

@@ -84,7 +84,6 @@ class FullWorkspaceSynchronizer
         WorkspaceName $targetWorkspaceName,
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $skipExisting = true,
-        bool $useCache = true,
         bool $dryRun = false,
     ): WorkspaceSynchronizationResult {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
@@ -167,7 +166,6 @@ class FullWorkspaceSynchronizer
                 $sourceDeepl,
                 $targetDeepl,
                 $skipExisting,
-                $useCache,
             );
             if ($command === null) {
                 // No command for this node — prune the stale row if no future event will ever clear it (a dry run only
@@ -219,7 +217,6 @@ class FullWorkspaceSynchronizer
         string $sourceDeepl,
         string $targetDeepl,
         bool $skipExisting,
-        bool $useCache,
     ): ?CommandInterface {
         $nodeType = $nodeTypeManager->getNodeType($node->nodeTypeName);
         if ($nodeType === null) {
@@ -266,7 +263,6 @@ class FullWorkspaceSynchronizer
             targetOrigin: $targetOrigin,
             sourceDeeplLanguage: $sourceDeepl,
             targetDeeplLanguage: $targetDeepl,
-            useCache: $useCache,
             targetWorkspaceName: $targetWorkspaceName,
         );
     }
