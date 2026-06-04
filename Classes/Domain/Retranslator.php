@@ -239,15 +239,18 @@ class Retranslator
         // regardless of the workspace role of whoever triggered it (an editor publishing, or clicking "sync now",
         // need not have write access to e.g. `live`). We therefore dispatch with CR authorization checks disabled.
         // The writes remain bounded to translation commands for the configured/stale nodes.
+        // Both command groups are dispatched as AI: this is a system translation operation, so every resulting event
+        // (the structural NodePeerVariantWasCreated AND the translated NodePropertiesWereSet) is attributed to the AI
+        // service rather than the editor who triggered the run — consistent with the publish-driven
+        // SynchronizationCommandHook. The two groups act on disjoint nodes (SetNodeProperties for variants that already
+        // exist in the target, CreateNodeVariant for those that do not), so their relative order is immaterial; only
+        // the within-`$variantCommands` pre-order (ancestor before descendant) matters and is preserved by the walk.
         $this->securityContext->withoutAuthorizationChecks(function () use ($cr, $stalePropertyCommands, $variantCommands): void {
             foreach ($stalePropertyCommands as $command) {
-                // Mark commands as "triggered by AI"
                 $this->dispatchAsAi($cr, $command);
             }
             foreach ($variantCommands as $command) {
-                // TODO: Why variant commands after property commands?
-                // TODO: Why not dispatch these as AI as well?
-                $cr->handle($command);
+                $this->dispatchAsAi($cr, $command);
             }
         });
         // Prune stale rows that no command could satisfy — see the no-op branch above. Done after dispatch (these
