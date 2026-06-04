@@ -315,14 +315,9 @@ class FullWorkspaceSynchronizer
         OriginDimensionSpacePoint $targetOrigin,
     ): array {
         $staleByNodeId = [];
-        foreach ($cr->projectionState(StaleTranslationReadModel::class)->staleTranslationFinder->findAll() as $stale) {
+        $finder = $cr->projectionState(StaleTranslationReadModel::class)->staleTranslationFinder;
+        foreach ($finder->findByWorkspaceAndOrigin($targetWorkspaceName, $targetOrigin) as $stale) {
             assert($stale instanceof StaleTranslation);
-            if (!$stale->workspaceName->equals($targetWorkspaceName)) {
-                continue;
-            }
-            if ($stale->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
-                continue;
-            }
             if ($contentGraph->findNodeAggregateById($stale->nodeAggregateId) === null) {
                 continue;
             }

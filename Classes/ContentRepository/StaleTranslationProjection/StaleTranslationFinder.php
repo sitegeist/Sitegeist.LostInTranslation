@@ -9,6 +9,7 @@ use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\Projection\ProjectionStateInterface;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
 
 /**
@@ -31,6 +32,30 @@ final class StaleTranslationFinder implements ProjectionStateInterface
             <<<SQL
             SELECT * FROM {$this->tableName}
             SQL,
+        )->fetchAllAssociative();
+
+        return StaleTranslations::fromDatabaseRows($staleTranslationRows);
+    }
+
+    /**
+     * Find the stale-translation records for one (workspace, target-origin) slice — the slice the synchronizers and the
+     * backend status actually act on. Scoped in SQL so callers no longer hydrate the whole projection via
+     * {@see self::findAll()} and filter by `workspaceName` + `originDimensionSpacePointHash` in PHP.
+     */
+    public function findByWorkspaceAndOrigin(
+        WorkspaceName $workspaceName,
+        OriginDimensionSpacePoint $originDimensionSpacePoint,
+    ): StaleTranslations {
+        $staleTranslationRows = $this->dbal->executeQuery(
+            <<<SQL
+            SELECT * FROM {$this->tableName}
+                WHERE workspaceName = :workspaceName
+                    AND originDimensionSpacePointHash = :originDimensionSpacePointHash
+            SQL,
+            [
+                'workspaceName' => $workspaceName->value,
+                'originDimensionSpacePointHash' => $originDimensionSpacePoint->hash,
+            ],
         )->fetchAllAssociative();
 
         return StaleTranslations::fromDatabaseRows($staleTranslationRows);

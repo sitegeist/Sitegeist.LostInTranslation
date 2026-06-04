@@ -72,13 +72,7 @@ class SynchronizationStatusProvider
         $targetContentGraph = $cr->getContentGraph($targetWorkspaceName);
 
         $count = 0;
-        foreach ($finder->findAll() as $entry) {
-            if (!$entry->workspaceName->equals($targetWorkspaceName)) {
-                continue;
-            }
-            if ($entry->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
-                continue;
-            }
+        foreach ($finder->findByWorkspaceAndOrigin($targetWorkspaceName, $targetOrigin) as $entry) {
             // Skip orphaned stale rows whose aggregate no longer exists (the projection does not cascade descendant
             // cleanup on removal — see `lostintranslation:reconcile`); WorkspaceSynchronizer skips them too.
             if ($targetContentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {

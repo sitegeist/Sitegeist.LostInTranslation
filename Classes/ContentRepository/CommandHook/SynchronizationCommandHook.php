@@ -258,13 +258,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
         // ancestor-before-descendant below.
         /** @var list<array{depth:int,command:CommandInterface}> $plannedCommands */
         $plannedCommands = [];
-        foreach ($this->staleTranslationFinder()->findAll() as $stale) {
-            if (!$stale->workspaceName->equals($targetWorkspace)) {
-                continue;
-            }
-            if ($stale->originDimensionSpacePoint->hash !== $targetOrigin->hash) {
-                continue;
-            }
+        foreach ($this->staleTranslationFinder()->findByWorkspaceAndOrigin($targetWorkspace, $targetOrigin) as $stale) {
             $sourceNode = $sourceSubgraph->findNodeById($stale->nodeAggregateId);
             // Source variant not present in the target workspace at the source dimension — nothing to translate from.
             // Leave the stale row alone.
