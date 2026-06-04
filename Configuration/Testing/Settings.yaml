@@ -26,6 +26,15 @@ Sitegeist:
           targetWorkspaceName: content-review
           targetDimension: es
           scope: Content
+        # Cross-workspace `ask` rule: publishing to `live` force-rebases the `de-review` workspace onto `live` (so its
+        # status reflects what needs translating) but defers the actual translation to a manual sync. Only fires when
+        # `de-review` exists. Exercises the rebase-on-publish-for-ask path.
+        - sourceWorkspaceName: live
+          sourceDimension: en
+          targetWorkspaceName: de-review
+          targetDimension: de
+          scope: Document
+          mode: ask
 
 Neos:
   Flow:

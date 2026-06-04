@@ -161,9 +161,16 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
         $additionalCommands = [];
         foreach ($matchingRules as $rule) {
-            // `ask` rules are synchronized out-of-band (Neos UI prompt / backend module "sync now") via
-            // WorkspaceSynchronizer, so the publish itself stays fast and atomic. Their stale rows are left untouched
-            // here and picked up by the deferred run.
+            // Bring the rule's target workspace current with the just-published source on EVERY publish — including for
+            // `ask` rules. This refreshes the stale-translation projection for the (cross-workspace) target so the
+            // backend module reports what still needs syncing, instead of the target lagging until someone rebases it.
+            // Returns false when the rule cannot run at all (target workspace missing, or not based on the source).
+            if (!$this->rebaseTargetOntoSource($rule)) {
+                continue;
+            }
+            // `ask` rules defer the actual translation to a deliberate manual sync (Neos UI prompt / backend module
+            // "sync now") so the publish stays fast. The rebase above already refreshed their status; nothing more to
+            // do inline.
             if ($rule->mode === SynchronizationMode::Ask) {
                 continue;
             }
@@ -205,40 +212,52 @@ final class SynchronizationCommandHook implements CommandHookInterface
     }
 
     /**
+     * Bring the rule's target workspace current with its source so the inline sync (and the stale-translation
+     * projection that the backend status reads) reflect the just-published source content. Returns false when the rule
+     * cannot run at all and the caller must skip it:
+     *  - the target workspace does not exist — it is NEVER auto-created here (materialising a workspace on every publish
+     *    is the deliberate, manual editor/admin path's job, not the inline hook's);
+     *  - (cross-workspace) the target is not based on the source, so it cannot be reconciled with it.
+     *
+     * For a same-workspace rule there is nothing to rebase. For a cross-workspace rule the target is force-rebased onto
+     * the source: this brings the target's source dimension current with the published source (every source node exists
+     * in the target, and the translation reads the latest source) and — via the projection's `replaceWorkspaceEntries`
+     * on `WorkspaceWasRebased` — refreshes the target's stale rows. The target's own review edits are replayed on top;
+     * genuinely-conflicting target changes are dropped (the published source wins).
+     */
+    private function rebaseTargetOntoSource(SynchronizationRule $rule): bool
+    {
+        $sourceWorkspace = WorkspaceName::fromString($rule->sourceWorkspaceName);
+        $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
+
+        $targetWorkspaceModel = $this->contentGraphReadModel->findWorkspaceByName($targetWorkspace);
+        if ($targetWorkspaceModel === null) {
+            return false;
+        }
+        if ($targetWorkspace->equals($sourceWorkspace)) {
+            return true;
+        }
+        if ($targetWorkspaceModel->baseWorkspaceName === null || !$targetWorkspaceModel->baseWorkspaceName->equals($sourceWorkspace)) {
+            return false;
+        }
+        $this->contentRepositoryRegistry->get($this->contentRepositoryId)->handle(
+            RebaseWorkspace::create($targetWorkspace)
+                ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
+        );
+        return true;
+    }
+
+    /**
      * @return list<CommandInterface>
      */
     private function commandsForRule(SynchronizationRule $rule): array
     {
+        // The target workspace has already been validated and (cross-workspace) rebased onto the source by
+        // {@see self::rebaseTargetOntoSource()} before this is called, so we read the current, reconciled state here.
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDsp);
-        $sourceWorkspace = WorkspaceName::fromString($rule->sourceWorkspaceName);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
-
-        // Cross-workspace rules (targetWorkspaceName != the publish target) fire on every publish that lands on the
-        // rule's source workspace — even before the review/target workspace has been provisioned. The workspace is
-        // never auto-created here: materialising a workspace on every publish is the deliberate, manual editor/admin
-        // path's job, not the inline publish hook's. When the target workspace is absent there is nothing to
-        // (re-)translate into, so skip the rule rather than letting `getContentGraph()` throw `WorkspaceDoesNotExist`.
-        $targetWorkspaceModel = $this->contentGraphReadModel->findWorkspaceByName($targetWorkspace);
-        if ($targetWorkspaceModel === null) {
-            return [];
-        }
-
-        // Cross-workspace sync: the target must be based on the source workspace, and is force-rebased onto it before we
-        // read it. The rebase brings the target's source dimension current with the just-published source content (so
-        // every source node exists in the target and the translation reads the latest source) and replays the target's
-        // own review edits on top. Conflicting target-side changes are dropped — the published source wins. A target
-        // that is not based on the source cannot be reconciled this way, so the rule is skipped.
-        if (!$targetWorkspace->equals($sourceWorkspace)) {
-            if ($targetWorkspaceModel->baseWorkspaceName === null || !$targetWorkspaceModel->baseWorkspaceName->equals($sourceWorkspace)) {
-                return [];
-            }
-            $this->contentRepositoryRegistry->get($this->contentRepositoryId)->handle(
-                RebaseWorkspace::create($targetWorkspace)
-                    ->withErrorHandlingStrategy(RebaseErrorHandlingStrategy::STRATEGY_FORCE)
-            );
-        }
 
         $sourceDeepl = $this->dimensionValueDirectiveFactory
             ->tryCreateForDimensionAndOriginDimensionSpacePoint(

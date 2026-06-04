@@ -41,9 +41,17 @@ class SynchronizationStatusProvider
      */
     public function forRules(ContentRepositoryId $contentRepositoryId, SynchronizationRules $rules): array
     {
+        $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $statuses = [];
         foreach ($rules as $rule) {
-            $statuses[] = new RuleSynchronizationStatus($rule, $this->pendingCountForRule($contentRepositoryId, $rule));
+            $targetWorkspaceExists = $cr->findWorkspaceByName(
+                WorkspaceName::fromString($rule->targetWorkspaceName)
+            ) !== null;
+            $statuses[] = new RuleSynchronizationStatus(
+                $rule,
+                $this->pendingCountForRule($contentRepositoryId, $rule),
+                $targetWorkspaceExists,
+            );
         }
         return $statuses;
     }

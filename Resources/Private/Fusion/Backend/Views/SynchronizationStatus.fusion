@@ -29,7 +29,7 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
           <th>Target</th>
           <th>Scope</th>
           <th>Mode</th>
-          <th>Out of sync</th>
+          <th>Status</th>
           <th></th>
         </tr>
         </thead>
@@ -41,9 +41,15 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
             <td>{rule.scope}</td>
             <td>{rule.mode}</td>
             <td>
-              <i class="fas fa-check-circle" style="color:green;" @if={rule.pendingCount < 1}></i>
-              <i class="fas fa-exclamation-triangle" style="color:#ffae00;" @if={rule.pendingCount > 0}></i>
-              &nbsp;{rule.pendingCount > 0 ? rule.pendingCount + ' translation(s) pending' : 'up to date'}
+              <Neos.Fusion:Fragment @if={!rule.targetWorkspaceExists}>
+                <i class="fas fa-times-circle" style="color:#ff460d;"></i>
+                &nbsp;target workspace does not exist
+              </Neos.Fusion:Fragment>
+              <Neos.Fusion:Fragment @if={rule.targetWorkspaceExists}>
+                <i class="fas fa-check-circle" style="color:green;" @if={rule.pendingCount < 1}></i>
+                <i class="fas fa-exclamation-triangle" style="color:#ffae00;" @if={rule.pendingCount > 0}></i>
+                &nbsp;{rule.pendingCount > 0 ? rule.pendingCount + ' translation(s) pending' : 'up to date'}
+              </Neos.Fusion:Fragment>
             </td>
             <td class="neos-action">
               <Neos.Fusion.Form:Form form.target.action="synchronizeRule" attributes.class="neos-inline neos-pull-right">

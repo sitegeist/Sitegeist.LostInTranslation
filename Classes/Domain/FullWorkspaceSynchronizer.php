@@ -219,8 +219,12 @@ class FullWorkspaceSynchronizer
                     $tetheredMissingNoop = $parentNode !== null
                         && $targetSubgraph->findNodeById($parentNode->aggregateId) !== null;
                     if ($targetExists || $tetheredMissingNoop) {
+                        // Prune the row in the TARGET workspace being reconciled. The stale records were collected from
+                        // the SOURCE workspace (see `collectStaleByNodeId`), so in the cross-workspace case
+                        // `$stale->workspaceName` is the source (e.g. `live`); pruning it there would wrongly clear the
+                        // source's own pending translation this run never touched. Single-workspace: source == target.
                         $staleTranslationMaintenance->removeStaleRow(
-                            $stale->workspaceName,
+                            $targetWorkspaceName,
                             $stale->nodeAggregateId,
                             $stale->originDimensionSpacePoint,
                         );

@@ -9,10 +9,15 @@ use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Command\RebaseWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\Dto\RebaseErrorHandlingStrategy;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
+use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 
 /**
@@ -138,8 +143,17 @@ class WorkspaceSynchronizer
         // Stale rows are flagged against the workspace the source content was edited in, so they drive the run from
         // the source side; existence is checked there too. In the single-workspace case source == target.
         $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
+        $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
 
-        $perNodeResults = [];
+        // Stale records arrive in primary-key order, not hierarchical order. Creating a node variant requires its
+        // parent to already cover the target dimension (CR `requireNodeAggregateToCoverDimensionSpacePoint`), so
+        // synchronizing a child document before its parent would abort with "Node aggregate <parent> does currently
+        // not cover dimension space point". We therefore pair each matching record with its source-tree depth and
+        // process them ancestor-before-descendant — a parent document's `retranslateNode` (which creates its variant)
+        // runs before any descendant's. This mirrors the publish-driven {@see SynchronizationCommandHook}. PHP's sort
+        // is stable (>= 8.0), so records at equal depth keep their original (id) order.
+        /** @var list<array{depth:int,entry:StaleTranslation}> $plannedEntries */
+        $plannedEntries = [];
         foreach ($finder->findAll() as $entry) {
             if (!$entry->workspaceName->equals($sourceWorkspaceName)) {
                 continue;
@@ -152,6 +166,16 @@ class WorkspaceSynchronizer
             if ($sourceContentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {
                 continue;
             }
+            $plannedEntries[] = [
+                'depth' => $this->treeDepthOf($sourceSubgraph, $entry->nodeAggregateId),
+                'entry' => $entry,
+            ];
+        }
+        usort($plannedEntries, static fn (array $a, array $b): int => $a['depth'] <=> $b['depth']);
+
+        $perNodeResults = [];
+        foreach ($plannedEntries as $plannedEntry) {
+            $entry = $plannedEntry['entry'];
             if ($dryRun) {
                 $perNodeResults[] = new PerNodeSynchronizationResult(
                     $entry->nodeAggregateId,
@@ -170,5 +194,14 @@ class WorkspaceSynchronizer
         }
 
         return new WorkspaceSynchronizationResult($perNodeResults);
+    }
+
+    /**
+     * Distance of the node from its root aggregate in the source subgraph (root = 0, its children = 1, …). Used purely
+     * to order synchronization ancestor-before-descendant so a parent document's variant is created before its child's.
+     */
+    private function treeDepthOf(ContentSubgraphInterface $sourceSubgraph, NodeAggregateId $nodeAggregateId): int
+    {
+        return $sourceSubgraph->findAncestorNodes($nodeAggregateId, FindAncestorNodesFilter::create())->count();
     }
 }

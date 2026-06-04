@@ -251,9 +251,15 @@ class Retranslator
         // Prune stale rows that no command could satisfy — see the no-op branch above. Done after dispatch (these
         // records never overlap the dispatched commands' nodes) via the maintenance API, the sanctioned escape hatch
         // for cleanup the projection's event-driven apply() path cannot perform on its own.
+        //
+        // Prune the row in the TARGET workspace we are reconciling — NOT `$stale->workspaceName`. The stale records
+        // were read (via `findBySubtree`) from the SOURCE workspace, so in the cross-workspace case `$stale->workspaceName`
+        // is the source (e.g. `live`); pruning it there would wrongly clear the source's own pending translation, which
+        // this run never touched. In the single-workspace case source == target == `$workspaceName`, so this is
+        // unchanged there.
         foreach ($satisfiedStaleRecords as $stale) {
             $staleTranslationReadModel->staleTranslationMaintenance->removeStaleRow(
-                $stale->workspaceName,
+                $workspaceName,
                 $stale->nodeAggregateId,
                 $stale->originDimensionSpacePoint,
             );

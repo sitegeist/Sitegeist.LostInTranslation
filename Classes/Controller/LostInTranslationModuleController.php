@@ -108,6 +108,7 @@ class LostInTranslationModuleController extends AbstractModuleController
                 'scope' => $status->rule->scope->value,
                 'mode' => $status->rule->mode->value,
                 'pendingCount' => $status->pendingCount,
+                'targetWorkspaceExists' => $status->targetWorkspaceExists,
             ];
         }
 

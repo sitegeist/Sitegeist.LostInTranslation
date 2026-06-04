@@ -347,6 +347,61 @@ Feature: Automatic retranslation on workspace publish
       | user-workspace       | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace       | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
+  Scenario: Synchronization creates a missing ancestor document before a descendant document
+    # Creating a node variant requires its parent to already cover the target dimension
+    # (CR `requireNodeAggregateToCoverDimensionSpacePoint`). When a freshly-created child document sits under a parent
+    # document that has not been varied into the target dimension yet, synchronizing the child before the parent would
+    # abort with `Node aggregate "parent-doc" does currently not cover dimension space point {"language":"de"}`. The
+    # WorkspaceSynchronizer processes stale records ancestor-before-descendant (by source-tree depth) so the parent's
+    # variant is created first. The child id ("child-doc") deliberately sorts BEFORE the parent id ("parent-doc"),
+    # proving the ordering is hierarchical and not by stale-record id.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                             |
+      | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Parent Text"} |
+      | child-doc       | parent-doc             | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Child Text"}  |
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
+      | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | child-doc       | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | parent-doc      | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | parent-doc      | ["autoTranslatableStringProperty"] |
+
+        # 1x ContentStreamWasForked (CreateWorkspace user-workspace) + 2x NodeAggregateWithNodeWasCreated
+    And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
+
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"}
+
+        # Both de rows cleared (parent created+translated first, then child); es rows survive (sync targeted de only).
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
+      | user-workspace | {"language":"es"}         | child-doc       | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | parent-doc      | ["autoTranslatableStringProperty"] |
+
+        # +4 events: parent-doc variant + its translation (ancestor, created first), then child-doc variant + its
+        # translation. Ancestor-before-descendant ordering keeps the parent-covers-target invariant at every step.
+    And I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
+    And event at index 3 is of type "NodePeerVariantWasCreated" with payload:
+      | Key             | Expected           |
+      | nodeAggregateId | "parent-doc"       |
+      | sourceOrigin    | {"language": "en"} |
+      | peerOrigin      | {"language": "de"} |
+    And event at index 4 is of type "NodePropertiesWereSet" with payload:
+      | Key                                                 | Expected                 |
+      | nodeAggregateId                                     | "parent-doc"             |
+      | originDimensionSpacePoint                           | {"language": "de"}       |
+      | propertyValues.autoTranslatableStringProperty.value | "Parent Text translated" |
+    And event at index 5 is of type "NodePeerVariantWasCreated" with payload:
+      | Key             | Expected           |
+      | nodeAggregateId | "child-doc"        |
+      | sourceOrigin    | {"language": "en"} |
+      | peerOrigin      | {"language": "de"} |
+    And event at index 6 is of type "NodePropertiesWereSet" with payload:
+      | Key                                                 | Expected                |
+      | nodeAggregateId                                     | "child-doc"             |
+      | originDimensionSpacePoint                           | {"language": "de"}      |
+      | propertyValues.autoTranslatableStringProperty.value | "Child Text translated" |
+
   Scenario: Full sync into an empty target dimension creates variants across the whole subtree
     # The `synchronize --full` mode (FullWorkspaceSynchronizer) walks every translatable node from the root down,
     # independent of stale state. Here a deep subtree (document + content with tethered child + grandchild) lives
@@ -1289,6 +1344,41 @@ Feature: Automatic retranslation on workspace publish
       | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
+  Scenario: Cross-workspace stale-driven sync must not prune the SOURCE workspace's stale rows
+    # Cross-workspace sync (live/en → de-review/de) of a Document.Page with a tethered `main` collection. The
+    # collection has no translatable properties, so its stale row is structural (empty property list). The document's
+    # CreateNodeVariant cascade materialises the collection in de-review/de, after which the collection's own sync pass
+    # is a no-op (nothing translatable to set). That no-op prune must remove the row from the TARGET workspace
+    # (de-review) it is reconciling — NOT from `live`, which was never translated and still owes a de translation.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                              | initialPropertyValues | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page | {"title": "Home"}     | {"main": "page-home-main"}         |
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    And I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | live          | {"language":"de"}         | page-home       | ["title"]     |
+      | live          | {"language":"es"}         | page-home       | ["title"]     |
+      | live          | {"language":"de"}         | page-home-main  | []            |
+      | live          | {"language":"es"}         | page-home-main  | []            |
+
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+
+    # de-review got the translated de variant; its de rows are cleared, leaving the rebase-copied es rows.
+    # CRUCIAL: `live` must retain ALL FOUR of its own rows — the sync wrote into de-review, not live.
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | de-review     | {"language":"es"}         | page-home       | ["title"]     |
+      | de-review     | {"language":"es"}         | page-home-main  | []            |
+      | live          | {"language":"de"}         | page-home       | ["title"]     |
+      | live          | {"language":"es"}         | page-home       | ["title"]     |
+      | live          | {"language":"de"}         | page-home-main  | []            |
+      | live          | {"language":"es"}         | page-home-main  | []            |
+
   Scenario: Full sync prunes a no-op stale row whose source properties were all unset
     # FullWorkspaceSynchronizer counterpart of the Retranslator no-op pruning: a stale node whose every translatable
     # source property is unset yields no SetNodeProperties (StalePropertyCommandBuilder returns null), so no
@@ -1473,12 +1563,12 @@ Feature: Automatic retranslation on workspace publish
     # change is dropped, the source's removal wins.
     Then I expect node "sir-david-nodenborough" to be absent in workspace "content-review" dimension space point {"language":"en"}
 
-  Scenario: The out-of-sync count reflects the target workspace, not the source
-    # Regression: the backend module's "out of sync" count for a cross-workspace rule must be measured on the TARGET. A
-    # node published to live leaves a persistent `live/de` stale row (the live→live/de rule is `ask`, so publishing does
-    # not translate de). A rule that synchronizes live → de-review/de must NOT report that lingering source row: once
-    # de-review is synchronized its own rows are cleared, so the count is zero. Counting the source workspace's rows
-    # (the old behaviour) would keep reporting the rule as out of sync forever.
+  Scenario: Publishing the source refreshes a cross-workspace rule's status, measured on the target
+    # The backend module's "out of sync" count for a cross-workspace rule is measured on the TARGET (de-review), not the
+    # source (live). Publishing the source force-rebases de-review onto live — even for this `ask` rule — so de-review's
+    # status immediately reflects the pending translation (rebase-on-publish), without auto-translating it. A manual
+    # sync then clears de-review's own rows and the count drops to zero; counting live's own (never-translated) de rows
+    # would instead report the rule as out of sync forever.
     When the command CreateWorkspace is executed with payload:
       | Key                | Value             |
       | workspaceName      | "de-review"       |
@@ -1492,9 +1582,10 @@ Feature: Automatic retranslation on workspace publish
       | Key                | Value            |
       | workspaceName      | "user-workspace" |
       | newContentStreamId | "user-cs-id-2"   |
-    # live carries a lingering de stale row, but de-review (the target) is untouched — so the rule reads as in sync.
-    Then the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0
-    # Synchronizing into de-review translates the node and the count stays at zero (the live/de row is never counted).
+    # Publishing rebased de-review onto live, so its de translation shows as pending — the `ask` rule did not translate.
+    Then the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 1
+    # Synchronizing into de-review translates the node and clears its row; the count drops to zero (live's own lingering
+    # de row is never counted).
     When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
     Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
     And the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0
