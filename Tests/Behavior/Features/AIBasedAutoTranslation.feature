@@ -86,9 +86,8 @@ Feature: Create node variant and let the AI translate the properties
     When I am in dimension space point {"language": "de"}
     Then I expect node aggregate identifier "nody-mc-nodeface" to lead to node user-cs-id;nody-mc-nodeface;{"language":"de"}
     And I expect this node to have the following properties:
-      # TEMPORARY CI sanity-check — wrong on purpose to confirm the Behat job goes red. REVERT before merging.
-      | Key                          | Value                     |
-      | inlineEditableStringProperty | "This is the wrong value" |
+      | Key                          | Value                |
+      | inlineEditableStringProperty | "My Text translated" |
 
     When the command SetNodeProperties is executed with payload:
       | Key                       | Value                                                               |
