@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - '3.0'
-      - 'retranslation-synchronisation'
   pull_request:
     branches:
       - '3.0'
