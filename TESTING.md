@@ -47,7 +47,38 @@ emitted **event stream**, so they need a running database.
 > distribution, runs `doctrine:migrate`, then invokes Behat with the `php -d` flags below. It runs
 > across the full PHP × Neos matrix (8.2/8.3 × 9.0/9.1), same as the main `test` job.
 
-### Run from the distribution root
+### Run containerized — the easy way (recommended)
+
+You can run the whole Behat suite from this package directory alone, with **only Docker installed** —
+no PHP, Composer, database or surrounding Neos distribution required:
+
+```shell
+make e2e
+```
+
+On first run this builds a PHP image, starts MariaDB, scaffolds a throwaway Neos distribution into a
+Docker volume (with this package symlinked into it for live editing), applies migrations and runs
+Behat. Subsequent runs reuse the cached distribution, so only the test run happens.
+
+```shell
+make e2e                                                              # full suite
+make e2e-feature FEATURE=Tests/Behavior/Features/Synchronization.feature
+make e2e-feature FEATURE=Tests/Behavior/Features/Synchronization.feature NAME="some scenario"
+make e2e-shell                                                        # shell into the runner (/dist)
+make e2e-clean                                                        # drop the cached distribution + DB
+make e2e-rebuild                                                      # rebuild the PHP image
+```
+
+Defaults are PHP 8.3 / Neos 9.1. To reproduce another matrix cell, override via env:
+
+```shell
+PHP_VERSION=8.2 NEOS_VERSION=9.0 make e2e-rebuild && PHP_VERSION=8.2 NEOS_VERSION=9.0 make e2e
+```
+
+The Docker setup lives under `Tests/Behavior/Docker/` (`Dockerfile`, `docker-compose.yml`,
+`entrypoint.sh`). The sections below describe the manual route, which is what CI uses.
+
+### Run from the distribution root (manual)
 
 Run Behat from the **parent Neos distribution root**, not from inside
 `DistributionPackages/Sitegeist.LostInTranslation/`. Running `composer test:behavior` from the package
