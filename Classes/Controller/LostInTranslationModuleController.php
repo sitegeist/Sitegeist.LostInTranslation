@@ -17,6 +17,7 @@ use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\Model\GlossaryEntry;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryEntryRepository;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
+use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
@@ -52,6 +53,9 @@ class LostInTranslationModuleController extends AbstractModuleController
 
     #[Flow\Inject]
     protected SynchronizationStatusProvider $synchronizationStatusProvider;
+
+    #[Flow\Inject]
+    protected StaleTranslationProjectionStatusProvider $staleTranslationProjectionStatusProvider;
 
     #[Flow\Inject]
     protected WorkspaceSynchronizer $workspaceSynchronizer;
@@ -96,6 +100,17 @@ class LostInTranslationModuleController extends AbstractModuleController
     {
         $contentRepositoryId = ContentRepositoryId::fromString($this->contentRepositoryIdentifier);
         $rules = SynchronizationRules::fromArray($this->synchronization);
+
+        // The pending counts are read from the stale-translation projection. If that projection is not set up yet (e.g.
+        // a fresh install before `./flow cr:setup`) querying it would fault on missing tables, so report its status and
+        // skip the counts rather than crash the module.
+        $projectionStatus = $this->staleTranslationProjectionStatusProvider->forContentRepository($contentRepositoryId);
+        $this->view->assign('projectionStatus', $projectionStatus);
+        if (!$projectionStatus->isReady) {
+            $this->view->assign('rules', []);
+            $this->view->assign('pendingTotal', 0);
+            return;
+        }
 
         $rows = [];
         foreach ($this->synchronizationStatusProvider->forRules($contentRepositoryId, $rules) as $index => $status) {

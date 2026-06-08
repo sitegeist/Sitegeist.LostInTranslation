@@ -147,6 +147,13 @@ Feature: Automatic retranslation on workspace publish
       | baseWorkspaceName  | "live"                 |
       | newContentStreamId | "other-user-cs-id"     |
 
+  Scenario: The backend module reports when the stale-translation projection is not set up
+    # A set-up content repository reports the projection as ready; once its schema is gone (a fresh install before
+    # `./flow cr:setup`) the backend module must surface that status instead of faulting on the missing tables.
+    Then the stale-translation projection is reported as "ready"
+    When the stale-translation projection schema is removed
+    Then the stale-translation projection is reported as "not set up"
+
   Scenario: Publishing a freshly-created en node to live auto-translates it to es in live
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:

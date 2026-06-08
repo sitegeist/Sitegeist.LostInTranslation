@@ -50,5 +50,43 @@ services:
       # The bootstrapped distribution, cached across runs.
       - dist:/dist
 
+  # Manual-testing "system under test": the same image, but bootstrapped into a
+  # Development-context Neos with a real content repository and served over HTTP.
+  # Driven by `make dev`. Uses its own database + distribution volume so a Behat
+  # run cannot wipe the site you are clicking through.
+  sut:
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+    depends_on:
+      database:
+        condition: service_healthy
+    entrypoint: ["bash", "/package/Tests/Behavior/Docker/dev-entrypoint.sh"]
+    ports:
+      - "${SUT_PORT:-8081}:${SUT_PORT:-8081}"
+    environment:
+      NEOS_VERSION: ${NEOS_VERSION:-9.1}
+      DB_HOST: database
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: neos
+      SUT_PORT: ${SUT_PORT:-8081}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password}
+    volumes:
+      # Same source symlink + host-overlay masking as the behat service above.
+      - ../../..:/package
+      - /package/Packages
+      - /package/bin
+      - /package/Data
+      - /package/Web
+      - /package/Build
+      - /package/node_modules
+      # The bootstrapped dev distribution, cached across runs (separate from behat's).
+      - dist-dev:/dist
+
 volumes:
   dist:
+  dist-dev:

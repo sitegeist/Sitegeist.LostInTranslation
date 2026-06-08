@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Behat\Gherkin\Node\TableNode;
+use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
@@ -17,6 +18,7 @@ use Neos\Neos\Domain\Service\WorkspacePublishingService;
 use Neos\Neos\Domain\Service\WorkspaceService;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
@@ -366,6 +368,42 @@ trait StaleTranslations
             $this->currentContentRepository->id,
             WorkspaceName::fromString($payload['workspaceName']),
             NodeAggregateId::fromString($payload['documentId']),
+        );
+    }
+
+    /**
+     * Drop the stale-translation projection's tables to simulate a content repository where `./flow cr:setup` has not
+     * created (or has lost) the projection schema. The subscription row still exists and claims to be ACTIVE, so the
+     * content repository recomputes the setup status against the live schema and reports SETUP_REQUIRED — exactly the
+     * state the backend module must surface instead of faulting. The per-scenario CR rebuild recreates the tables, so
+     * this mutation is self-healing for the next scenario.
+     *
+     * @When /^the stale-translation projection schema is removed$/
+     */
+    public function theStaleTranslationProjectionSchemaIsRemoved(): void
+    {
+        $connection = $this->getObject(EntityManagerInterface::class)->getConnection();
+        $tableNamePrefix = sprintf('cr_%s_p_staletranslation', $this->currentContentRepository->id->value);
+        foreach (['_nodeaggregate_type', '_ws_hierarchy', ''] as $tableNameSuffix) {
+            $connection->executeStatement('DROP TABLE IF EXISTS ' . $tableNamePrefix . $tableNameSuffix);
+        }
+    }
+
+    /**
+     * Assert how {@see StaleTranslationProjectionStatusProvider} — the source the backend module reads to decide whether
+     * to show the synchronization overview or a setup banner — reports the projection. `$readiness` is "ready" or
+     * "not set up".
+     *
+     * @Then /^the stale-translation projection is reported as "(ready|not set up)"$/
+     */
+    public function theStaleTranslationProjectionIsReportedAs(string $readiness): void
+    {
+        $status = $this->getObject(StaleTranslationProjectionStatusProvider::class)
+            ->forContentRepository($this->currentContentRepository->id);
+        Assert::assertSame(
+            $readiness === 'ready',
+            $status->isReady,
+            sprintf('Unexpected projection readiness; provider reported: %s', $status->summary),
         );
     }
 

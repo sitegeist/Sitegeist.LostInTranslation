@@ -16,12 +16,20 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
 
     <legend>Synchronization</legend>
 
-    <div @if={!rules}>
+    <div @if={!projectionStatus.isReady} class="neos-error">
+        <p>
+            <i class="fas fa-exclamation-triangle" style="color:#ff460d;"></i>
+            &nbsp;<strong>{projectionStatus.summary}</strong>
+        </p>
+        <p @if={projectionStatus.hint}>{projectionStatus.hint}</p>
+    </div>
+
+    <div @if={projectionStatus.isReady && !rules}>
         <p>No synchronization rules are configured. Add rules under
           <code>Sitegeist.LostInTranslation.nodeTranslation.synchronization</code>.</p>
     </div>
 
-    <Neos.Fusion:Fragment @if={rules}>
+    <Neos.Fusion:Fragment @if={projectionStatus.isReady && rules}>
       <table class="neos-table">
         <thead>
         <tr>
