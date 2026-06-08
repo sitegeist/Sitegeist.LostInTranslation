@@ -420,6 +420,32 @@ Feature: Automatic retranslation on workspace publish
       | originDimensionSpacePoint                           | {"language": "de"}      |
       | propertyValues.autoTranslatableStringProperty.value | "Child Text translated" |
 
+  Scenario: Stale-driven sync skips content whose ancestor document has no stale row, hinting at a full sync
+    # Reproduces a live data hole: the stale-translation projection was installed AFTER an ancestor document was
+    # created, so the document has no stale row, while content added later (under its tethered collection) does. The
+    # depth-sort can only order ancestors that HAVE a stale row, so it cannot bootstrap the document — its tethered
+    # `main` collection never materialises in the target and the content below cannot be varied. Instead of letting the
+    # CR abort the whole run with `Node aggregate "page-home-main" does currently not cover dimension space point`, the
+    # stale-driven sync skips the affected nodes and flags that a full sync is needed (the CLI / backend module turn
+    # that flag into a "run synchronize --full" hint).
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
+      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+    # Punch the hole: drop the document's own stale rows, as if it predated the projection. Its tethered collection and
+    # the content below keep their rows, so they are the records that drive (and now stall) the stale-driven run.
+    And I remove the recorded stale translations for node "page-home" in workspace "user-workspace"
+
+    # The run proceeds (no CR abort) but skips page-home-main and intro-text: their nearest non-tethered ancestor
+    # (page-home) is missing in de and has no pending translation, so this run cannot create it.
+    Then synchronizing translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"de"} skips 2 node(s) pending a full sync
+
+    # Nothing was created in de — the skip is graceful, not a partial write.
+    And I expect node "page-home" to be absent in workspace "user-workspace" dimension space point {"language":"de"}
+    And I expect node "page-home-main" to be absent in workspace "user-workspace" dimension space point {"language":"de"}
+    And I expect node "intro-text" to be absent in workspace "user-workspace" dimension space point {"language":"de"}
+
   Scenario: Synchronization translates a stale uriPathSegment and keeps it a valid slug
     # The stale-driven sync path (WorkspaceSynchronizer -> Retranslator -> StalePropertyCommandBuilder) must apply the
     # same strict-charset post-processing to uriPathSegment as the create-variant cascade: a translated segment

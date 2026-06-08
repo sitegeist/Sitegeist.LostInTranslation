@@ -52,4 +52,17 @@ final readonly class WorkspaceSynchronizationResult
             static fn (PerNodeSynchronizationResult $r): bool => $r->result->skippedReason !== null,
         ));
     }
+
+    /**
+     * Nodes skipped because their ancestor document is missing in the target and has no stale record,
+     * so this stale-driven run could not bootstrap it. A non-zero count means a full sync is needed —
+     * callers surface a "run synchronize --full" hint.
+     */
+    public function totalNodesRequiringFullSync(): int
+    {
+        return count(array_filter(
+            $this->perNodeResults,
+            static fn (PerNodeSynchronizationResult $r): bool => $r->result->requiresFullSync,
+        ));
+    }
 }

@@ -144,10 +144,7 @@ class LostInTranslationModuleController extends AbstractModuleController
             ContentRepositoryId::fromString($this->contentRepositoryIdentifier),
             $rule,
         );
-        $this->addSynchronizationResultFlashMessage(
-            sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension),
-            $result,
-        );
+        $this->addSynchronizationResultFlashMessage($rule, $result);
         $this->forward('synchronizationStatus');
     }
 
@@ -156,16 +153,14 @@ class LostInTranslationModuleController extends AbstractModuleController
         $contentRepositoryId = ContentRepositoryId::fromString($this->contentRepositoryIdentifier);
         foreach (SynchronizationRules::fromArray($this->synchronization) as $rule) {
             $result = $this->workspaceSynchronizer->synchronizeRule($contentRepositoryId, $rule);
-            $this->addSynchronizationResultFlashMessage(
-                sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension),
-                $result,
-            );
+            $this->addSynchronizationResultFlashMessage($rule, $result);
         }
         $this->forward('synchronizationStatus');
     }
 
-    private function addSynchronizationResultFlashMessage(string $label, WorkspaceSynchronizationResult $result): void
+    private function addSynchronizationResultFlashMessage(SynchronizationRule $rule, WorkspaceSynchronizationResult $result): void
     {
+        $label = sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension);
         if ($result->skippedReason !== null) {
             $this->addFlashMessage(
                 sprintf('%s: skipped (%s)', $label, $result->skippedReason),
@@ -183,6 +178,25 @@ class LostInTranslationModuleController extends AbstractModuleController
             $result->totalVariantCommandsDispatched() === 1 ? '' : 's',
             $result->totalSkippedNodes(),
         ));
+
+        $nodesRequiringFullSync = $result->totalNodesRequiringFullSync();
+        if ($nodesRequiringFullSync > 0) {
+            $this->addFlashMessage(
+                sprintf(
+                    '%s: %d node(s) were skipped because an ancestor document is missing in the target dimension '
+                    . 'and has no pending translation. A full sync is needed to create the missing ancestors — run '
+                    . 'on the CLI: ./flow lostintranslation:synchronize %s %s %s %s --full',
+                    $label,
+                    $nodesRequiringFullSync,
+                    $rule->sourceWorkspaceName,
+                    $rule->sourceDimension,
+                    $rule->targetWorkspaceName,
+                    $rule->targetDimension,
+                ),
+                '',
+                Message::SEVERITY_WARNING,
+            );
+        }
     }
 
     // Renders the fusion view for the form to store a custom deepl key

@@ -39,12 +39,28 @@ final readonly class RetranslationResult
          * the source node could not be located. Non-null implies both counts are zero.
          */
         public ?string $skippedReason = null,
+        /**
+         * True when the skip is structural and recoverable only by a full sync: the node's ancestor
+         * document is missing in the target dimension and has no stale record of its own, so the
+         * stale-driven run cannot bootstrap it (the depth-sort only orders ancestors that *have* a
+         * stale row). The CLI and backend module surface a "run synchronize --full" hint when set.
+         * Implies `skippedReason !== null`.
+         */
+        public bool $requiresFullSync = false,
     ) {
     }
 
     public static function skipped(string $reason): self
     {
         return new self(0, 0, $reason);
+    }
+
+    /**
+     * A skip the caller can resolve by running a full sync — see {@see self::$requiresFullSync}.
+     */
+    public static function skippedRequiringFullSync(string $reason): self
+    {
+        return new self(0, 0, $reason, true);
     }
 
     public function isNoOp(): bool

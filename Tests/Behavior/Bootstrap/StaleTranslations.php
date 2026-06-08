@@ -10,6 +10,7 @@ use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryI
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
+use Neos\ContentRepository\Core\Service\ContentRepositoryMaintainerFactory;
 use PHPUnit\Framework\Assert;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
@@ -26,6 +27,12 @@ use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 trait StaleTranslations
 {
+    /**
+     * Set by {@see self::theStaleTranslationProjectionSchemaIsRemoved()} so {@see self::recreateStaleTranslationProjectionSchema()}
+     * can heal the dropped tables after the scenario.
+     */
+    private bool $staleTranslationSchemaWasRemoved = false;
+
     /**
      * Workspace metadata and role assignments live in the `neos_neos_workspace_metadata` / `neos_neos_workspace_role`
      * tables, which Neos lists under `ignoredTables` so they are NOT truncated by the `@flowEntities` reset (the same
@@ -188,6 +195,63 @@ trait StaleTranslations
         );
         Assert::assertNotNull($result->skippedReason, 'Expected full synchronization to be skipped, but it ran');
         Assert::assertStringContainsString($expectedReasonFragment, $result->skippedReason);
+    }
+
+    /**
+     * Drop the recorded stale-translation rows for a single node aggregate, simulating the live data hole where the
+     * stale-translation projection was installed AFTER the node was created (so it never got a row), while nodes added
+     * later did. Used to exercise the stale-driven sync's graceful skip when an ancestor document has no stale row.
+     *
+     * @When /^I remove the recorded stale translations for node "([^"]*)" in workspace "([^"]*)"$/
+     * @throws Exception
+     */
+    public function iRemoveTheRecordedStaleTranslationsForNode(string $nodeAggregateId, string $workspaceName): void
+    {
+        $this->contentRepositoryRegistry->get($this->currentContentRepository->id)
+            ->projectionState(StaleTranslationReadModel::class)
+            ->staleTranslationMaintenance
+            ->removeStaleRowsForNodeAggregate(
+                WorkspaceName::fromString($workspaceName),
+                NodeAggregateId::fromString($nodeAggregateId),
+            );
+    }
+
+    /**
+     * Assert that a stale-driven synchronization ran (did not short-circuit) but gracefully skipped a number of nodes
+     * it could not bootstrap because an ancestor document is missing in the target and has no stale row. Every such
+     * skip must carry the `--full` hint, mirroring what the CLI / backend module surface to the user.
+     *
+     * @Then /^synchronizing translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) skips (\d+) node\(s\) pending a full sync$/
+     * @throws Exception
+     */
+    public function synchronizingSkipsNodesPendingAFullSync(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        int $expectedCount,
+    ): void {
+        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+        );
+        Assert::assertNull(
+            $result->skippedReason,
+            sprintf('Expected the run to proceed and skip individual nodes, but it short-circuited: %s', $result->skippedReason ?? ''),
+        );
+        Assert::assertSame(
+            $expectedCount,
+            $result->totalNodesRequiringFullSync(),
+            'Unexpected number of nodes skipped pending a full sync',
+        );
+        foreach ($result->perNodeResults as $perNode) {
+            if ($perNode->result->requiresFullSync) {
+                Assert::assertStringContainsString('--full', (string)$perNode->result->skippedReason);
+            }
+        }
     }
 
     /**
@@ -375,8 +439,13 @@ trait StaleTranslations
      * Drop the stale-translation projection's tables to simulate a content repository where `./flow cr:setup` has not
      * created (or has lost) the projection schema. The subscription row still exists and claims to be ACTIVE, so the
      * content repository recomputes the setup status against the live schema and reports SETUP_REQUIRED — exactly the
-     * state the backend module must surface instead of faulting. The per-scenario CR rebuild recreates the tables, so
-     * this mutation is self-healing for the next scenario.
+     * state the backend module must surface instead of faulting.
+     *
+     * NOT self-healing on its own: the testsuite's {@see CRBehavioralTestsSubjectProvider::setUpContentRepository()}
+     * runs `ContentRepositoryMaintainer::setUp()` only ONCE per CR id per process (static `$alreadySetUpContentRepositories`
+     * guard); later scenarios merely truncate the event table and reset projection state, so a dropped table stays
+     * dropped and every following scenario faults with "Table cr_default_p_staletranslation doesn't exist". We therefore
+     * recreate the schema in {@see self::recreateStaleTranslationProjectionSchema()} after the scenario.
      *
      * @When /^the stale-translation projection schema is removed$/
      */
@@ -387,6 +456,30 @@ trait StaleTranslations
         foreach (['_nodeaggregate_type', '_ws_hierarchy', ''] as $tableNameSuffix) {
             $connection->executeStatement('DROP TABLE IF EXISTS ' . $tableNamePrefix . $tableNameSuffix);
         }
+        $this->staleTranslationSchemaWasRemoved = true;
+    }
+
+    /**
+     * Heal a scenario that dropped the stale-translation projection schema (see
+     * {@see self::theStaleTranslationProjectionSchemaIsRemoved()}): re-run the content repository maintainer's idempotent
+     * `setUp()`, which recreates the missing projection tables. Without this, every subsequent scenario in the same
+     * behat run faults on the missing table, because the testsuite only sets a CR up once per process.
+     *
+     * @AfterScenario
+     * @throws Exception
+     */
+    public function recreateStaleTranslationProjectionSchema(): void
+    {
+        if (!$this->staleTranslationSchemaWasRemoved) {
+            return;
+        }
+        $this->staleTranslationSchemaWasRemoved = false;
+        $maintainer = $this->contentRepositoryRegistry->buildService(
+            $this->currentContentRepository->id,
+            new ContentRepositoryMaintainerFactory(),
+        );
+        $result = $maintainer->setUp();
+        Assert::assertNull($result, sprintf('Failed to recreate stale-translation projection schema: %s', $result?->getMessage() ?? ''));
     }
 
     /**

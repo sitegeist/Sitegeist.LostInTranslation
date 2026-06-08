@@ -7,8 +7,11 @@ namespace Sitegeist\LostInTranslation\Domain;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
@@ -114,6 +117,11 @@ class WorkspaceSynchronizer
         // the source side; existence is checked there too. In the single-workspace case source == target.
         $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
         $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
+        // Target subgraph for ancestor-coverage checks. `withoutRestrictions` so a present-but-disabled
+        // ancestor still counts as covering the target dimension — disabled state does not affect whether
+        // a descendant variant can be created (CR coverage is independent of visibility).
+        $targetContentGraph = $cr->getContentGraph($targetWorkspaceName);
+        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
 
         // Stale records arrive in primary-key order, not hierarchical order. Creating a node variant requires its
         // parent to already cover the target dimension (CR `requireNodeAggregateToCoverDimensionSpacePoint`), so
@@ -138,9 +146,35 @@ class WorkspaceSynchronizer
         }
         usort($plannedEntries, static fn (array $a, array $b): int => $a['depth'] <=> $b['depth']);
 
+        // Ids that this run will (attempt to) translate, i.e. those backed by a stale record. The
+        // ancestor check below uses this set to know which missing ancestors will be created earlier
+        // in the run (depth-sort) versus which are holes the stale-driven run cannot fill.
+        $plannedStaleIds = [];
+        foreach ($plannedEntries as $plannedEntry) {
+            $plannedStaleIds[$plannedEntry['entry']->nodeAggregateId->value] = true;
+        }
+
         $perNodeResults = [];
         foreach ($plannedEntries as $plannedEntry) {
             $entry = $plannedEntry['entry'];
+            // A node whose ancestor document is missing in the target and has no stale record of its
+            // own cannot be created by this stale-driven run: the missing document never gets a
+            // CreateNodeVariant, so its tethered content collection never materialises and the node
+            // below cannot be varied (CR `requireNodeAggregateToCoverDimensionSpacePoint`). Rather than
+            // letting the CR abort the whole run, skip the node and let the caller hint at `--full`.
+            $missingAncestorReason = $this->reasonAncestorCannotBeCreated(
+                $sourceSubgraph,
+                $targetSubgraph,
+                $entry->nodeAggregateId,
+                $plannedStaleIds,
+            );
+            if ($missingAncestorReason !== null) {
+                $perNodeResults[] = new PerNodeSynchronizationResult(
+                    $entry->nodeAggregateId,
+                    RetranslationResult::skippedRequiringFullSync($missingAncestorReason),
+                );
+                continue;
+            }
             if ($dryRun) {
                 $perNodeResults[] = new PerNodeSynchronizationResult(
                     $entry->nodeAggregateId,
@@ -159,5 +193,43 @@ class WorkspaceSynchronizer
         }
 
         return new WorkspaceSynchronizationResult($perNodeResults);
+    }
+
+    /**
+     * Walk `$nodeAggregateId`'s source-tree ancestors (nearest first) to determine whether the
+     * stale-driven run can create its target variant. Returns a human-readable reason when it cannot —
+     * a non-tethered (document) ancestor is missing in the target dimension and has no stale record, so
+     * nothing in this run will create it — or `null` when the ancestor chain is satisfiable.
+     *
+     * @param array<string,true> $plannedStaleIds ids backed by a stale record this run will process
+     */
+    private function reasonAncestorCannotBeCreated(
+        ContentSubgraphInterface $sourceSubgraph,
+        ContentSubgraphInterface $targetSubgraph,
+        NodeAggregateId $nodeAggregateId,
+        array $plannedStaleIds,
+    ): ?string {
+        foreach ($sourceSubgraph->findAncestorNodes($nodeAggregateId, FindAncestorNodesFilter::create()) as $ancestor) {
+            if ($targetSubgraph->findNodeById($ancestor->aggregateId) !== null) {
+                // This ancestor already covers the target; by the CR invariant (a node covers a DSP
+                // only if its parent does) every higher ancestor covers it too — the chain is fine.
+                return null;
+            }
+            if ($ancestor->classification->isTethered()) {
+                // A tethered node materialises via its document ancestor's CreateNodeVariant cascade;
+                // its fate is decided by that (non-tethered) ancestor, checked further up the loop.
+                continue;
+            }
+            if (!isset($plannedStaleIds[$ancestor->aggregateId->value])) {
+                return sprintf(
+                    'ancestor %s is missing in the target dimension and has no pending translation; '
+                    . 'run synchronize --full to create it',
+                    $ancestor->aggregateId->value,
+                );
+            }
+            // The ancestor has a stale record, so depth-sort creates it before this node — but keep
+            // walking up to confirm ITS own ancestors are satisfiable too.
+        }
+        return null;
     }
 }

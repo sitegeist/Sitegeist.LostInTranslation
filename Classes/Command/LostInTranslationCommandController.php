@@ -217,6 +217,21 @@ class LostInTranslationCommandController extends CommandController
                 $result->totalSkippedNodes(),
             ],
         );
+
+        $nodesRequiringFullSync = $result->totalNodesRequiringFullSync();
+        if ($nodesRequiringFullSync > 0) {
+            $this->outputLine();
+            $this->outputLine(
+                '<comment>%d node(s) were skipped because an ancestor document is missing in the target dimension '
+                . 'and has no pending translation. The stale-driven sync cannot bootstrap it. Run a full sync to '
+                . 'create the missing ancestors:</comment>',
+                [$nodesRequiringFullSync],
+            );
+            $this->outputLine(
+                '  ./flow lostintranslation:synchronize %s %s %s %s --full',
+                [$sourceWorkspace, $sourceDimension, $targetWorkspace, $targetDimension],
+            );
+        }
     }
 
     /**
