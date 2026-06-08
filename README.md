@@ -20,6 +20,66 @@ Sitegeist.LostInTranslation is available via Packagist. Run `composer require si
 
 We use semantic versioning so every breaking change will increase the major version number.
 
+### Integrating into an existing project
+
+Beyond `composer require`, integrating the package into a site that already has content requires a few
+one-time steps so the stale-translation projection is built and existing content is reconciled.
+
+1. **Run the database migrations** (glossary and bookkeeping tables):
+
+   ```shell
+   ./flow doctrine:migrate
+   ```
+
+2. **Check and adjust the Content Repository.** The projection replays the full event stream, so the
+   CR should be healthy first:
+
+   ```shell
+   ./flow cr:status
+   ./flow contentgraphintegrity:runviolationdetection   # minor integrity issues are usually fine
+   ./flow structureadjustments:detect
+   ./flow structureadjustments:fix                       # if the previous step reports adjustments
+   ```
+
+   Optionally clean up dangling content streams:
+
+   ```shell
+   ./flow contentstream:removedangling
+   ./flow contentstream:pruneremovedfromeventstream
+   ```
+
+3. **Build the stale-translation projection** by replaying the event stream onto it. The
+   `stale_translations` tables are created automatically by the projection's setup — there is no
+   dedicated Doctrine migration for them.
+
+   ```shell
+   ./flow subscription:replay Sitegeist.LostInTranslation:StaleTranslations
+   ```
+
+4. **(Optional) Translate existing content** with a one-off full synchronization. The source dimension
+   must equal the target dimension preset's `referenceLanguage`. Always dry-run first:
+
+   ```shell
+   # preview what would happen
+   ./flow lostintranslation:synchronize --source-workspace=live --source-dimension=de --target-workspace=live --target-dimension=en --full --dry-run
+   # apply
+   ./flow lostintranslation:synchronize --source-workspace=live --source-dimension=de --target-workspace=live --target-dimension=en --full
+   ```
+
+5. **Prune orphaned stale markers** left behind by content that no longer exists:
+
+   ```shell
+   ./flow lostintranslation:reconcile
+   ```
+
+6. **(Optional) Rebase outdated workspaces** so existing user workspaces pick up the new content:
+
+   ```shell
+   ./flow workspace:list
+   ./flow workspace:rebaseoutdated
+   ./flow contentstream:pruneremovedfromeventstream   # clean up streams created by rebasing
+   ```
+
 ## How it works
 
 By default, all inline editable properties are translated using DeepL (see setting `translateInlineEditables`).
@@ -116,12 +176,12 @@ derived from the target dimension's `referenceLanguage`, so only the target is p
 required.
 
 ```
-./flow lostintranslation:retranslate-node <nodeAggregateId> <target> <contentRepository> <workspace>
+./flow lostintranslation:retranslate-node --node-aggregate-id=<nodeAggregateId> --target=<target> --content-repository=<contentRepository> --workspace=<workspace>
 
-#   nodeAggregateId    the node whose subtree is brought up to date
-#   target             the target dimension value, e.g. "de"
-#   contentRepository  the content repository id, usually "default"
-#   workspace          the workspace to operate in, e.g. "live"
+#   --node-aggregate-id    the node whose subtree is brought up to date
+#   --target               the target dimension value, e.g. "de"
+#   --content-repository   the content repository id, usually "default"
+#   --workspace            the workspace to operate in, e.g. "live"
 ```
 
 **`lostintranslation:synchronize`** — reconcile a whole workspace/dimension instead of a single node. By default
@@ -132,15 +192,14 @@ target is force-rebased onto its base (which must be the source workspace) befor
 what would happen without dispatching any commands.
 
 ```
-./flow lostintranslation:synchronize <sourceWorkspace> <sourceDimension> <targetWorkspace> <targetDimension> \
-    [--content-repository default] [--full] [--dry-run]
+./flow lostintranslation:synchronize --source-workspace=<sourceWorkspace> --source-dimension=<sourceDimension> --target-workspace=<targetWorkspace> --target-dimension=<targetDimension> [--content-repository=default] [--full] [--dry-run]
 
-#   sourceWorkspace    workspace the source content is read from
-#   sourceDimension    source language value; must equal the target dimension's referenceLanguage
-#   targetWorkspace    workspace the translated variant/property commands are dispatched into
-#   targetDimension    target language value, e.g. "de"
-#   --full             walk the whole subtree instead of only stale records
-#   --dry-run          report the affected records/nodes without writing anything
+#   --source-workspace   workspace the source content is read from
+#   --source-dimension   source language value; must equal the target dimension's referenceLanguage
+#   --target-workspace   workspace the translated variant/property commands are dispatched into
+#   --target-dimension   target language value, e.g. "de"
+#   --full               walk the whole subtree instead of only stale records
+#   --dry-run            report the affected records/nodes without writing anything
 ```
 
 **`lostintranslation:reconcile`** — housekeeping. The projection only clears the directly-removed aggregate on
