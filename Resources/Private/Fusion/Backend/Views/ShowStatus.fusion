@@ -26,8 +26,9 @@ prototype(Sitegeist.LostInTranslation:Views.ShowStatus) < prototype(Neos.Fusion:
       <p><i class="fas fa-check-circle" style="color:green;"></i> DeepL API connection
         successful {status.freeApi ? ' (Free API)' : ' (Payed API)'}</p>
       <p @if={status.characterCount < status.characterLimit}><i class="fas fa-check-circle"
-                                                                style="color:green;"></i> {status.characterCount}
-        from {status.characterLimit} characters used</p>
+                                                                style="color:green;"></i>{' '}
+        {status.characterCount} from {status.characterLimit} characters used
+        ({status.characterLimit > 0 ? Math.round(status.characterCount / status.characterLimit * 100) : 0}%)</p>
       <p @if={status.characterCount >= status.characterLimit}><i class="fas fa-exclamation-triangle"
                                                                  style="color:red;"></i> Character limit
         of {status.characterLimit} reached. No further translations possible.</p>
