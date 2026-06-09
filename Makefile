@@ -59,5 +59,4 @@ dev-stop: ## Stop the SUT, keeping its cached distribution
 	$(COMPOSE) stop sut
 
 dev-clean: ## Stop the SUT and drop its cached distribution
-	$(COMPOSE) rm -sfv sut
-	-docker volume rm $(DEV_DIST_VOLUME)
+	$(COMPOSE) down -v

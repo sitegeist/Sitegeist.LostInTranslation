@@ -21,6 +21,7 @@
     # (options.automaticTranslation: true) the post-processor coerces the translation back into a valid slug.
     uriPathSegment:
       options:
+        automaticTranslation: true
         translationPostProcessor: 'Sitegeist\LostInTranslation\Domain\PostProcessor\UriPathSegmentPostProcessor'
     title:
       options:

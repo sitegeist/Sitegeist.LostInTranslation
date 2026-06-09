@@ -60,9 +60,14 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
               </Neos.Fusion:Fragment>
             </td>
             <td class="neos-action">
-              <Neos.Fusion.Form:Form form.target.action="synchronizeRule" attributes.class="neos-inline neos-pull-right">
-                <Neos.Fusion.Form:Hidden field.name="ruleIndex" field.value={rule.index}/>
-                <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">
+              <!-- On submit, turn the icon into a spinner and (on the next tick, so the form still submits) disable
+                   every sync button to prevent double-triggering during the blocking request. The page reloads when the
+                   synchronous sync finishes, which resets the buttons. -->
+              <!-- ruleIndex is passed as a target argument (in the action URL), not a Neos.Fusion.Form:Hidden field:
+                   the Input prototype coalesces its stringified value with the Eel-or operator, and index 0 stringifies
+                   to the Eel-falsy zero, which would drop the value and make ruleIndex arrive empty for the first rule. -->
+              <Neos.Fusion.Form:Form form.target.action="synchronizeRule" form.target.arguments.ruleIndex={rule.index} attributes.class="neos-inline neos-pull-right" attributes.onsubmit="var i = this.querySelector('button i'); if (i) i.className = 'fas fa-spinner fa-spin'; setTimeout(() => document.querySelectorAll('.js-sync-button').forEach(b => b.disabled = true), 0);">
+                <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary js-sync-button">
                   <i class="fas fa-sync"></i> Sync now
                 </Neos.Fusion.Form:Button>
               </Neos.Fusion.Form:Form>
@@ -72,8 +77,8 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
         </tbody>
       </table>
 
-      <Neos.Fusion.Form:Form form.target.action="synchronizeAllRules" attributes.class="neos-inline">
-        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">
+      <Neos.Fusion.Form:Form form.target.action="synchronizeAllRules" attributes.class="neos-inline" attributes.onsubmit="var i = this.querySelector('button i'); if (i) i.className = 'fas fa-spinner fa-spin'; setTimeout(() => document.querySelectorAll('.js-sync-button').forEach(b => b.disabled = true), 0);">
+        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary js-sync-button">
           <i class="fas fa-sync"></i> Sync all rules ({pendingTotal} pending)
         </Neos.Fusion.Form:Button>
       </Neos.Fusion.Form:Form>

@@ -39,4 +39,4 @@ Sitegeist:
           targetWorkspaceName: live
           targetDimension: de
           scope: Document
-          mode: auto
+          mode: ask
