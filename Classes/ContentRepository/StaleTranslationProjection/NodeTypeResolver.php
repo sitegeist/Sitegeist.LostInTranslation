@@ -74,7 +74,9 @@ final readonly class NodeTypeResolver implements ProjectionStateInterface
      */
     public function findAll(): array
     {
-        return $this->dbal->executeQuery('SELECT * FROM ' . $this->tableName)
+        /** @var array<int,array{workspaceName: string, nodeAggregateId: string, nodeTypeName: string}> $rows */
+        $rows = $this->dbal->executeQuery('SELECT * FROM ' . $this->tableName)
             ->fetchAllAssociative();
+        return $rows;
     }
 }
