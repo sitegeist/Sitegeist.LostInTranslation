@@ -35,17 +35,10 @@ one-time steps so the stale-translation projection is built and existing content
    CR should be healthy first:
 
    ```shell
+   ./flow cr:setup
    ./flow cr:status
    ./flow contentgraphintegrity:runviolationdetection   # minor integrity issues are usually fine
-   ./flow structureadjustments:detect
-   ./flow structureadjustments:fix                       # if the previous step reports adjustments
-   ```
-
-   Optionally clean up dangling content streams:
-
-   ```shell
-   ./flow contentstream:removedangling
-   ./flow contentstream:pruneremovedfromeventstream
+   ./flow structureadjustments:fix                      # if the previous step reports adjustments
    ```
 
 3. **Build the stale-translation projection** by replaying the event stream onto it. The
@@ -77,7 +70,6 @@ one-time steps so the stale-translation projection is built and existing content
    ```shell
    ./flow workspace:list
    ./flow workspace:rebaseoutdated
-   ./flow contentstream:pruneremovedfromeventstream   # clean up streams created by rebasing
    ```
 
 ## How it works
