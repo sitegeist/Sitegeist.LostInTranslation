@@ -687,6 +687,31 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | user-workspace | {"language":"de"}         | homepage        | ["title"]     |
       | user-workspace | {"language":"de"}         | homepage-main   | []            |
 
+  Scenario: Changing a non-translatable property must not remove an existing (empty) stale record
+        # Regression: a node created with no stale translatable values is recorded with an empty property list. Editing a
+        # NON-translatable property on the source used to wrongly DELETE that record in the target dimension — the
+        # source-side merge produced an empty intersection and fell into a delete branch. A source-side property set can
+        # only ADD newly-stale properties to a target record; stale rows are removed only by retranslation/sync and by
+        # node/variant/workspace lifecycle events, never by an unrelated source edit.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                    | initialPropertyValues       |
+      | plain-node      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations   | {"stringProperty": "Plain"} |
+        # Only the non-translatable `stringProperty` carries a value, so the stale record is empty.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | plain-node      | []            |
+
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                         |
+      | nodeAggregateId           | "plain-node"                  |
+      | originDimensionSpacePoint | {"language": "en"}            |
+      | propertyValues            | {"stringProperty": "Changed"} |
+        # The empty stale record must survive the non-translatable change (not be deleted).
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | plain-node      | []            |
+
   Scenario: Retranslating a document removes all of its stale translations including its content collection
         # A document's tethered ContentCollection carries no translatable properties and is recorded with an empty stale
         # list. Retranslating the document must clear ALL stale records below it — the document's own properties, the

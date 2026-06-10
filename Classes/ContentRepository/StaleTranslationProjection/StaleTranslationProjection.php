@@ -392,28 +392,23 @@ class StaleTranslationProjection implements ProjectionInterface
                         $this->convertPropertyNamesToStringArray($translatablePropertyNames)
                     );
 
-                    if ($newPropertyNames === []) {
-                        $this->dbal->delete(
-                            $this->itemTableName,
-                            [
-                                'workspaceName' => $event->workspaceName->value,
-                                'nodeAggregateId' => $event->nodeAggregateId->value,
-                                'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
-                            ]
-                        );
-                    } else {
-                        $this->dbal->update(
-                            $this->itemTableName,
-                            [
-                                'propertyNames' => \json_encode($newPropertyNames),
-                            ],
-                            [
-                                'workspaceName' => $event->workspaceName->value,
-                                'nodeAggregateId' => $event->nodeAggregateId->value,
-                                'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
-                            ]
-                        );
-                    }
+                    // A source-side property set can only ADD newly-stale properties to a target
+                    // record (a union with the current set); it never makes a target translation
+                    // fresh. So we never delete here. An empty result means this was a structural
+                    // row ('[]') and/or the changed property was not translatable — the row must be
+                    // preserved. Removing target rows is reserved for retranslation/sync, variant
+                    // creation, and node/workspace lifecycle events.
+                    $this->dbal->update(
+                        $this->itemTableName,
+                        [
+                            'propertyNames' => \json_encode(array_values($newPropertyNames)),
+                        ],
+                        [
+                            'workspaceName' => $event->workspaceName->value,
+                            'nodeAggregateId' => $event->nodeAggregateId->value,
+                            'originDimensionSpacePointHash' => $targetDimensionSpacePoint->hash,
+                        ]
+                    );
                 } else {
                     $newPropertyNames = array_intersect(
                         $updatedPropertyNames,
