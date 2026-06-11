@@ -43,9 +43,18 @@ export const SyncDialog: React.FC = () => {
                 return;
             }
             const translated = result.stalePropertyCommandsDispatched + result.variantCommandsDispatched;
+            // Removals and subtree-tag changes (e.g. hide/show) are only mirrored by `remove-target` / `sync-to-target`
+            // rules, so only mention them when they actually happened — and surface removals explicitly because they are
+            // destructive.
+            const extras = [
+                result.removalCommandsDispatched > 0 ? `removed ${result.removalCommandsDispatched} node(s)` : null,
+                result.tagCommandsDispatched > 0 ? `updated ${result.tagCommandsDispatched} visibility/tag change(s)` : null,
+            ].filter(Boolean);
+            const message = `Translated ${translated} change(s) into the configured languages.`
+                + (extras.length > 0 ? ` Also ${extras.join(' and ')}.` : '');
             dispatch(actions.UI.FlashMessages.add(
                 `lost-in-translation-sync-${Date.now()}`,
-                `Translated ${translated} change(s) into the configured languages.`,
+                message,
                 'success'
             ));
             setPrompt(null);

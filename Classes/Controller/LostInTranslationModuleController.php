@@ -170,12 +170,15 @@ class LostInTranslationModuleController extends AbstractModuleController
             return;
         }
         $this->addFlashMessage(sprintf(
-            '%s: %d propert%s and %d variant%s translated, %d skipped.',
+            '%s: %d propert%s and %d variant%s translated, %d removed, %d tag change%s, %d skipped.',
             $label,
             $result->totalStalePropertyCommandsDispatched(),
             $result->totalStalePropertyCommandsDispatched() === 1 ? 'y' : 'ies',
             $result->totalVariantCommandsDispatched(),
             $result->totalVariantCommandsDispatched() === 1 ? '' : 's',
+            $result->totalRemovalCommandsDispatched(),
+            $result->totalTagCommandsDispatched(),
+            $result->totalTagCommandsDispatched() === 1 ? '' : 's',
             $result->totalSkippedNodes(),
         ));
 

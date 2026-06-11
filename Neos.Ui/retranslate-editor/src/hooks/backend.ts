@@ -39,6 +39,10 @@ export type PendingSynchronizationResponse = {
 export type SynchronizeResponse = {
     stalePropertyCommandsDispatched: number;
     variantCommandsDispatched: number;
+    // Source-language deletions / subtree-tag changes (e.g. hide/show) mirrored into the target by `remove-target` /
+    // `sync-to-target` rules.
+    removalCommandsDispatched: number;
+    tagCommandsDispatched: number;
     skippedNodes: number;
     // Per-rule short-circuit reasons (e.g. target workspace missing or not based on source). Empty when all rules ran.
     errors: string[];

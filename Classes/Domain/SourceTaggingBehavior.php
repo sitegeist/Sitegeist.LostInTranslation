@@ -14,8 +14,12 @@ namespace Sitegeist\LostInTranslation\Domain;
  *  - {@see self::SyncToTarget}: mirror the source tag change — apply (`TagSubtree`) or remove (`UntagSubtree`) the same
  *    {@see \Neos\ContentRepository\Core\Feature\SubtreeTagging\Dto\SubtreeTag} on the corresponding node in the target
  *    dimension. Applies to any node type (Documents and Content alike) and is idempotent — a tag already matching the
- *    target's explicit state is skipped. Only mirrored for {@see SynchronizationMode::Auto} rules, inline on publish
- *    from the publish's own `SubtreeWasTagged` / `SubtreeWasUntagged` events.
+ *    target's explicit state is skipped.
+ *
+ * For {@see SynchronizationMode::Auto} rules the tag change is mirrored inline on publish (incrementally, from the
+ * publish's own `SubtreeWasTagged` / `SubtreeWasUntagged` events); for {@see SynchronizationMode::Ask} rules and the
+ * manual CLI it is reconciled on the deliberate "sync now" run (by diffing the target dimension's explicit tags against
+ * the source). Note Neos forbids the `disabled` / `removed` tags on tethered nodes, so those are never mirrored.
  */
 enum SourceTaggingBehavior: string
 {
