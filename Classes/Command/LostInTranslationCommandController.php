@@ -27,6 +27,7 @@ use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\PerNodeSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
+use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 class LostInTranslationCommandController extends CommandController
@@ -163,6 +164,9 @@ class LostInTranslationCommandController extends CommandController
      * @param bool $removeOrphans If set, also remove target-dimension nodes whose source variant no longer exists
      *                            (mirror source-language deletions). Removes Documents and Content alike — the manual
      *                            counterpart of a rule's `onSourceRemoval: remove-target`.
+     * @param bool $syncTags If set, also reconcile subtree tags (e.g. hide/show, and any other tag): converge each
+     *                       target node's explicit tags onto the source — the manual counterpart of a rule's
+     *                       `onSourceTagging: sync-to-target`.
      * @throws StopCommandException
      */
     public function synchronizeCommand(
@@ -174,6 +178,7 @@ class LostInTranslationCommandController extends CommandController
         bool $dryRun = false,
         bool $full = false,
         bool $removeOrphans = false,
+        bool $syncTags = false,
     ): void {
         $contentRepositoryId = ContentRepositoryId::fromString($contentRepository);
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]);
@@ -190,6 +195,7 @@ class LostInTranslationCommandController extends CommandController
                 targetDimensionSpacePoint: $targetDsp,
                 dryRun: $dryRun,
                 removeOrphans: $removeOrphans,
+                syncTags: $syncTags,
             )
             : $this->workspaceSynchronizer->synchronizeWorkspace(
                 contentRepositoryId: $contentRepositoryId,
@@ -199,6 +205,7 @@ class LostInTranslationCommandController extends CommandController
                 targetDimensionSpacePoint: $targetDsp,
                 dryRun: $dryRun,
                 onSourceRemoval: $removeOrphans ? SourceRemovalBehavior::RemoveTarget : SourceRemovalBehavior::KeepTarget,
+                onSourceTagging: $syncTags ? SourceTaggingBehavior::SyncToTarget : SourceTaggingBehavior::KeepTarget,
             );
 
         if ($result->skippedReason !== null) {
@@ -215,13 +222,14 @@ class LostInTranslationCommandController extends CommandController
             $this->outputLine($this->formatPerNodeLine($perNode, $dryRun));
         }
         $this->outputLine(
-            '%s: %d node(s) processed, %d stale property update(s), %d variant creation(s) and %d removal(s) dispatched, %d skipped.',
+            '%s: %d node(s) processed, %d stale property update(s), %d variant creation(s), %d removal(s) and %d tag change(s) dispatched, %d skipped.',
             [
                 $dryRun ? 'Dry run' : 'Synchronization finished',
                 count($result->perNodeResults),
                 $result->totalStalePropertyCommandsDispatched(),
                 $result->totalVariantCommandsDispatched(),
                 $result->totalRemovalCommandsDispatched(),
+                $result->totalTagCommandsDispatched(),
                 $result->totalSkippedNodes(),
             ],
         );
@@ -319,6 +327,14 @@ class LostInTranslationCommandController extends CommandController
                 '  - %s: %sremoval (source variant gone)',
                 $perNode->nodeAggregateId->value,
                 $dryRun ? 'would dispatch ' : 'dispatched ',
+            );
+        }
+        if ($r->tagCommandsDispatched > 0) {
+            return sprintf(
+                '  - %s: %s%d subtree-tag change(s)',
+                $perNode->nodeAggregateId->value,
+                $dryRun ? 'would dispatch ' : 'dispatched ',
+                $r->tagCommandsDispatched,
             );
         }
         return sprintf(

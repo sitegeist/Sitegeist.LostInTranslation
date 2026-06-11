@@ -6,6 +6,7 @@ namespace Sitegeist\LostInTranslation\Tests\Unit\Domain;
 
 use Neos\Flow\Tests\UnitTestCase;
 use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
+use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
@@ -85,6 +86,32 @@ class SynchronizationRuleTest extends UnitTestCase
     {
         $fields = $this->requiredFields();
         $fields['onSourceRemoval'] = 'destroy-everything';
+
+        $this->expectException(\InvalidArgumentException::class);
+        SynchronizationRule::fromArray($fields);
+    }
+
+    /** @test */
+    public function fromArrayDefaultsOnSourceTaggingToKeepTarget(): void
+    {
+        $rule = SynchronizationRule::fromArray($this->requiredFields());
+
+        self::assertSame(SourceTaggingBehavior::KeepTarget, $rule->onSourceTagging);
+    }
+
+    /** @test */
+    public function fromArrayParsesSyncToTargetOnSourceTagging(): void
+    {
+        $rule = SynchronizationRule::fromArray(['onSourceTagging' => 'sync-to-target'] + $this->requiredFields());
+
+        self::assertSame(SourceTaggingBehavior::SyncToTarget, $rule->onSourceTagging);
+    }
+
+    /** @test */
+    public function fromArrayRejectsUnknownOnSourceTagging(): void
+    {
+        $fields = $this->requiredFields();
+        $fields['onSourceTagging'] = 'maybe-hide';
 
         $this->expectException(\InvalidArgumentException::class);
         SynchronizationRule::fromArray($fields);

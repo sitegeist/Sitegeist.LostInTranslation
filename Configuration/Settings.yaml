@@ -144,6 +144,15 @@ Sitegeist:
       #                     under `Document` Documents are removed too. For `auto` rules the removal happens inline on
       #                     publish; for `ask` rules and the manual CLI it is reconciled on the deliberate "sync now" run.
       #
+      # Each rule may set an optional `onSourceTagging` (default `keep-target`):
+      #
+      #   onSourceTagging: keep-target | sync-to-target   (optional, default: keep-target)
+      #     keep-target    = leave the target's subtree tags alone; the target dimension manages its own visibility (a
+      #                      reviewer can hide/show translated nodes independently). The previous, unchanged behavior.
+      #     sync-to-target = mirror source-language subtree-tag changes (e.g. the `disabled` hide/show tag) into the
+      #                      target dimension. Applies to any node type (NOT gated by `scope`). Only `auto` rules mirror
+      #                      tags, inline on publish; idempotent (a tag already matching the target is skipped).
+      #
       # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
       # hook then iterates the stale-translation records already recorded for the rule's
       # `(targetWorkspaceName, targetDimension)` — i.e. anything that needs (re-)translation as of that moment, which
@@ -178,6 +187,7 @@ Sitegeist:
       #    scope: Document
       #    mode: auto
       #    onSourceRemoval: keep-target
+      #    onSourceTagging: keep-target
 
 Neos:
   Flow:

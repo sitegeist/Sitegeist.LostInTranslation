@@ -14,6 +14,10 @@ use Neos\ContentRepository\Core\EventStore\PublishedEvents;
 use Neos\ContentRepository\Core\Feature\NodeRemoval\Command\RemoveNodeAggregate;
 use Neos\ContentRepository\Core\Feature\NodeRemoval\Event\NodeAggregateWasRemoved;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\TagSubtree;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\UntagSubtree;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Event\SubtreeWasTagged;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Event\SubtreeWasUntagged;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
@@ -36,6 +40,7 @@ use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\NodeTreeDepth;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
+use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\StaleRecordReconciler;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
@@ -167,6 +172,9 @@ final class SynchronizationCommandHook implements CommandHookInterface
         // Source-language node removals carried by THIS publish. Collected once; each `remove-target` rule below filters
         // them to the removals that actually touched its source dimension. Empty for publishes without any removal.
         $removalEvents = $this->collectRemovalEvents($events);
+        // Source-language subtree-tag changes (e.g. hide/show) carried by THIS publish. Collected once; each
+        // `sync-to-target` rule below mirrors the ones that touched its source dimension.
+        $taggingEvents = $this->collectTaggingEvents($events);
 
         $additionalCommands = [];
         foreach ($matchingRules as $rule) {
@@ -183,8 +191,20 @@ final class SynchronizationCommandHook implements CommandHookInterface
             if ($rule->mode === SynchronizationMode::Ask) {
                 continue;
             }
-            foreach ($this->commandsForRule($rule) as $cmd) {
+            $translationCommands = $this->commandsForRule($rule);
+            foreach ($translationCommands as $cmd) {
                 $additionalCommands[] = $cmd;
+            }
+            // Mirror source-language subtree-tag changes (hide/show etc.) into the target dimension when the rule opts
+            // in. Emitted BEFORE the removals below so that a node tagged and removed in the same publish is tagged
+            // while it still exists (the removal then cascades it away), never tagged after it is gone. The
+            // CreateNodeVariant commands collected above let us also tag a node created in THIS publish — its variant
+            // does not exist yet when we build the batch, but the CR dispatches the create before our tag.
+            if ($rule->onSourceTagging === SourceTaggingBehavior::SyncToTarget) {
+                $plannedVariantCreations = $this->plannedVariantCreationIds($translationCommands);
+                foreach ($this->taggingCommandsForRule($rule, $taggingEvents, $plannedVariantCreations) as $cmd) {
+                    $additionalCommands[] = $cmd;
+                }
             }
             // Mirror source-language deletions into the target dimension when the rule opts in. Cheap and precise: it
             // only inspects this publish's own removal events, never walking the target tree (that is the manual sync's
@@ -244,6 +264,128 @@ final class SynchronizationCommandHook implements CommandHookInterface
             }
         }
         return $removalEvents;
+    }
+
+    /**
+     * Pick the subtree-tag events ({@see SubtreeWasTagged} / {@see SubtreeWasUntagged}) out of the publish — the
+     * hide/show `disabled` tag and any other tag surface here, republished onto the target workspace alongside the
+     * `WorkspaceWasPublished` event.
+     *
+     * @return list<SubtreeWasTagged|SubtreeWasUntagged>
+     */
+    private function collectTaggingEvents(PublishedEvents $events): array
+    {
+        $taggingEvents = [];
+        foreach ($events as $event) {
+            if ($event instanceof SubtreeWasTagged || $event instanceof SubtreeWasUntagged) {
+                $taggingEvents[] = $event;
+            }
+        }
+        return $taggingEvents;
+    }
+
+    /**
+     * The node aggregate ids that a {@see CreateNodeVariant} in this batch will materialise in the target dimension —
+     * used so a node created AND tagged in the same publish can still be tagged (its variant exists by the time the CR
+     * dispatches our tagging commands).
+     *
+     * @param list<CommandInterface> $translationCommands
+     * @return array<string,true>
+     */
+    private function plannedVariantCreationIds(array $translationCommands): array
+    {
+        $ids = [];
+        foreach ($translationCommands as $command) {
+            if ($command instanceof CreateNodeVariant) {
+                $ids[$command->nodeAggregateId->value] = true;
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * Mirror this publish's source-language subtree-tag changes into the rule's target dimension. Only called for rules
+     * with {@see SourceTaggingBehavior::SyncToTarget}.
+     *
+     * For each tag/untag that affected the rule's SOURCE dimension, emit the matching {@see TagSubtree} /
+     * {@see UntagSubtree} for the target variant. Not gated by {@see SynchronizationScope} — a hidden Document should
+     * hide in the target whether the rule mirrors structure or only content. The emit is idempotent: the CR throws when
+     * tagging an already-explicitly-tagged node (or untagging one that is not), so we skip a command whose target is
+     * already in the desired explicit state — which also makes re-publishes safe.
+     *
+     * `$plannedVariantCreationIds` are the nodes a `CreateNodeVariant` earlier in THIS batch will materialise. Their
+     * target variant does not exist yet when we build the batch, but the CR dispatches the create before our tagging
+     * commands, so a freshly-created variant can still be tagged this publish (it starts untagged, so the add is safe;
+     * there is nothing to untag).
+     *
+     * @param list<SubtreeWasTagged|SubtreeWasUntagged> $taggingEvents
+     * @param array<string,true> $plannedVariantCreationIds
+     * @return list<TagSubtree|UntagSubtree>
+     */
+    private function taggingCommandsForRule(SynchronizationRule $rule, array $taggingEvents, array $plannedVariantCreationIds): array
+    {
+        if ($taggingEvents === []) {
+            return [];
+        }
+        $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
+        $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
+        $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
+        $targetSubgraph = $this->contentGraphReadModel
+            ->getContentGraph($targetWorkspace)
+            ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
+
+        $commands = [];
+        foreach ($taggingEvents as $tagging) {
+            // Only mirror tag changes that touched the SOURCE language. A tag applied directly to the target variant
+            // leaves the source DSP out of the affected set and must not bounce back.
+            if (!$tagging->affectedDimensionSpacePoints->contains($sourceDsp)) {
+                continue;
+            }
+            $targetNode = $targetSubgraph->findNodeById($tagging->nodeAggregateId);
+            if ($targetNode === null) {
+                // The target variant does not exist yet. If a CreateNodeVariant in this batch will materialise it (the
+                // CR dispatches that create before this command), mirror an ADD onto the soon-to-exist, untagged
+                // variant. An untag has nothing to act on and is skipped. A node neither present nor being created
+                // cannot be tagged here — a later tag-only publish or a manual sync reconciles it.
+                if ($tagging instanceof SubtreeWasTagged && isset($plannedVariantCreationIds[$tagging->nodeAggregateId->value])) {
+                    $commands[] = TagSubtree::create(
+                        $targetWorkspace,
+                        $tagging->nodeAggregateId,
+                        $targetDsp,
+                        NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+                        $tagging->tag,
+                    );
+                }
+                continue;
+            }
+            // Compare against the target's EXPLICIT tags (inherited ones cannot be (un)tagged): skip when already in the
+            // desired state so we never trip SubtreeIsAlreadyTagged / SubtreeIsNotTagged.
+            $explicitlyTagged = $targetNode->tags->withoutInherited()->contain($tagging->tag);
+            if ($tagging instanceof SubtreeWasTagged) {
+                if ($explicitlyTagged) {
+                    continue;
+                }
+                $commands[] = TagSubtree::create(
+                    $targetWorkspace,
+                    $tagging->nodeAggregateId,
+                    $targetDsp,
+                    NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+                    $tagging->tag,
+                );
+            } else {
+                if (!$explicitlyTagged) {
+                    continue;
+                }
+                $commands[] = UntagSubtree::create(
+                    $targetWorkspace,
+                    $tagging->nodeAggregateId,
+                    $targetDsp,
+                    NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+                    $tagging->tag,
+                );
+            }
+        }
+        return $commands;
     }
 
     /**

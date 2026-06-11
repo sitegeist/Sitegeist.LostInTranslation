@@ -16,6 +16,7 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFil
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindRootNodeAggregatesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
@@ -87,6 +88,7 @@ class FullWorkspaceSynchronizer
         bool $dryRun = false,
         bool $removeOrphans = false,
         SynchronizationScope $removalScope = SynchronizationScope::Document,
+        bool $syncTags = false,
     ): WorkspaceSynchronizationResult {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -220,6 +222,33 @@ class FullWorkspaceSynchronizer
                 if (!$dryRun) {
                     $this->aiCommandDispatcher->dispatch($cr, $removal);
                 }
+            }
+        }
+
+        // Tag reconcile (opt-in): converge each target node's explicit subtree tags onto the source by diffing the two
+        // dimensions. Content graphs are re-read so variants created earlier in this run are included. See
+        // TargetTagReconciler.
+        if ($syncTags) {
+            $tagCommands = TargetTagReconciler::collect(
+                $cr->getContentGraph($targetWorkspaceName),
+                $cr->getContentGraph($sourceWorkspaceName),
+                $sourceDimensionSpacePoint,
+                $targetDimensionSpacePoint,
+                $targetWorkspaceName,
+            );
+            /** @var array<string,int> $tagCountByNode */
+            $tagCountByNode = [];
+            foreach ($tagCommands as $tagCommand) {
+                $tagCountByNode[$tagCommand->nodeAggregateId->value] = ($tagCountByNode[$tagCommand->nodeAggregateId->value] ?? 0) + 1;
+                if (!$dryRun) {
+                    $this->aiCommandDispatcher->dispatch($cr, $tagCommand);
+                }
+            }
+            foreach ($tagCountByNode as $nodeAggregateIdValue => $count) {
+                $perNodeResults[] = new PerNodeSynchronizationResult(
+                    NodeAggregateId::fromString((string)$nodeAggregateIdValue),
+                    $dryRun ? RetranslationResult::skipped('dry-run') : RetranslationResult::tagged($count),
+                );
             }
         }
 

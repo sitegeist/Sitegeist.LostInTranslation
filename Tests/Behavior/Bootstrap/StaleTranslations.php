@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Behat\Gherkin\Node\TableNode;
 use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Dto\SubtreeTag;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
@@ -20,6 +21,7 @@ use Neos\Neos\Domain\Service\WorkspaceService;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
+use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
@@ -171,6 +173,34 @@ trait StaleTranslations
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
             onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
             removalScope: SynchronizationScope::from($removalScope),
+        );
+        Assert::assertNull(
+            $result->skippedReason,
+            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+        );
+    }
+
+    /**
+     * Like {@see self::iSynchronizeTranslations()} but also reconciles subtree tags: converges each target-dimension
+     * node's explicit tags (hide/show and any other tag) onto the source. Exercises the manual / "sync now" diff path
+     * of {@see SourceTaggingBehavior::SyncToTarget} ({@see \Sitegeist\LostInTranslation\Domain\TargetTagReconciler}).
+     *
+     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) syncing subtree tags$/
+     * @throws Exception
+     */
+    public function iSynchronizeTranslationsSyncingTags(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+    ): void {
+        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+            onSourceTagging: SourceTaggingBehavior::SyncToTarget,
         );
         Assert::assertNull(
             $result->skippedReason,
@@ -391,6 +421,45 @@ trait StaleTranslations
             $expectedValue,
             $node->getProperty(PropertyName::fromString($propertyName)),
             sprintf('Property "%s" of node "%s" in %s@%s does not match', $propertyName, $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
+        );
+    }
+
+    /**
+     * Assert a node carries (or does not carry) a given subtree tag in a (workspace, dimension) subgraph by workspace
+     * NAME. Read `withoutRestrictions` so a disabled node is still visible (the default constraints would filter it
+     * out). `$negate` is the " not" group from the regex — present means assert the tag is absent.
+     *
+     * @When /^I expect node "([^"]*)" in workspace "([^"]*)" dimension space point (\{[^}]+\}) to( not)? be tagged "([^"]*)"$/
+     * @throws Exception
+     */
+    public function iExpectNodeToBeTagged(
+        string $nodeAggregateId,
+        string $workspaceName,
+        string $dimensionSpacePoint,
+        string $negate,
+        string $tag,
+    ): void {
+        $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
+        $subgraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName))->getSubgraph(
+            DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+            VisibilityConstraints::withoutRestrictions(),
+        );
+        $node = $subgraph->findNodeById(NodeAggregateId::fromString($nodeAggregateId));
+        Assert::assertNotNull(
+            $node,
+            sprintf('Node "%s" not found in %s@%s', $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
+        );
+        $hasTag = $node->tags->contain(SubtreeTag::fromString($tag));
+        if ($negate !== '') {
+            Assert::assertFalse(
+                $hasTag,
+                sprintf('Node "%s" in %s@%s is unexpectedly tagged "%s"', $nodeAggregateId, $dimensionSpacePoint, $workspaceName, $tag),
+            );
+            return;
+        }
+        Assert::assertTrue(
+            $hasTag,
+            sprintf('Node "%s" in %s@%s is not tagged "%s"', $nodeAggregateId, $dimensionSpacePoint, $workspaceName, $tag),
         );
     }
 

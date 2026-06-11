@@ -12,6 +12,7 @@ Sitegeist:
           targetDimension: es
           scope: Document
           onSourceRemoval: remove-target
+          onSourceTagging: sync-to-target
         # `ask` mode: publishing to `live` must NOT auto-translate into `de`; the stale rows survive until a manual
         # synchronization runs (the "ask mode" scenario). `de` was already left untouched by the auto scenarios, so
         # adding this rule does not change their expectations — it only adds the manual-sync path under test.

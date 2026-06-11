@@ -158,6 +158,7 @@ Sitegeist:
           scope: Document                # Document (mirror documents + content) | Content (content only)
           mode: auto                     # auto (translate on publish) | ask (defer to a manual "sync now")
           onSourceRemoval: keep-target   # keep-target (default) | remove-target (mirror source deletions)
+          onSourceTagging: keep-target   # keep-target (default) | sync-to-target (mirror hide/show + other tags)
 ```
 
 `onSourceRemoval` decides what happens to the target dimension when a node is **removed** in the source
@@ -166,6 +167,13 @@ deletions — the previous behaviour). `remove-target` mirrors the deletion, gat
 only content nodes are removed (never Documents, symmetric with never auto-*creating* them), under `Document`
 Documents are removed too. For `auto` rules the deletion is mirrored inline on publish (from the publish's own
 removal events); for `ask` rules it is reconciled on the deliberate "sync now" run, like translations.
+
+`onSourceTagging` decides whether subtree-tag changes in the source language — the `disabled` (hide/show)
+tag and any other `SubtreeTag` — are mirrored into the target. The default `keep-target` leaves the target's
+tags alone (a reviewer manages visibility independently); `sync-to-target` mirrors them onto the target
+variant. It is **not** gated by `scope` (a hidden Document hides in the target either way). `auto` rules
+mirror tags inline on publish (from the publish's own tag events); `ask` rules and the CLI (`--sync-tags`)
+reconcile them on the deliberate "sync now" run by diffing the target's tags against the source.
 
 Automatic synchronization is always stale-driven. The Flow CLI offers the same operations for scripting,
 cron jobs and one-off catch-ups:
@@ -192,7 +200,7 @@ target is force-rebased onto its base (which must be the source workspace) befor
 what would happen without dispatching any commands.
 
 ```
-./flow lostintranslation:synchronize --source-workspace=<sourceWorkspace> --source-dimension=<sourceDimension> --target-workspace=<targetWorkspace> --target-dimension=<targetDimension> [--content-repository=default] [--full] [--dry-run]
+./flow lostintranslation:synchronize --source-workspace=<sourceWorkspace> --source-dimension=<sourceDimension> --target-workspace=<targetWorkspace> --target-dimension=<targetDimension> [--content-repository=default] [--full] [--dry-run] [--remove-orphans] [--sync-tags]
 
 #   --source-workspace   workspace the source content is read from
 #   --source-dimension   source language value; must equal the target dimension's referenceLanguage
@@ -200,6 +208,8 @@ what would happen without dispatching any commands.
 #   --target-dimension   target language value, e.g. "de"
 #   --full               walk the whole subtree instead of only stale records
 #   --dry-run            report the affected records/nodes without writing anything
+#   --remove-orphans     also remove target nodes whose source variant no longer exists (mirror deletions)
+#   --sync-tags          also reconcile subtree tags (hide/show + any other tag) onto the source
 ```
 
 **`lostintranslation:reconcile`** — housekeeping. The projection only clears the directly-removed aggregate on

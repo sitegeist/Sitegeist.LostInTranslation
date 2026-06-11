@@ -263,9 +263,10 @@ nodeTranslation:
       sourceDimension: en            # must equal the targetDimension preset's referenceLanguage
       targetWorkspaceName: de-review # where translated variants are written
       targetDimension: de
-      scope: Document                # Document | Content        (REQUIRED — config validation throws if missing)
-      mode: auto                     # auto | ask                (default: auto)
-      onSourceRemoval: keep-target   # keep-target | remove-target (default: keep-target)
+      scope: Document                # Document | Content          (REQUIRED — config validation throws if missing)
+      mode: auto                     # auto | ask                  (default: auto)
+      onSourceRemoval: keep-target   # keep-target | remove-target  (default: keep-target)
+      onSourceTagging: keep-target   # keep-target | sync-to-target (default: keep-target)
 ```
 
 - **`SynchronizationScope`** (required, no default):
@@ -290,6 +291,18 @@ nodeTranslation:
     `NodeAggregateWasRemoved` events; `ask` rules and the CLI reconcile by **diffing** the target
     dimension against the source on the deliberate sync. See `SynchronizationScope::mayRemoveNode()` and
     `TargetOrphanCollector`.
+- **`SourceTaggingBehavior`** (default `keep-target`): what happens to the target dimension when a subtree
+  tag (e.g. the `disabled` hide/show tag, or any other `SubtreeTag`) is added/removed in the source language.
+  - `keep-target` — leave the target's tags alone; the target dimension manages its own visibility (the
+    original behaviour, so existing configs are unchanged).
+  - `sync-to-target` — mirror the source tag change, emitting `TagSubtree` / `UntagSubtree` on the target
+    variant. **Not** gated by `scope` (a hidden Document hides in the target whether the rule mirrors
+    structure or only content). Mirrored only for `auto` rules, **incrementally** from the publish's own
+    `SubtreeWasTagged` / `SubtreeWasUntagged` events. For `ask` rules and the CLI (`--sync-tags`) it is instead
+    reconciled on the deliberate sync by **diffing** each node's explicit tag set against the source
+    (`TargetTagReconciler`) — mirroring the removal feature's auto-incremental / manual-full split. The emit is
+    idempotent either way — a tag already matching the target's *explicit* state is skipped, so the CR never
+    trips `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged` and re-runs are safe.
 
 A `SynchronizationRule` is an immutable readonly VO; `SynchronizationRules::forPublicationTarget()`
 returns **all** rules matching a publish target (one publish may fan out to multiple targets).
@@ -328,14 +341,22 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
    exists → translated `SetNodeProperties`. Unsatisfiable no-op rows are pruned via
    `StaleRecordReconciler`.
 8. **Order commands ancestor-before-descendant** by source-tree depth (`NodeTreeDepth`).
-9. **Removal mirror** (only for `auto` rules with `onSourceRemoval: remove-target`): scan this publish's
+9. **Tagging mirror** (only for `auto` rules with `onSourceTagging: sync-to-target`): scan this publish's
+   `SubtreeWasTagged` / `SubtreeWasUntagged` events whose `affectedDimensionSpacePoints` include the rule's
+   **source** DSP. For each whose target variant exists, append a `TagSubtree` / `UntagSubtree` for the target
+   variant (`allSpecializations` at the target DSP) — unless the target is already in the desired *explicit*
+   state (idempotent, avoids `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged`). A node *created* in this same
+   publish (its id is among step 7's `CreateNodeVariant`s) also gets its `TagSubtree`, relying on the batch
+   being dispatched in order (create then tag) onto the freshly-created, untagged variant. Not scope-gated.
+   Emitted **before** the removal mirror so a node tagged-and-removed in one publish is tagged while it exists.
+10. **Removal mirror** (only for `auto` rules with `onSourceRemoval: remove-target`): scan this publish's
    `PublishedEvents` for `NodeAggregateWasRemoved` whose `affectedCoveredDimensionSpacePoints` include the
    rule's **source** DSP (this gate distinguishes a source-side removal from an editor deleting only the
    target variant). For each, if the target variant still exists and the scope permits removing it
    (`SynchronizationScope::mayRemoveNode()`), append a `RemoveNodeAggregate` for the target variant
    (`allSpecializations` at the target DSP). Cheap and precise — only the publish delta is inspected, never
    the whole target tree.
-10. Flag AI authorship and **return** the `Commands` — the hook does *not* dispatch inline (it can't,
+11. Flag AI authorship and **return** the `Commands` — the hook does *not* dispatch inline (it can't,
    mid-publish); the CR dispatches the returned commands as separate commits after the publish.
 
 ### B. Manual "sync now" / post-publish prompt — `WorkspaceSynchronizer` + controller/module
@@ -357,6 +378,11 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
   `ask` rules defer their removal to exactly this run. This also self-heals deletions from before the flag
   was enabled. (The full reconcile is acceptable here because "sync now" is already a deliberate, heavier
   operation — unlike the publish hook, which must stay incremental.)
+- **Tag mirror (diff path).** When the rule is `sync-to-target`, after the stale-driven pass it converges each
+  target node's EXPLICIT subtree tags onto the source by diffing the two dimensions (`TargetTagReconciler`):
+  a `TagSubtree` per tag the target lacks, an `UntagSubtree` per tag it has extra — for any tag, not just
+  `disabled`. `synchronizeRule()` passes the rule's `onSourceTagging`, so `ask` rules reconcile tags on this
+  run. The reconciler re-reads a fresh subgraph, so a variant created earlier in the same run is tagged too.
 - The backend module lists **all** rules (source→target, dimensions, scope, mode, live out-of-sync
   count) with "Sync now"/"Sync all", ignoring `mode` on purpose — it doubles as a manual catch-up for
   rules that errored mid-cascade.
@@ -379,6 +405,8 @@ Match the **literal** action string, not an imported constant (a wrong import pa
   `TargetOrphanCollector` pass runs after the translation walk, removing target-dimension nodes absent
   from the source. The CLI has no rule, so it removes Documents **and** content (`Document` removal
   scope); a rule-driven run passes the rule's `scope`.
+- **Tag mirror.** With `--sync-tags` (CLI) / `syncTags: true`, the diff-based `TargetTagReconciler` pass runs
+  after the translation walk, converging each target node's explicit subtree tags onto the source.
 
 ### Cross-workspace mechanics (the crux)
 
@@ -492,6 +520,24 @@ behaviour.
   symmetric with creation (Content keeps Documents). Known asymmetry: `auto` mirrors only the publish
   delta, whereas the manual/full diff is a full reconcile, so an orphan created while the flag was off is
   cleaned up only on the next manual/`--full` sync.
+- **Source-tagging mirror (`onSourceTagging: sync-to-target`) — event-scan (auto) + diff (manual), not
+  scope-gated.** Mirrors source-language subtree-tag changes (the `disabled` hide/show tag and ANY other
+  `SubtreeTag`) onto the target via `TagSubtree` / `UntagSubtree`, reusing the removal mirror's split: `auto`
+  rules event-scan `SubtreeWasTagged` / `SubtreeWasUntagged` from the publish; `ask` rules and the CLI
+  (`--sync-tags`) diff each node's explicit tag set against the source (`TargetTagReconciler`).
+  **Decisions:** (1) opt-in per-rule **enum** `keep-target | sync-to-target` (default `keep-target`), so a
+  target reviewer keeps independent visibility unless the rule opts in; (2) **not** gated by `scope` — unlike
+  create/remove, hiding is not a structural change, and a hidden source Document should hide in the target
+  regardless of Content/Document scope; (3) **idempotent** — skip when the target's *explicit* tag state
+  already matches, because the CR throws `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged` otherwise; (4) only
+  EXPLICIT tags are diffed/mirrored (inherited ones reproduce once their ancestor is reconciled), reproducing
+  the source's tag structure. **Create-and-tag in one publish** is handled on the `auto` path by emitting the
+  mirrored `TagSubtree` after the node's own `CreateNodeVariant` in the returned batch — the CR dispatches the
+  batch sequentially, so the (untagged) variant exists by the time the tag is applied. `CreateNodeVariant` does
+  **not** copy explicit subtree tags onto a peer variant (verified by test), so the optimistic tag is safe;
+  this covers nodes the sync creates via a direct `CreateNodeVariant` (a node with no translatable property, or
+  a custom tag on a tethered node, is left to the diff path; note Neos forbids the `disabled` / `removed` tags
+  on tethered nodes entirely, so "hide a tethered node" is impossible to begin with).
 - **Auto-creating the target workspace (`ReviewWorkspaceProvisioner`) — added then reverted/deleted.**
   See [§5](#5-synchronization): a cross-workspace rule fires on every publish, so auto-create was
   wrong. The class no longer exists.
@@ -550,6 +596,15 @@ behaviour.
 - **Cross-workspace `ask` + `remove-target` is largely moot.** The publish's force-rebase already drops a
   target variant whose source was removed ("source wins"), so the removal mirror mainly matters for
   same-workspace rules where no rebase intervenes.
+- **Auto tag mirroring of create-and-tag-in-one-publish covers nodes the sync creates via a direct
+  `CreateNodeVariant`** (translatable, non-tethered). The hook tags a node created in the same publish by
+  ordering the mirrored `TagSubtree` after that node's `CreateNodeVariant` (the CR dispatches the batch
+  sequentially, so the variant exists by then). Two narrow residuals are left to the manual / `--sync-tags`
+  diff path (`TargetTagReconciler`, which has no such gap): a tagged node with **no translatable property**
+  (the sync never creates it), and a **custom** tag on a **tethered** node created in the same publish.
+  Note the `disabled` (hide) and `removed` tags **cannot** be applied to a tethered node at all — Neos's
+  `NeosSubtreeTaggingConstraintChecks` rejects that on both source and target — so the practical "hide a
+  tethered node" case does not exist; only arbitrary custom tags on tethered nodes are possible.
 - The Neos 8 in-content "translation status" banner/overlay and the `ShowStatus.fusion` module view
   were **not** ported (depend on Neos 8 APIs with no Neos 9 equivalent); the inspector view covers
   the same find-stale → retranslate workflow.
@@ -576,9 +631,11 @@ Classes/
     CrossWorkspaceSynchronizationTarget.php           cross-ws preflight + force-rebase
     StaleRecordReconciler.php                         prune unsatisfiable (target) rows
     TargetOrphanCollector.php                         diff-based source-removal mirror (manual / full)
+    TargetTagReconciler.php                           diff-based subtree-tag mirror (manual / full)
     NodeTreeDepth.php                                 ancestor-before-descendant ordering
     AiCommandDispatcher.php                           AI attribution + auth bypass
-    SynchronizationRule(s).php / SynchronizationScope.php / SynchronizationMode.php / SourceRemovalBehavior.php
+    SynchronizationRule(s).php / SynchronizationScope.php / SynchronizationMode.php
+    SourceRemovalBehavior.php / SourceTaggingBehavior.php
     SynchronizationStatusProvider.php / RuleSynchronizationStatus.php
     Directive/ (DimensionValueDirectiveFactory, DeeplLanguagePair, …)
     PostProcessor/ (TranslatedPropertyPostProcessorInterface, UriPathSegmentPostProcessor)

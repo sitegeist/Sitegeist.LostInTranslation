@@ -53,6 +53,11 @@ final readonly class RetranslationResult
          * additional commands). Each removal cascades descendant removal in the target dimension.
          */
         public int $removalCommandsDispatched = 0,
+        /**
+         * `TagSubtree` / `UntagSubtree` commands dispatched to mirror source-language subtree-tag changes (e.g.
+         * hide/show) into the target dimension — only the manual / full sync diff path emits these.
+         */
+        public int $tagCommandsDispatched = 0,
     ) {
     }
 
@@ -77,10 +82,19 @@ final readonly class RetranslationResult
         return new self(0, 0, null, false, 1);
     }
 
+    /**
+     * A node whose target variant had `$count` subtree-tag commands dispatched to mirror source-language tag changes.
+     */
+    public static function tagged(int $count): self
+    {
+        return new self(0, 0, null, false, 0, $count);
+    }
+
     public function isNoOp(): bool
     {
         return $this->stalePropertyCommandsDispatched === 0
             && $this->variantCommandsDispatched === 0
-            && $this->removalCommandsDispatched === 0;
+            && $this->removalCommandsDispatched === 0
+            && $this->tagCommandsDispatched === 0;
     }
 }

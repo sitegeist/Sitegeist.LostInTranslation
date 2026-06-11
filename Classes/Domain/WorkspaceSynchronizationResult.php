@@ -53,6 +53,14 @@ final readonly class WorkspaceSynchronizationResult
         ));
     }
 
+    public function totalTagCommandsDispatched(): int
+    {
+        return array_sum(array_map(
+            static fn (PerNodeSynchronizationResult $r): int => $r->result->tagCommandsDispatched,
+            $this->perNodeResults,
+        ));
+    }
+
     public function totalSkippedNodes(): int
     {
         return count(array_filter(

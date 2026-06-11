@@ -1831,3 +1831,109 @@ Feature: Automatic retranslation on workspace publish
     # The publish completes without a NodeAggregateCurrentlyDoesNotExist abort and the whole es subtree is gone.
     Then I expect node "page-home" to be absent in workspace "live" dimension space point {"language":"es"}
     And I expect node "intro-text" to be absent in workspace "live" dimension space point {"language":"es"}
+
+  Scenario: Hiding then showing a node in the source language mirrors the subtree tag into the target (auto, sync-to-target)
+    # The `live → live/es` rule is `onSourceTagging: sync-to-target`. Publishing auto-creates the es variant; tagging the
+    # EN variant "disabled" (the hide/show tag) and re-publishing mirrors the tag onto the es variant from this publish's
+    # own SubtreeWasTagged event. Untagging mirrors back the other way via SubtreeWasUntagged.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # es variant created and initially NOT tagged.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to not be tagged "disabled"
+    # Hide the EN (source) variant, then publish.
+    When I am in workspace "user-workspace"
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    # The hide is mirrored onto the es variant.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to be tagged "disabled"
+    # Show the EN (source) variant again, then publish.
+    When I am in workspace "user-workspace"
+    And the command UntagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-4"   |
+    # The show is mirrored back onto the es variant.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to not be tagged "disabled"
+
+  Scenario: Manual sync reconciles subtree tags by diffing source vs target — for the disabled tag AND arbitrary tags
+    # The deliberate "sync now" diff path (WorkspaceSynchronizer) converges each target node's explicit subtree tags
+    # onto the source. Mirrors ANY tag, not just `disabled`. Tag the EN source BEFORE the es variant even exists, so the
+    # tags are applied to the variant the same run creates it (the create-and-tag case the publish hook cannot cover).
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "needs-review"           |
+    # Manual sync creates the es variant AND reconciles BOTH tags onto it.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "needs-review"
+    # Remove only the `disabled` tag on the source, then re-sync: the diff drops `disabled` on the target but keeps the
+    # custom `needs-review` tag.
+    When the command UntagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "needs-review"
+
+  Scenario: A node created AND hidden in the same publish is hidden in the target (auto, sync-to-target)
+    # Create + tag the EN source, then publish both in ONE go. The es variant does not exist when the hook builds its
+    # batch, but its CreateNodeVariant is dispatched before the mirrored TagSubtree, so the es variant ends up hidden.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # The es variant is created, translated, AND hidden — all in this single publish.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to be tagged "disabled"

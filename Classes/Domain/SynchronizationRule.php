@@ -21,6 +21,10 @@ use Neos\Flow\Annotations as Flow;
  * `onSourceRemoval` decides what happens to the target dimension when a node is removed in the source language: keep
  * the translated variant ({@see SourceRemovalBehavior::KeepTarget}, the default) or mirror the deletion
  * ({@see SourceRemovalBehavior::RemoveTarget}).
+ *
+ * `onSourceTagging` decides what happens to the target dimension when a subtree tag (e.g. `disabled` / hide-show) is
+ * added or removed in the source language: leave the target's tags alone ({@see SourceTaggingBehavior::KeepTarget}, the
+ * default) or mirror the tag change ({@see SourceTaggingBehavior::SyncToTarget}).
  */
 #[Flow\Proxy(false)]
 final readonly class SynchronizationRule
@@ -33,6 +37,7 @@ final readonly class SynchronizationRule
         public SynchronizationScope $scope,
         public SynchronizationMode $mode = SynchronizationMode::Auto,
         public SourceRemovalBehavior $onSourceRemoval = SourceRemovalBehavior::KeepTarget,
+        public SourceTaggingBehavior $onSourceTagging = SourceTaggingBehavior::KeepTarget,
     ) {
     }
 
@@ -94,6 +99,23 @@ final readonly class SynchronizationRule
             }
         }
 
+        // `onSourceTagging` is optional and defaults to KeepTarget (leave the target's subtree tags alone), so existing
+        // rule configs keep their current behavior. A present but unrecognized value fails loudly.
+        $onSourceTagging = SourceTaggingBehavior::KeepTarget;
+        if (isset($row['onSourceTagging']) && $row['onSourceTagging'] !== '') {
+            if (!is_string($row['onSourceTagging'])) {
+                throw new \InvalidArgumentException('SynchronizationRule field "onSourceTagging" must be a string', 1779051207);
+            }
+            $onSourceTagging = SourceTaggingBehavior::tryFrom($row['onSourceTagging']);
+            if ($onSourceTagging === null) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Invalid onSourceTagging "%s" in SynchronizationRule; expected one of: %s',
+                    $row['onSourceTagging'],
+                    implode(', ', array_map(static fn (SourceTaggingBehavior $b): string => $b->value, SourceTaggingBehavior::cases())),
+                ), 1779051208);
+            }
+        }
+
         return new self(
             sourceWorkspaceName: $row['sourceWorkspaceName'],
             sourceDimension: $row['sourceDimension'],
@@ -102,6 +124,7 @@ final readonly class SynchronizationRule
             scope: $scope,
             mode: $mode,
             onSourceRemoval: $onSourceRemoval,
+            onSourceTagging: $onSourceTagging,
         );
     }
 }
