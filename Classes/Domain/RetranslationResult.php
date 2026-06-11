@@ -47,6 +47,12 @@ final readonly class RetranslationResult
          * Implies `skippedReason !== null`.
          */
         public bool $requiresFullSync = false,
+        /**
+         * `RemoveNodeAggregate` commands dispatched to mirror a source-language deletion into the target dimension
+         * (only the manual / full sync diff path emits these; the publish-driven hook emits its removals directly as
+         * additional commands). Each removal cascades descendant removal in the target dimension.
+         */
+        public int $removalCommandsDispatched = 0,
     ) {
     }
 
@@ -63,8 +69,18 @@ final readonly class RetranslationResult
         return new self(0, 0, $reason, true);
     }
 
+    /**
+     * A node whose target variant was removed to mirror a source-language deletion.
+     */
+    public static function removed(): self
+    {
+        return new self(0, 0, null, false, 1);
+    }
+
     public function isNoOp(): bool
     {
-        return $this->stalePropertyCommandsDispatched === 0 && $this->variantCommandsDispatched === 0;
+        return $this->stalePropertyCommandsDispatched === 0
+            && $this->variantCommandsDispatched === 0
+            && $this->removalCommandsDispatched === 0;
     }
 }

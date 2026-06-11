@@ -19,6 +19,7 @@ use Neos\Neos\Domain\Service\WorkspacePublishingService;
 use Neos\Neos\Domain\Service\WorkspaceService;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
 use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
@@ -141,6 +142,36 @@ trait StaleTranslations
         );
         // Fail loudly if the synchronizer short-circuited via `skipped(...)` (e.g. mis-configured source/target).
         // Without this a scenario that meant to exercise sync but mis-typed a dimension would silently pass.
+        Assert::assertNull(
+            $result->skippedReason,
+            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+        );
+    }
+
+    /**
+     * Like {@see self::iSynchronizeTranslations()} but also mirrors source-language deletions: target-dimension nodes
+     * whose source variant no longer exists are removed, gated by the given scope (`Content` keeps Documents, `Document`
+     * removes them too). Exercises the manual / "sync now" diff path of {@see SourceRemovalBehavior::RemoveTarget}.
+     *
+     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) removing orphans with scope "([^"]*)"$/
+     * @throws Exception
+     */
+    public function iSynchronizeTranslationsRemovingOrphans(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        string $removalScope,
+    ): void {
+        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+            onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
+            removalScope: SynchronizationScope::from($removalScope),
+        );
         Assert::assertNull(
             $result->skippedReason,
             sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),

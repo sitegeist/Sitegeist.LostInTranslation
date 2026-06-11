@@ -45,6 +45,14 @@ final readonly class WorkspaceSynchronizationResult
         ));
     }
 
+    public function totalRemovalCommandsDispatched(): int
+    {
+        return array_sum(array_map(
+            static fn (PerNodeSynchronizationResult $r): int => $r->result->removalCommandsDispatched,
+            $this->perNodeResults,
+        ));
+    }
+
     public function totalSkippedNodes(): int
     {
         return count(array_filter(

@@ -50,6 +50,9 @@ class WorkspaceSynchronizer
     #[Flow\Inject]
     protected Retranslator $retranslator;
 
+    #[Flow\Inject]
+    protected AiCommandDispatcher $aiCommandDispatcher;
+
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
 
@@ -70,9 +73,16 @@ class WorkspaceSynchronizer
             targetWorkspaceName: WorkspaceName::fromString($rule->targetWorkspaceName),
             targetDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $rule->targetDimension]),
             dryRun: $dryRun,
+            onSourceRemoval: $rule->onSourceRemoval,
+            removalScope: $rule->scope,
         );
     }
 
+    /**
+     * @param SourceRemovalBehavior $onSourceRemoval when {@see SourceRemovalBehavior::RemoveTarget}, target-dimension
+     *        nodes whose source variant no longer exists are removed after the stale-driven pass (the deletion-side
+     *        reconcile; see {@see TargetOrphanCollector}). `$removalScope` gates which node types may be removed.
+     */
     public function synchronizeWorkspace(
         ContentRepositoryId $contentRepositoryId,
         WorkspaceName $sourceWorkspaceName,
@@ -80,6 +90,8 @@ class WorkspaceSynchronizer
         WorkspaceName $targetWorkspaceName,
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $dryRun = false,
+        SourceRemovalBehavior $onSourceRemoval = SourceRemovalBehavior::KeepTarget,
+        SynchronizationScope $removalScope = SynchronizationScope::Document,
     ): WorkspaceSynchronizationResult {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -190,6 +202,29 @@ class WorkspaceSynchronizer
                 sourceWorkspaceName: $sourceWorkspaceName,
             );
             $perNodeResults[] = new PerNodeSynchronizationResult($entry->nodeAggregateId, $result);
+        }
+
+        // Deletion-side reconcile: mirror source-language removals by deleting target-dimension nodes whose source
+        // variant no longer exists. Decoupled from any publish, so we diff the two subgraphs rather than reading
+        // removal events (which the publish-driven hook uses). See TargetOrphanCollector for the scope gating.
+        if ($onSourceRemoval === SourceRemovalBehavior::RemoveTarget) {
+            $orphanRemovals = TargetOrphanCollector::collect(
+                $targetContentGraph,
+                $targetSubgraph,
+                $sourceSubgraph,
+                $cr->getNodeTypeManager(),
+                $removalScope,
+                $targetWorkspaceName,
+                $targetDimensionSpacePoint,
+            );
+            foreach ($orphanRemovals as $removal) {
+                if ($dryRun) {
+                    $perNodeResults[] = new PerNodeSynchronizationResult($removal->nodeAggregateId, RetranslationResult::skipped('dry-run'));
+                    continue;
+                }
+                $this->aiCommandDispatcher->dispatch($cr, $removal);
+                $perNodeResults[] = new PerNodeSynchronizationResult($removal->nodeAggregateId, RetranslationResult::removed());
+            }
         }
 
         return new WorkspaceSynchronizationResult($perNodeResults);

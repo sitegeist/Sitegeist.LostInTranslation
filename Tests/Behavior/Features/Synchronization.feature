@@ -1667,3 +1667,167 @@ Feature: Automatic retranslation on workspace publish
     When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
     Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
     And the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0
+
+  Scenario: Removing a content node in the source language removes its target-language variant on publish (auto, remove-target)
+    # The `live → live/es` Document rule is `onSourceRemoval: remove-target`. Publishing auto-creates the es variant;
+    # removing the EN (source) variant and re-publishing makes the auto-sync hook mirror the deletion into es from this
+    # publish's own NodeAggregateWasRemoved event.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    # Remove only the EN (source) variant, then publish.
+    When I am in workspace "user-workspace"
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    Then I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"en"}
+    And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"es"}
+
+  Scenario: Removing a Document in the source language removes the target-language Document on publish (auto, Document scope)
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                      |
+      | home            | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Home"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    Then I expect node "home" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
+    When I am in workspace "user-workspace"
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "home"               |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    # Document scope mirrors the Document deletion into es.
+    Then I expect node "home" to be absent in workspace "live" dimension space point {"language":"es"}
+
+  Scenario: Manual orphan removal respects scope — Content keeps Documents, Document removes them; keep-target leaves them
+    # Build orphans by creating es variants and then removing their EN source. The deliberate "sync now" diff path
+    # (WorkspaceSynchronizer) reconciles deletions; the scope gates which node types it removes. A plain sync (no
+    # removal) is the keep-target control.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
+      | home            | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Home"}  |
+      | intro           | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Intro"} |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
+    And I expect node "intro" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+    # Remove BOTH EN source variants, orphaning the es variants.
+    When the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "home"               |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "intro"              |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+    # keep-target control: a plain sync leaves both es orphans intact.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
+    And I expect node "intro" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+    # Content scope: the content orphan is removed, the Document orphan is kept.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
+    Then I expect node "intro" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
+    # Document scope: the Document orphan is removed too.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document"
+    Then I expect node "home" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+
+  Scenario: An `ask` remove-target rule defers deletion to the manual sync, not the publish
+    # The `live → live/de` rule is `ask` + `remove-target`. Same-workspace, so (unlike a cross-workspace rule) no
+    # force-rebase drops the orphaned de peer on publish — the deletion mirror is the ONLY thing that would remove it,
+    # and `ask` defers that mirror to the deliberate manual sync.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # Translate the de variant via a manual sync (the `ask` rule does not auto-translate on publish).
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    # Remove the source (en) variant and publish. The `ask` rule must NOT remove the de variant on publish.
+    When I am in workspace "user-workspace"
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    # Deferred: the de variant is still present after the publish (the es auto rule did mirror its own removal).
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"es"}
+    # The deliberate manual sync (the deferred "sync now") reconciles the deletion.
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} removing orphans with scope "Document"
+    Then I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
+
+  Scenario: Removing a Document and a node inside it in the same publish mirrors as a single subtree removal (auto, remove-target)
+    # Guards the auto-path removal dedup. The CR emits a standalone NodeAggregateWasRemoved for EACH explicitly removed
+    # aggregate (never for cascade-removed children), so a parent + descendant removed in one publish would otherwise
+    # emit two RemoveNodeAggregate commands — and the descendant's command would target a node the parent's cascade
+    # already deleted (NodeAggregateCurrentlyDoesNotExist) once the parent removal is dispatched first (e.g. when the
+    # target hierarchy diverges from the source). Only the subtree-root removal must be emitted; the CR cascades the rest.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                           | {"main": "page-home-main"}         |
+      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Intro"} |                                    |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # es variants created by the Document-scope rule.
+    Then I expect node "page-home" in workspace "live" dimension space point {"language":"es"} to have property "title" with value "Home translated"
+    And I expect node "intro-text" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+    # Remove the child first then the parent (the only order the SOURCE permits — a parent removal cascades the child,
+    # so the child cannot be removed afterwards), then publish both removals together.
+    When I am in workspace "user-workspace"
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "intro-text"         |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+    And the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "page-home"          |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    # The publish completes without a NodeAggregateCurrentlyDoesNotExist abort and the whole es subtree is gone.
+    Then I expect node "page-home" to be absent in workspace "live" dimension space point {"language":"es"}
+    And I expect node "intro-text" to be absent in workspace "live" dimension space point {"language":"es"}

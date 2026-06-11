@@ -11,15 +11,21 @@ use Neos\ContentRepository\Core\Dimension\ContentDimension;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\EventStore\PublishedEvents;
+use Neos\ContentRepository\Core\Feature\NodeRemoval\Command\RemoveNodeAggregate;
+use Neos\ContentRepository\Core\Feature\NodeRemoval\Event\NodeAggregateWasRemoved;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Event\WorkspaceWasPublished;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphReadModelInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeVariantSelectionStrategy;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
@@ -29,6 +35,7 @@ use Sitegeist\LostInTranslation\Domain\CrossWorkspaceSynchronizationTarget;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\NodeTreeDepth;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
+use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
 use Sitegeist\LostInTranslation\Domain\StaleRecordReconciler;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
@@ -157,6 +164,10 @@ final class SynchronizationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
+        // Source-language node removals carried by THIS publish. Collected once; each `remove-target` rule below filters
+        // them to the removals that actually touched its source dimension. Empty for publishes without any removal.
+        $removalEvents = $this->collectRemovalEvents($events);
+
         $additionalCommands = [];
         foreach ($matchingRules as $rule) {
             // Bring the rule's target workspace current with the just-published source on EVERY publish — including for
@@ -168,12 +179,20 @@ final class SynchronizationCommandHook implements CommandHookInterface
             }
             // `ask` rules defer the actual translation to a deliberate manual sync (Neos UI prompt / backend module
             // "sync now") so the publish stays fast. The rebase above already refreshed their status; nothing more to
-            // do inline.
+            // do inline — removals are reconciled by that same manual sync too.
             if ($rule->mode === SynchronizationMode::Ask) {
                 continue;
             }
             foreach ($this->commandsForRule($rule) as $cmd) {
                 $additionalCommands[] = $cmd;
+            }
+            // Mirror source-language deletions into the target dimension when the rule opts in. Cheap and precise: it
+            // only inspects this publish's own removal events, never walking the target tree (that is the manual sync's
+            // job). The rebase above ran first, so the target subgraph the removal reads is already current.
+            if ($rule->onSourceRemoval === SourceRemovalBehavior::RemoveTarget) {
+                foreach ($this->removalCommandsForRule($rule, $removalEvents) as $cmd) {
+                    $additionalCommands[] = $cmd;
+                }
             }
         }
 
@@ -207,6 +226,119 @@ final class SynchronizationCommandHook implements CommandHookInterface
             }
         }
         return null;
+    }
+
+    /**
+     * Pick the `NodeAggregateWasRemoved` events out of the publish. Both `PublishWorkspace` and
+     * `PublishIndividualNodesFromWorkspace` republish the affected node events onto the target workspace alongside the
+     * `WorkspaceWasPublished` event, so a source-side removal surfaces here as part of the publish delta.
+     *
+     * @return list<NodeAggregateWasRemoved>
+     */
+    private function collectRemovalEvents(PublishedEvents $events): array
+    {
+        $removalEvents = [];
+        foreach ($events as $event) {
+            if ($event instanceof NodeAggregateWasRemoved) {
+                $removalEvents[] = $event;
+            }
+        }
+        return $removalEvents;
+    }
+
+    /**
+     * Mirror this publish's source-language removals into the rule's target dimension — the deletion-side counterpart of
+     * {@see self::commandsForRule()}. Only called for rules with {@see SourceRemovalBehavior::RemoveTarget}.
+     *
+     * For each removal that actually touched the rule's SOURCE dimension we emit one `RemoveNodeAggregate` for the
+     * target variant. Removing the (subtree-root) target node is enough — the Content Repository cascades descendant
+     * removal in the target dimension, mirroring how the CR emits only the one removal event on the source side.
+     *
+     * @param list<NodeAggregateWasRemoved> $removalEvents
+     * @return list<RemoveNodeAggregate>
+     */
+    private function removalCommandsForRule(SynchronizationRule $rule, array $removalEvents): array
+    {
+        if ($removalEvents === []) {
+            return [];
+        }
+        $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
+        $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
+        $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
+        $targetSubgraph = $this->contentGraphReadModel
+            ->getContentGraph($targetWorkspace)
+            ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
+
+        // First pass: collect every removal that should mirror into the target — source language affected, target
+        // variant still present, scope permits removing this node type. Keep the ids so the second pass can drop
+        // descendants.
+        /** @var list<NodeAggregateId> $candidates */
+        $candidates = [];
+        /** @var array<string,true> $candidateIds */
+        $candidateIds = [];
+        foreach ($removalEvents as $removed) {
+            // Only mirror removals that affected the SOURCE language. A removal that touched only the target variant
+            // (an editor deleting the translation directly) leaves the source DSP out of the affected set and must not
+            // bounce back into the target.
+            if (!$removed->affectedCoveredDimensionSpacePoints->contains($sourceDsp)) {
+                continue;
+            }
+            // The target variant may already be gone — e.g. the source removal used `allVariants`, which the
+            // rebase-onto-source above already replayed onto the target dimension. Nothing left to mirror.
+            $targetNode = $targetSubgraph->findNodeById($removed->nodeAggregateId);
+            if ($targetNode === null) {
+                continue;
+            }
+            $nodeType = $this->nodeTypeManager->getNodeType($targetNode->nodeTypeName);
+            $isDocument = $nodeType !== null && $nodeType->isOfType('Neos.Neos:Document');
+            if (!$rule->scope->mayRemoveNode($isDocument)) {
+                continue;
+            }
+            $candidates[] = $removed->nodeAggregateId;
+            $candidateIds[$removed->nodeAggregateId->value] = true;
+        }
+
+        // Second pass: keep only subtree-root removals. A single `RemoveNodeAggregate` cascades the target subtree, and
+        // the CR emits a standalone `NodeAggregateWasRemoved` only for EXPLICITLY removed aggregates (never for
+        // cascade-removed children). So when an editor removed both an ancestor and one of its descendants in the same
+        // publish, emitting a removal for each would make the descendant's command target an aggregate the ancestor's
+        // cascade already deleted — aborting with `NodeAggregateCurrentlyDoesNotExist`. Dropping any candidate that has
+        // an ancestor in the same batch (resolved against the TARGET subgraph, whose hierarchy may diverge from the
+        // source) leaves only the roots; the cascade removes the rest.
+        $commands = [];
+        foreach ($candidates as $candidate) {
+            if ($this->hasAncestorIn($targetSubgraph, $candidate, $candidateIds)) {
+                continue;
+            }
+            $commands[] = RemoveNodeAggregate::create(
+                $targetWorkspace,
+                $candidate,
+                $targetDsp,
+                // Mirror "remove this node in this language": the target DSP and its specializations, leaving the
+                // (already-removed-or-untouched) source language peer alone.
+                NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+            );
+        }
+        return $commands;
+    }
+
+    /**
+     * Whether any ancestor of `$nodeAggregateId` in the target subgraph is itself in `$candidateIds` — i.e. this node
+     * would be cascade-removed by a removal already planned for one of its ancestors.
+     *
+     * @param array<string,true> $candidateIds
+     */
+    private function hasAncestorIn(
+        ContentSubgraphInterface $targetSubgraph,
+        NodeAggregateId $nodeAggregateId,
+        array $candidateIds,
+    ): bool {
+        foreach ($targetSubgraph->findAncestorNodes($nodeAggregateId, FindAncestorNodesFilter::create()) as $ancestor) {
+            if (isset($candidateIds[$ancestor->aggregateId->value])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -17,6 +17,10 @@ use Neos\Flow\Annotations as Flow;
  *
  * `mode` decides whether the synchronization is triggered inline by the publish ({@see SynchronizationMode::Auto}) or
  * deferred to a deliberate "sync now" action in the Neos UI / backend module ({@see SynchronizationMode::Ask}).
+ *
+ * `onSourceRemoval` decides what happens to the target dimension when a node is removed in the source language: keep
+ * the translated variant ({@see SourceRemovalBehavior::KeepTarget}, the default) or mirror the deletion
+ * ({@see SourceRemovalBehavior::RemoveTarget}).
  */
 #[Flow\Proxy(false)]
 final readonly class SynchronizationRule
@@ -28,6 +32,7 @@ final readonly class SynchronizationRule
         public string $targetDimension,
         public SynchronizationScope $scope,
         public SynchronizationMode $mode = SynchronizationMode::Auto,
+        public SourceRemovalBehavior $onSourceRemoval = SourceRemovalBehavior::KeepTarget,
     ) {
     }
 
@@ -71,6 +76,24 @@ final readonly class SynchronizationRule
             }
         }
 
+        // `onSourceRemoval` is optional and defaults to KeepTarget (leave the translated variant in place), so existing
+        // rule configs keep their current behavior. A present but unrecognized value is a configuration mistake and
+        // fails loudly rather than silently falling back.
+        $onSourceRemoval = SourceRemovalBehavior::KeepTarget;
+        if (isset($row['onSourceRemoval']) && $row['onSourceRemoval'] !== '') {
+            if (!is_string($row['onSourceRemoval'])) {
+                throw new \InvalidArgumentException('SynchronizationRule field "onSourceRemoval" must be a string', 1779051205);
+            }
+            $onSourceRemoval = SourceRemovalBehavior::tryFrom($row['onSourceRemoval']);
+            if ($onSourceRemoval === null) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Invalid onSourceRemoval "%s" in SynchronizationRule; expected one of: %s',
+                    $row['onSourceRemoval'],
+                    implode(', ', array_map(static fn (SourceRemovalBehavior $b): string => $b->value, SourceRemovalBehavior::cases())),
+                ), 1779051206);
+            }
+        }
+
         return new self(
             sourceWorkspaceName: $row['sourceWorkspaceName'],
             sourceDimension: $row['sourceDimension'],
@@ -78,6 +101,7 @@ final readonly class SynchronizationRule
             targetDimension: $row['targetDimension'],
             scope: $scope,
             mode: $mode,
+            onSourceRemoval: $onSourceRemoval,
         );
     }
 }

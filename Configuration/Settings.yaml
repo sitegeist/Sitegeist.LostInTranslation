@@ -134,6 +134,16 @@ Sitegeist:
       #            The synchronization then runs in its own request via `WorkspaceSynchronizer`, so the publish stays
       #            fast and atomic. Regardless of mode, the backend module can always trigger a manual "sync now".
       #
+      # Each rule may set an optional `onSourceRemoval` (default `keep-target`):
+      #
+      #   onSourceRemoval: keep-target | remove-target   (optional, default: keep-target)
+      #     keep-target   = leave the translated variant in place when its source node is removed; source and target may
+      #                     diverge on deletions (this is the previous, unchanged behavior).
+      #     remove-target = mirror the deletion into the target dimension. Gated by `scope`: under `Content` only content
+      #                     nodes are removed (never Documents, symmetric with "Content never auto-creates Documents"),
+      #                     under `Document` Documents are removed too. For `auto` rules the removal happens inline on
+      #                     publish; for `ask` rules and the manual CLI it is reconciled on the deliberate "sync now" run.
+      #
       # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
       # hook then iterates the stale-translation records already recorded for the rule's
       # `(targetWorkspaceName, targetDimension)` — i.e. anything that needs (re-)translation as of that moment, which
@@ -167,6 +177,7 @@ Sitegeist:
       #    targetDimension: de
       #    scope: Document
       #    mode: auto
+      #    onSourceRemoval: keep-target
 
 Neos:
   Flow:

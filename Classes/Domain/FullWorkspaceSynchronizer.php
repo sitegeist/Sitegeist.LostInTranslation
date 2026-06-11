@@ -85,6 +85,8 @@ class FullWorkspaceSynchronizer
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $skipExisting = true,
         bool $dryRun = false,
+        bool $removeOrphans = false,
+        SynchronizationScope $removalScope = SynchronizationScope::Document,
     ): WorkspaceSynchronizationResult {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -195,6 +197,29 @@ class FullWorkspaceSynchronizer
             );
             if (!$dryRun) {
                 $this->aiCommandDispatcher->dispatch($cr, $command);
+            }
+        }
+
+        // Deletion-side reconcile (opt-in): remove target-dimension nodes whose source variant no longer exists. The
+        // full run already holds both subgraphs, so it diffs them directly. See TargetOrphanCollector for scope gating.
+        if ($removeOrphans) {
+            $orphanRemovals = TargetOrphanCollector::collect(
+                $targetContentGraph,
+                $targetSubgraph,
+                $sourceSubgraph,
+                $nodeTypeManager,
+                $removalScope,
+                $targetWorkspaceName,
+                $targetDimensionSpacePoint,
+            );
+            foreach ($orphanRemovals as $removal) {
+                $perNodeResults[] = new PerNodeSynchronizationResult(
+                    $removal->nodeAggregateId,
+                    $dryRun ? RetranslationResult::skipped('dry-run') : RetranslationResult::removed(),
+                );
+                if (!$dryRun) {
+                    $this->aiCommandDispatcher->dispatch($cr, $removal);
+                }
             }
         }
 

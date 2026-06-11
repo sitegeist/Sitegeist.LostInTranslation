@@ -157,7 +157,15 @@ Sitegeist:
           targetDimension: de
           scope: Document                # Document (mirror documents + content) | Content (content only)
           mode: auto                     # auto (translate on publish) | ask (defer to a manual "sync now")
+          onSourceRemoval: keep-target   # keep-target (default) | remove-target (mirror source deletions)
 ```
+
+`onSourceRemoval` decides what happens to the target dimension when a node is **removed** in the source
+language. The default `keep-target` leaves the translated variant in place (source and target may diverge on
+deletions — the previous behaviour). `remove-target` mirrors the deletion, gated by `scope`: under `Content`
+only content nodes are removed (never Documents, symmetric with never auto-*creating* them), under `Document`
+Documents are removed too. For `auto` rules the deletion is mirrored inline on publish (from the publish's own
+removal events); for `ask` rules it is reconciled on the deliberate "sync now" run, like translations.
 
 Automatic synchronization is always stale-driven. The Flow CLI offers the same operations for scripting,
 cron jobs and one-off catch-ups:

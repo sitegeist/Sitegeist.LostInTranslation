@@ -23,4 +23,21 @@ enum SynchronizationScope: string
 {
     case Content = 'Content';
     case Document = 'Document';
+
+    /**
+     * Whether a node may be (mirrored-)removed from the target dimension under this scope — the deletion-side mirror of
+     * which nodes the scope creates. {@see self::Document} mirrors the whole structure, so it removes Documents and
+     * Content alike; {@see self::Content} never touches Documents (symmetric with never auto-creating them), so it only
+     * removes non-Document nodes.
+     *
+     * `$isDocument` is whether the node in question is a `Neos.Neos:Document` (resolved by the caller, which holds the
+     * NodeTypeManager).
+     */
+    public function mayRemoveNode(bool $isDocument): bool
+    {
+        return match ($this) {
+            self::Document => true,
+            self::Content => !$isDocument,
+        };
+    }
 }

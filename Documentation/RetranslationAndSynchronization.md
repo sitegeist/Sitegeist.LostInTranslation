@@ -263,8 +263,9 @@ nodeTranslation:
       sourceDimension: en            # must equal the targetDimension preset's referenceLanguage
       targetWorkspaceName: de-review # where translated variants are written
       targetDimension: de
-      scope: Document                # Document | Content  (REQUIRED — config validation throws if missing)
-      mode: auto                     # auto | ask          (default: auto)
+      scope: Document                # Document | Content        (REQUIRED — config validation throws if missing)
+      mode: auto                     # auto | ask                (default: auto)
+      onSourceRemoval: keep-target   # keep-target | remove-target (default: keep-target)
 ```
 
 - **`SynchronizationScope`** (required, no default):
@@ -277,6 +278,18 @@ nodeTranslation:
   - `ask` — defer translation to a deliberate manual sync (Neos UI prompt / backend module "sync
     now") so the publish stays fast and atomic. (The cross-workspace rebase still happens on publish
     for `ask` rules — only the translation is deferred.)
+- **`SourceRemovalBehavior`** (default `keep-target`): what happens to the target dimension when a node
+  is **removed** in the source language.
+  - `keep-target` — leave the translated variant in place; source and target may diverge on deletions
+    (the original behaviour, so existing configs are unchanged).
+  - `remove-target` — mirror the deletion into the target dimension. Gated by `scope` (symmetric with
+    creation): under `Content` only content nodes are removed (a removed Document is **kept**, only its
+    orphaned content beneath it is removed); under `Document` Documents are removed too. Removing the
+    subtree root suffices — the CR cascades descendant removal in the target dimension.
+    Detection differs by path (see §5): `auto` rules mirror **incrementally** from the publish's own
+    `NodeAggregateWasRemoved` events; `ask` rules and the CLI reconcile by **diffing** the target
+    dimension against the source on the deliberate sync. See `SynchronizationScope::mayRemoveNode()` and
+    `TargetOrphanCollector`.
 
 A `SynchronizationRule` is an immutable readonly VO; `SynchronizationRules::forPublicationTarget()`
 returns **all** rules matching a publish target (one publish may fan out to multiple targets).
@@ -315,7 +328,14 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
    exists → translated `SetNodeProperties`. Unsatisfiable no-op rows are pruned via
    `StaleRecordReconciler`.
 8. **Order commands ancestor-before-descendant** by source-tree depth (`NodeTreeDepth`).
-9. Flag AI authorship and **return** the `Commands` — the hook does *not* dispatch inline (it can't,
+9. **Removal mirror** (only for `auto` rules with `onSourceRemoval: remove-target`): scan this publish's
+   `PublishedEvents` for `NodeAggregateWasRemoved` whose `affectedCoveredDimensionSpacePoints` include the
+   rule's **source** DSP (this gate distinguishes a source-side removal from an editor deleting only the
+   target variant). For each, if the target variant still exists and the scope permits removing it
+   (`SynchronizationScope::mayRemoveNode()`), append a `RemoveNodeAggregate` for the target variant
+   (`allSpecializations` at the target DSP). Cheap and precise — only the publish delta is inspected, never
+   the whole target tree.
+10. Flag AI authorship and **return** the `Commands` — the hook does *not* dispatch inline (it can't,
    mid-publish); the CR dispatches the returned commands as separate commits after the publish.
 
 ### B. Manual "sync now" / post-publish prompt — `WorkspaceSynchronizer` + controller/module
@@ -329,6 +349,14 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
 - `WorkspaceSynchronizer` validates `sourceWorkspace != targetWorkspace` and that `sourceDimension`
   equals the target's `referenceLanguage`; cross-workspace force-rebases the target; then dispatches
   one `Retranslator::retranslateNode()` per stale record, depth-ordered.
+- **Removal mirror (diff path).** When the rule is `remove-target`, after the stale-driven pass it
+  reconciles deletions by **diffing** rather than reading events (the publish is long gone): walk the
+  target-dimension subgraph and dispatch a `RemoveNodeAggregate` for every node whose aggregate has no
+  variant in the source dimension, scope-gated (`TargetOrphanCollector`). `synchronizeRule()` passes the
+  rule's `onSourceRemoval` + `scope`, so the UI "sync now" and backend module reconcile deletions too;
+  `ask` rules defer their removal to exactly this run. This also self-heals deletions from before the flag
+  was enabled. (The full reconcile is acceptable here because "sync now" is already a deliberate, heavier
+  operation — unlike the publish hook, which must stay incremental.)
 - The backend module lists **all** rules (source→target, dimensions, scope, mode, live out-of-sync
   count) with "Sync now"/"Sync all", ignoring `mode` on purpose — it doubles as a manual catch-up for
   rules that errored mid-cascade.
@@ -347,6 +375,10 @@ Match the **literal** action string, not an imported constant (a wrong import pa
   `SetNodeProperties` covering **all** translatable properties.
 - Same `--dry-run` semantics; for cross-workspace it force-rebases the target first (skipped on
   dry-run).
+- **Removal mirror.** With `--remove-orphans` (CLI) / `removeOrphans: true`, the same diff-based
+  `TargetOrphanCollector` pass runs after the translation walk, removing target-dimension nodes absent
+  from the source. The CLI has no rule, so it removes Documents **and** content (`Document` removal
+  scope); a rule-driven run passes the rule's `scope`.
 
 ### Cross-workspace mechanics (the crux)
 
@@ -423,6 +455,11 @@ inside the projection and handling moves; judged out of scope). `findAll()` is u
 because it must scan all workspaces for orphans; the hot paths use the SQL-scoped
 `findByWorkspaceAndOrigin` instead.
 
+> Not to be confused with `onSourceRemoval: remove-target` (§4–5): `reconcile` prunes orphan
+> **stale-tracking rows** left in the projection table after a deletion; `remove-target` removes the
+> actual orphaned **target-language nodes** in the content graph. They are complementary — the former is
+> projection housekeeping, the latter mirrors deletions.
+
 ---
 
 ## 7. Evolution / superseded decisions
@@ -441,6 +478,20 @@ behaviour.
   descendant) so a parent's `CreateNodeVariant` materializes before a child's. (Limitation: a parent
   that is missing from the target *and* has no stale row is unreachable by stale-driven sync — that's
   `--full`'s job.)
+- **Source-removal mirror (`onSourceRemoval: remove-target`) — event-scan + diff (current) vs a
+  projection tombstone table (rejected).** Mirroring source deletions needed a signal of *what* was
+  removed. A persistent "removal tombstone" table in the projection was rejected: the projection is
+  rule-agnostic, so it would record tombstones even for `keep-target` rules that never consume them (a
+  leak), and it would have to replicate every workspace-lifecycle handler (`replaceWorkspaceEntries`,
+  publish/rebase/discard/remove). Instead the rule-aware consumers detect removals directly — `auto` rules
+  scan the publish's own `NodeAggregateWasRemoved` events (cheap, incremental, honours the hook's
+  no-full-walk contract), while `ask`/CLI runs diff the target dimension against the source
+  (`TargetOrphanCollector`) since the events are gone by then. **Decisions:** (1) opt-in per-rule **enum**
+  `keep-target | remove-target` (default `keep-target`) — not a boolean and not default-on, so existing
+  configs are unchanged and the destructive behaviour is explicit; (2) removal **respects `scope`**
+  symmetric with creation (Content keeps Documents). Known asymmetry: `auto` mirrors only the publish
+  delta, whereas the manual/full diff is a full reconcile, so an orphan created while the flag was off is
+  cleaned up only on the next manual/`--full` sync.
 - **Auto-creating the target workspace (`ReviewWorkspaceProvisioner`) — added then reverted/deleted.**
   See [§5](#5-synchronization): a cross-workspace rule fires on every publish, so auto-create was
   wrong. The class no longer exists.
@@ -490,6 +541,15 @@ behaviour.
 - Several projection handlers were specified as red TDD scenarios (Behat `todo` profile) but not all
   implemented: thinning `whenNodeAggregateTypeWasChanged`, partial publish/discard wiring,
   `whenDimensionSpacePointWasMoved`.
+- **Pending removals are not counted by the out-of-sync status.** `SynchronizationStatusProvider`
+  counts stale-translation rows; a source deletion produces no stale row, so an `ask` rule whose only
+  pending work is a removal reports "in sync" and does not raise the post-publish "sync now" prompt. The
+  removal is still reconciled on the next deliberate sync — it just doesn't itself trigger the prompt.
+  Counting it would require a target-tree diff on every status read (the expense the incremental design
+  avoids).
+- **Cross-workspace `ask` + `remove-target` is largely moot.** The publish's force-rebase already drops a
+  target variant whose source was removed ("source wins"), so the removal mirror mainly matters for
+  same-workspace rules where no rebase intervenes.
 - The Neos 8 in-content "translation status" banner/overlay and the `ShowStatus.fusion` module view
   were **not** ported (depend on Neos 8 APIs with no Neos 9 equivalent); the inspector view covers
   the same find-stale → retranslate workflow.
@@ -515,9 +575,10 @@ Classes/
     ReferenceDimensionSpacePointResolver.php          target↔source dimension resolution
     CrossWorkspaceSynchronizationTarget.php           cross-ws preflight + force-rebase
     StaleRecordReconciler.php                         prune unsatisfiable (target) rows
+    TargetOrphanCollector.php                         diff-based source-removal mirror (manual / full)
     NodeTreeDepth.php                                 ancestor-before-descendant ordering
     AiCommandDispatcher.php                           AI attribution + auth bypass
-    SynchronizationRule(s).php / SynchronizationScope.php / SynchronizationMode.php
+    SynchronizationRule(s).php / SynchronizationScope.php / SynchronizationMode.php / SourceRemovalBehavior.php
     SynchronizationStatusProvider.php / RuleSynchronizationStatus.php
     Directive/ (DimensionValueDirectiveFactory, DeeplLanguagePair, …)
     PostProcessor/ (TranslatedPropertyPostProcessorInterface, UriPathSegmentPostProcessor)

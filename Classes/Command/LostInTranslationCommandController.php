@@ -26,6 +26,7 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\PerNodeSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 class LostInTranslationCommandController extends CommandController
@@ -159,6 +160,9 @@ class LostInTranslationCommandController extends CommandController
      * @param string $contentRepository Content repository id (defaults to "default").
      * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.
      * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
+     * @param bool $removeOrphans If set, also remove target-dimension nodes whose source variant no longer exists
+     *                            (mirror source-language deletions). Removes Documents and Content alike — the manual
+     *                            counterpart of a rule's `onSourceRemoval: remove-target`.
      * @throws StopCommandException
      */
     public function synchronizeCommand(
@@ -169,6 +173,7 @@ class LostInTranslationCommandController extends CommandController
         string $contentRepository = 'default',
         bool $dryRun = false,
         bool $full = false,
+        bool $removeOrphans = false,
     ): void {
         $contentRepositoryId = ContentRepositoryId::fromString($contentRepository);
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]);
@@ -184,6 +189,7 @@ class LostInTranslationCommandController extends CommandController
                 targetWorkspaceName: $targetWorkspaceName,
                 targetDimensionSpacePoint: $targetDsp,
                 dryRun: $dryRun,
+                removeOrphans: $removeOrphans,
             )
             : $this->workspaceSynchronizer->synchronizeWorkspace(
                 contentRepositoryId: $contentRepositoryId,
@@ -192,6 +198,7 @@ class LostInTranslationCommandController extends CommandController
                 targetWorkspaceName: $targetWorkspaceName,
                 targetDimensionSpacePoint: $targetDsp,
                 dryRun: $dryRun,
+                onSourceRemoval: $removeOrphans ? SourceRemovalBehavior::RemoveTarget : SourceRemovalBehavior::KeepTarget,
             );
 
         if ($result->skippedReason !== null) {
@@ -208,12 +215,13 @@ class LostInTranslationCommandController extends CommandController
             $this->outputLine($this->formatPerNodeLine($perNode, $dryRun));
         }
         $this->outputLine(
-            '%s: %d node(s) processed, %d stale property update(s) and %d variant creation(s) dispatched, %d skipped.',
+            '%s: %d node(s) processed, %d stale property update(s), %d variant creation(s) and %d removal(s) dispatched, %d skipped.',
             [
                 $dryRun ? 'Dry run' : 'Synchronization finished',
                 count($result->perNodeResults),
                 $result->totalStalePropertyCommandsDispatched(),
                 $result->totalVariantCommandsDispatched(),
+                $result->totalRemovalCommandsDispatched(),
                 $result->totalSkippedNodes(),
             ],
         );
@@ -305,6 +313,13 @@ class LostInTranslationCommandController extends CommandController
         }
         if ($r->isNoOp()) {
             return sprintf('  - %s: no-op (already in sync)', $perNode->nodeAggregateId->value);
+        }
+        if ($r->removalCommandsDispatched > 0) {
+            return sprintf(
+                '  - %s: %sremoval (source variant gone)',
+                $perNode->nodeAggregateId->value,
+                $dryRun ? 'would dispatch ' : 'dispatched ',
+            );
         }
         return sprintf(
             '  - %s: %s%d stale property update(s), %d variant creation(s)',

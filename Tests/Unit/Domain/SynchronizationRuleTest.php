@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Tests\Unit\Domain;
 
 use Neos\Flow\Tests\UnitTestCase;
+use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
@@ -58,6 +59,32 @@ class SynchronizationRuleTest extends UnitTestCase
     {
         $fields = $this->requiredFields();
         $fields['mode'] = 'maybe';
+
+        $this->expectException(\InvalidArgumentException::class);
+        SynchronizationRule::fromArray($fields);
+    }
+
+    /** @test */
+    public function fromArrayDefaultsOnSourceRemovalToKeepTarget(): void
+    {
+        $rule = SynchronizationRule::fromArray($this->requiredFields());
+
+        self::assertSame(SourceRemovalBehavior::KeepTarget, $rule->onSourceRemoval);
+    }
+
+    /** @test */
+    public function fromArrayParsesRemoveTargetOnSourceRemoval(): void
+    {
+        $rule = SynchronizationRule::fromArray(['onSourceRemoval' => 'remove-target'] + $this->requiredFields());
+
+        self::assertSame(SourceRemovalBehavior::RemoveTarget, $rule->onSourceRemoval);
+    }
+
+    /** @test */
+    public function fromArrayRejectsUnknownOnSourceRemoval(): void
+    {
+        $fields = $this->requiredFields();
+        $fields['onSourceRemoval'] = 'destroy-everything';
 
         $this->expectException(\InvalidArgumentException::class);
         SynchronizationRule::fromArray($fields);
