@@ -169,12 +169,10 @@ final class SynchronizationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
-        // Source-language node removals carried by THIS publish. Collected once; each `remove-target` rule below filters
-        // them to the removals that actually touched its source dimension. Empty for publishes without any removal.
-        $removalEvents = $this->collectRemovalEvents($events);
-        // Source-language subtree-tag changes (e.g. hide/show) carried by THIS publish. Collected once; each
-        // `sync-to-target` rule below mirrors the ones that touched its source dimension.
-        $taggingEvents = $this->collectTaggingEvents($events);
+        // Source-language node removals and subtree-tag changes (e.g. hide/show) carried by THIS publish, collected in a
+        // single pass. Each `remove-target` / `sync-to-target` rule below filters them to the ones that actually touched
+        // its source dimension. Both empty for an ordinary translate-only publish.
+        $mirrorEvents = $this->collectMirrorEvents($events);
 
         $additionalCommands = [];
         foreach ($matchingRules as $rule) {
@@ -187,32 +185,43 @@ final class SynchronizationCommandHook implements CommandHookInterface
             }
             // `ask` rules defer the actual translation to a deliberate manual sync (Neos UI prompt / backend module
             // "sync now") so the publish stays fast. The rebase above already refreshed their status; nothing more to
-            // do inline — removals are reconciled by that same manual sync too.
+            // do inline — removals and tag changes are reconciled by that same manual sync too.
             if ($rule->mode === SynchronizationMode::Ask) {
                 continue;
             }
-            $translationCommands = $this->commandsForRule($rule);
-            foreach ($translationCommands as $cmd) {
+
+            // Read the rule's source + target subgraphs ONCE here and pass them down, so the translation, tagging and
+            // removal passes do not each re-fetch them on this (always-on) publish path.
+            $contentGraph = $this->contentGraphReadModel->getContentGraph(WorkspaceName::fromString($rule->targetWorkspaceName));
+            $sourceSubgraph = $contentGraph->getSubgraph(
+                DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]),
+                VisibilityConstraints::withoutRestrictions(),
+            );
+            $targetSubgraph = $contentGraph->getSubgraph(
+                DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]),
+                VisibilityConstraints::withoutRestrictions(),
+            );
+
+            $translationCommands = $this->commandsForRule($rule, $sourceSubgraph, $targetSubgraph);
+            // Mirror source-language tag changes when the rule opts in. The plannedVariantCreationIds let us also tag a
+            // node created in THIS publish — its variant does not exist yet when we build the batch, but the CR
+            // dispatches the create before our tag (see the fixed assembly order below).
+            $tagCommands = $rule->onSourceTagging === SourceTaggingBehavior::SyncToTarget
+                ? $this->taggingCommandsForRule($rule, $mirrorEvents['taggings'], $this->plannedVariantCreationIds($translationCommands), $targetSubgraph)
+                : [];
+            // Mirror source-language deletions when the rule opts in. Cheap and precise: only this publish's own removal
+            // events are inspected, never walking the target tree (that is the manual sync's job).
+            $removalCommands = $rule->onSourceRemoval === SourceRemovalBehavior::RemoveTarget
+                ? $this->removalCommandsForRule($rule, $mirrorEvents['removals'], $targetSubgraph)
+                : [];
+
+            // Assemble in a FIXED order — this is the load-bearing ordering contract, kept in one place rather than
+            // relying on the append order of scattered branches. The CR dispatches the returned batch sequentially:
+            //  1. translations (a CreateNodeVariant must materialise a variant before it can be tagged),
+            //  2. tag changes (a node tagged AND removed in one publish must be tagged while it still exists),
+            //  3. removals (each cascades its target subtree away).
+            foreach ([...$translationCommands, ...$tagCommands, ...$removalCommands] as $cmd) {
                 $additionalCommands[] = $cmd;
-            }
-            // Mirror source-language subtree-tag changes (hide/show etc.) into the target dimension when the rule opts
-            // in. Emitted BEFORE the removals below so that a node tagged and removed in the same publish is tagged
-            // while it still exists (the removal then cascades it away), never tagged after it is gone. The
-            // CreateNodeVariant commands collected above let us also tag a node created in THIS publish — its variant
-            // does not exist yet when we build the batch, but the CR dispatches the create before our tag.
-            if ($rule->onSourceTagging === SourceTaggingBehavior::SyncToTarget) {
-                $plannedVariantCreations = $this->plannedVariantCreationIds($translationCommands);
-                foreach ($this->taggingCommandsForRule($rule, $taggingEvents, $plannedVariantCreations) as $cmd) {
-                    $additionalCommands[] = $cmd;
-                }
-            }
-            // Mirror source-language deletions into the target dimension when the rule opts in. Cheap and precise: it
-            // only inspects this publish's own removal events, never walking the target tree (that is the manual sync's
-            // job). The rebase above ran first, so the target subgraph the removal reads is already current.
-            if ($rule->onSourceRemoval === SourceRemovalBehavior::RemoveTarget) {
-                foreach ($this->removalCommandsForRule($rule, $removalEvents) as $cmd) {
-                    $additionalCommands[] = $cmd;
-                }
             }
         }
 
@@ -249,39 +258,26 @@ final class SynchronizationCommandHook implements CommandHookInterface
     }
 
     /**
-     * Pick the `NodeAggregateWasRemoved` events out of the publish. Both `PublishWorkspace` and
-     * `PublishIndividualNodesFromWorkspace` republish the affected node events onto the target workspace alongside the
-     * `WorkspaceWasPublished` event, so a source-side removal surfaces here as part of the publish delta.
+     * Pick the source-side structural events out of the publish in a single pass: node removals
+     * ({@see NodeAggregateWasRemoved}) and subtree-tag changes ({@see SubtreeWasTagged} / {@see SubtreeWasUntagged},
+     * incl. the hide/show `disabled` tag). Both `PublishWorkspace` and `PublishIndividualNodesFromWorkspace` republish
+     * the affected node events onto the target workspace alongside the `WorkspaceWasPublished` event, so a source-side
+     * removal/tag surfaces here as part of the publish delta.
      *
-     * @return list<NodeAggregateWasRemoved>
+     * @return array{removals: list<NodeAggregateWasRemoved>, taggings: list<SubtreeWasTagged|SubtreeWasUntagged>}
      */
-    private function collectRemovalEvents(PublishedEvents $events): array
+    private function collectMirrorEvents(PublishedEvents $events): array
     {
-        $removalEvents = [];
+        $removals = [];
+        $taggings = [];
         foreach ($events as $event) {
             if ($event instanceof NodeAggregateWasRemoved) {
-                $removalEvents[] = $event;
+                $removals[] = $event;
+            } elseif ($event instanceof SubtreeWasTagged || $event instanceof SubtreeWasUntagged) {
+                $taggings[] = $event;
             }
         }
-        return $removalEvents;
-    }
-
-    /**
-     * Pick the subtree-tag events ({@see SubtreeWasTagged} / {@see SubtreeWasUntagged}) out of the publish — the
-     * hide/show `disabled` tag and any other tag surface here, republished onto the target workspace alongside the
-     * `WorkspaceWasPublished` event.
-     *
-     * @return list<SubtreeWasTagged|SubtreeWasUntagged>
-     */
-    private function collectTaggingEvents(PublishedEvents $events): array
-    {
-        $taggingEvents = [];
-        foreach ($events as $event) {
-            if ($event instanceof SubtreeWasTagged || $event instanceof SubtreeWasUntagged) {
-                $taggingEvents[] = $event;
-            }
-        }
-        return $taggingEvents;
+        return ['removals' => $removals, 'taggings' => $taggings];
     }
 
     /**
@@ -322,17 +318,18 @@ final class SynchronizationCommandHook implements CommandHookInterface
      * @param array<string,true> $plannedVariantCreationIds
      * @return list<TagSubtree|UntagSubtree>
      */
-    private function taggingCommandsForRule(SynchronizationRule $rule, array $taggingEvents, array $plannedVariantCreationIds): array
-    {
+    private function taggingCommandsForRule(
+        SynchronizationRule $rule,
+        array $taggingEvents,
+        array $plannedVariantCreationIds,
+        ContentSubgraphInterface $targetSubgraph,
+    ): array {
         if ($taggingEvents === []) {
             return [];
         }
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
-        $targetSubgraph = $this->contentGraphReadModel
-            ->getContentGraph($targetWorkspace)
-            ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
 
         $commands = [];
         foreach ($taggingEvents as $tagging) {
@@ -399,17 +396,17 @@ final class SynchronizationCommandHook implements CommandHookInterface
      * @param list<NodeAggregateWasRemoved> $removalEvents
      * @return list<RemoveNodeAggregate>
      */
-    private function removalCommandsForRule(SynchronizationRule $rule, array $removalEvents): array
-    {
+    private function removalCommandsForRule(
+        SynchronizationRule $rule,
+        array $removalEvents,
+        ContentSubgraphInterface $targetSubgraph,
+    ): array {
         if ($removalEvents === []) {
             return [];
         }
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
-        $targetSubgraph = $this->contentGraphReadModel
-            ->getContentGraph($targetWorkspace)
-            ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
 
         // First pass: collect every removal that should mirror into the target — source language affected, target
         // variant still present, scope permits removing this node type. Keep the ids so the second pass can drop
@@ -501,10 +498,14 @@ final class SynchronizationCommandHook implements CommandHookInterface
     /**
      * @return list<CommandInterface>
      */
-    private function commandsForRule(SynchronizationRule $rule): array
-    {
+    private function commandsForRule(
+        SynchronizationRule $rule,
+        ContentSubgraphInterface $sourceSubgraph,
+        ContentSubgraphInterface $targetSubgraph,
+    ): array {
         // The target workspace has already been validated and (cross-workspace) rebased onto the source by
         // {@see self::rebaseTargetOntoSource()} before this is called, so we read the current, reconciled state here.
+        // The source/target subgraphs are fetched once by the caller and passed in.
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]);
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDsp);
@@ -520,13 +521,6 @@ final class SynchronizationCommandHook implements CommandHookInterface
         }
         $sourceDeepl = $languagePair->sourceLanguage;
         $targetDeepl = $languagePair->targetLanguage;
-
-        $sourceSubgraph = $this->contentGraphReadModel
-            ->getContentGraph($targetWorkspace)
-            ->getSubgraph($sourceDsp, VisibilityConstraints::withoutRestrictions());
-        $targetSubgraph = $this->contentGraphReadModel
-            ->getContentGraph($targetWorkspace)
-            ->getSubgraph($targetDsp, VisibilityConstraints::withoutRestrictions());
 
         // Collect each command paired with the source-tree depth of the node it acts on, so the batch can be ordered
         // ancestor-before-descendant below.

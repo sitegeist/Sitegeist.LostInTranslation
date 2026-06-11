@@ -1937,3 +1937,140 @@ Feature: Automatic retranslation on workspace publish
     # The es variant is created, translated, AND hidden — all in this single publish.
     Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
     And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to be tagged "disabled"
+
+  Scenario: A manual sync reports how many removals and tag changes it dispatched
+    # Guards the counts the "sync now" UI / backend module surface (WorkspaceSynchronizationResult totals).
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Gone"}  |
+      | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Stays"} |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    # Orphan one node (remove its source) and tag the other in the source.
+    When the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value              |
+      | workspaceName                | "user-workspace"   |
+      | nodeAggregateId              | "nody-mc-nodeface" |
+      | coveredDimensionSpacePoint   | {"language":"en"}  |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+      | tag                          | "disabled"         |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document" and syncing subtree tags
+    Then the last synchronization reported 1 removal(s) and 1 tag change(s)
+    And I expect node "sir-david-nodenborough" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
+
+  Scenario: A dry-run manual sync previews removals and tag changes without dispatching them
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Gone"}  |
+      | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Stays"} |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    When the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value              |
+      | workspaceName                | "user-workspace"   |
+      | nodeAggregateId              | "nody-mc-nodeface" |
+      | coveredDimensionSpacePoint   | {"language":"en"}  |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+      | tag                          | "disabled"         |
+    When I dry-run synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document" and syncing subtree tags
+    # The preview reports what WOULD happen ...
+    Then the last synchronization reported 1 removal(s) and 1 tag change(s)
+    # ... but nothing was dispatched: the orphan is still present and the other node is still untagged.
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Gone translated"
+    And I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
+
+  Scenario: Re-running a tag sync is an idempotent no-op
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    Then the last synchronization reported 0 removal(s) and 1 tag change(s)
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
+    # Second run: the target already matches the source, so the diff yields nothing — no error, no commands.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    Then the last synchronization reported 0 removal(s) and 0 tag change(s)
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
+
+  Scenario: Content-scope orphan removal keeps a removed Document but deletes orphaned content beneath it
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                           | {"main": "page-home-main"}         |
+      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Intro"} |                                    |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "page-home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Home translated"
+    And I expect node "intro-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+    # Remove the source Document subtree (cascades the content's source away), orphaning both es variants.
+    When the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "page-home"          |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+    # Content scope keeps the orphan Document but still descends to remove the orphaned content beneath it.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
+    Then I expect node "intro-text" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "page-home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Home translated"
+
+  Scenario: keep-target (the default) leaves the target's subtree tags untouched
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    # A plain sync (no tag syncing) must NOT mirror the source tag — the target manages its own visibility.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
+
+  Scenario: Cross-workspace manual sync mirrors a subtree tag into the review workspace
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    # Translate the de variant into de-review first.
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+    Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    # Hide the source in live, then reconcile tags cross-workspace into de-review.
+    When the command TagSubtree is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "live"                   |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allSpecializations"     |
+      | tag                          | "disabled"               |
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"} syncing subtree tags
+    Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to be tagged "disabled"

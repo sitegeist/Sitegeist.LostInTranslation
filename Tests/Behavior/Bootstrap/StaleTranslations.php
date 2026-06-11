@@ -26,6 +26,7 @@ use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 trait StaleTranslations
@@ -35,6 +36,11 @@ trait StaleTranslations
      * can heal the dropped tables after the scenario.
      */
     private bool $staleTranslationSchemaWasRemoved = false;
+
+    /**
+     * The result of the most recent manual synchronization step, so a following `Then` can assert its reported counts.
+     */
+    private ?WorkspaceSynchronizationResult $lastSynchronizationResult = null;
 
     /**
      * Workspace metadata and role assignments live in the `neos_neos_workspace_metadata` / `neos_neos_workspace_role`
@@ -126,6 +132,38 @@ trait StaleTranslations
     }
 
     /**
+     * Shared runner for the manual ("sync now") {@see WorkspaceSynchronizer} steps below. Stores the result in
+     * {@see self::$lastSynchronizationResult} so a following `Then` can assert the reported counts, and fails loudly if
+     * the synchronizer short-circuited via `skipped(...)` (e.g. a mis-configured source/target).
+     */
+    private function runManualSynchronization(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        bool $dryRun,
+        SourceRemovalBehavior $onSourceRemoval,
+        SynchronizationScope $removalScope,
+        SourceTaggingBehavior $onSourceTagging,
+    ): void {
+        $this->lastSynchronizationResult = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
+            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
+            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+            dryRun: $dryRun,
+            onSourceRemoval: $onSourceRemoval,
+            removalScope: $removalScope,
+            onSourceTagging: $onSourceTagging,
+        );
+        Assert::assertNull(
+            $this->lastSynchronizationResult->skippedReason,
+            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $this->lastSynchronizationResult->skippedReason ?? ''),
+        );
+    }
+
+    /**
      * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
      * @throws Exception
      */
@@ -135,18 +173,15 @@ trait StaleTranslations
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
     ): void {
-        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
-            contentRepositoryId: $this->currentContentRepository->id,
-            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
-            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
-            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
-            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
-        );
-        // Fail loudly if the synchronizer short-circuited via `skipped(...)` (e.g. mis-configured source/target).
-        // Without this a scenario that meant to exercise sync but mis-typed a dimension would silently pass.
-        Assert::assertNull(
-            $result->skippedReason,
-            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+        $this->runManualSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            dryRun: false,
+            onSourceRemoval: SourceRemovalBehavior::KeepTarget,
+            removalScope: SynchronizationScope::Document,
+            onSourceTagging: SourceTaggingBehavior::KeepTarget,
         );
     }
 
@@ -165,18 +200,15 @@ trait StaleTranslations
         string $targetDimensionSpacePoint,
         string $removalScope,
     ): void {
-        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
-            contentRepositoryId: $this->currentContentRepository->id,
-            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
-            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
-            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
-            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+        $this->runManualSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            dryRun: false,
             onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
             removalScope: SynchronizationScope::from($removalScope),
-        );
-        Assert::assertNull(
-            $result->skippedReason,
-            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+            onSourceTagging: SourceTaggingBehavior::KeepTarget,
         );
     }
 
@@ -194,17 +226,85 @@ trait StaleTranslations
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
     ): void {
-        $result = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
-            contentRepositoryId: $this->currentContentRepository->id,
-            sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
-            sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
-            targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
-            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
+        $this->runManualSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            dryRun: false,
+            onSourceRemoval: SourceRemovalBehavior::KeepTarget,
+            removalScope: SynchronizationScope::Document,
             onSourceTagging: SourceTaggingBehavior::SyncToTarget,
         );
-        Assert::assertNull(
-            $result->skippedReason,
-            sprintf('WorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+    }
+
+    /**
+     * Manual sync that mirrors BOTH source-language deletions and subtree-tag changes in one run.
+     *
+     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) removing orphans with scope "([^"]*)" and syncing subtree tags$/
+     * @throws Exception
+     */
+    public function iSynchronizeTranslationsRemovingOrphansAndSyncingTags(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        string $removalScope,
+    ): void {
+        $this->runManualSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            dryRun: false,
+            onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
+            removalScope: SynchronizationScope::from($removalScope),
+            onSourceTagging: SourceTaggingBehavior::SyncToTarget,
+        );
+    }
+
+    /**
+     * Dry-run variant of {@see self::iSynchronizeTranslationsRemovingOrphansAndSyncingTags()}: the result reports what
+     * WOULD be removed/tagged, but nothing is dispatched (target nodes stay untouched).
+     *
+     * @When /^I dry-run synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) removing orphans with scope "([^"]*)" and syncing subtree tags$/
+     * @throws Exception
+     */
+    public function iDryRunSynchronizeTranslationsRemovingOrphansAndSyncingTags(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        string $removalScope,
+    ): void {
+        $this->runManualSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            dryRun: true,
+            onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
+            removalScope: SynchronizationScope::from($removalScope),
+            onSourceTagging: SourceTaggingBehavior::SyncToTarget,
+        );
+    }
+
+    /**
+     * @Then /^the last synchronization reported (\d+) removal\(s\) and (\d+) tag change\(s\)$/
+     * @throws Exception
+     */
+    public function theLastSynchronizationReportedCounts(string $expectedRemovals, string $expectedTagChanges): void
+    {
+        Assert::assertNotNull($this->lastSynchronizationResult, 'No synchronization has run yet');
+        Assert::assertSame(
+            (int)$expectedRemovals,
+            $this->lastSynchronizationResult->totalRemovalCommandsDispatched(),
+            'reported removal count',
+        );
+        Assert::assertSame(
+            (int)$expectedTagChanges,
+            $this->lastSynchronizationResult->totalTagCommandsDispatched(),
+            'reported tag-change count',
         );
     }
 

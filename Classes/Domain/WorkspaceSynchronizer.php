@@ -219,14 +219,13 @@ class WorkspaceSynchronizer
                 $targetWorkspaceName,
                 $targetDimensionSpacePoint,
             );
-            foreach ($orphanRemovals as $removal) {
-                if ($dryRun) {
-                    $perNodeResults[] = new PerNodeSynchronizationResult($removal->nodeAggregateId, RetranslationResult::skipped('dry-run'));
-                    continue;
-                }
-                $this->aiCommandDispatcher->dispatch($cr, $removal);
-                $perNodeResults[] = new PerNodeSynchronizationResult($removal->nodeAggregateId, RetranslationResult::removed());
-            }
+            $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
+                $cr,
+                $this->aiCommandDispatcher,
+                $orphanRemovals,
+                $dryRun,
+                static fn (int $commandCount): RetranslationResult => RetranslationResult::removed(),
+            ));
         }
 
         // Tag reconcile: converge each target-dimension node's explicit subtree tags (hide/show and any other tag) onto
@@ -241,20 +240,13 @@ class WorkspaceSynchronizer
                 $targetDimensionSpacePoint,
                 $targetWorkspaceName,
             );
-            /** @var array<string,int> $tagCountByNode */
-            $tagCountByNode = [];
-            foreach ($tagCommands as $tagCommand) {
-                $tagCountByNode[$tagCommand->nodeAggregateId->value] = ($tagCountByNode[$tagCommand->nodeAggregateId->value] ?? 0) + 1;
-                if (!$dryRun) {
-                    $this->aiCommandDispatcher->dispatch($cr, $tagCommand);
-                }
-            }
-            foreach ($tagCountByNode as $nodeAggregateIdValue => $count) {
-                $perNodeResults[] = new PerNodeSynchronizationResult(
-                    NodeAggregateId::fromString((string)$nodeAggregateIdValue),
-                    $dryRun ? RetranslationResult::skipped('dry-run') : RetranslationResult::tagged($count),
-                );
-            }
+            $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
+                $cr,
+                $this->aiCommandDispatcher,
+                $tagCommands,
+                $dryRun,
+                static fn (int $commandCount): RetranslationResult => RetranslationResult::tagged($commandCount),
+            ));
         }
 
         return new WorkspaceSynchronizationResult($perNodeResults);

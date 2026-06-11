@@ -12,6 +12,7 @@ use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
+use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 /**
@@ -34,6 +35,9 @@ class WorkspaceSynchronizationController extends ActionController
     #[Flow\Inject]
     protected WorkspaceSynchronizer $workspaceSynchronizer;
 
+    #[Flow\Inject]
+    protected StaleTranslationProjectionStatusProvider $staleTranslationProjectionStatusProvider;
+
     /**
      * @var array<int,array<string,string>>
      */
@@ -46,6 +50,11 @@ class WorkspaceSynchronizationController extends ActionController
     public function pendingAction(string $workspaceName, string $contentRepositoryId = 'default'): string
     {
         $contentRepositoryIdObject = ContentRepositoryId::fromString($contentRepositoryId);
+        // The pending count is read from the stale-translation projection; if it is not set up / caught up (e.g. before
+        // `./flow cr:setup`), report nothing pending so the UI does not prompt, rather than faulting on missing tables.
+        if (!$this->staleTranslationProjectionStatusProvider->forContentRepository($contentRepositoryIdObject)->isReady) {
+            return $this->jsonResponse(['pendingCount' => 0, 'perRule' => []]);
+        }
         $rules = $this->askRulesForPublicationTarget(WorkspaceName::fromString($workspaceName));
 
         $perRule = [];
@@ -72,6 +81,19 @@ class WorkspaceSynchronizationController extends ActionController
     public function synchronizeAction(string $workspaceName, string $contentRepositoryId = 'default'): string
     {
         $contentRepositoryIdObject = ContentRepositoryId::fromString($contentRepositoryId);
+        // Guard against the projection not being set up / caught up (e.g. before `./flow cr:setup`): synchronizeRule
+        // reads it, so surface a clear error instead of faulting on missing tables.
+        $projectionStatus = $this->staleTranslationProjectionStatusProvider->forContentRepository($contentRepositoryIdObject);
+        if (!$projectionStatus->isReady) {
+            return $this->jsonResponse([
+                'stalePropertyCommandsDispatched' => 0,
+                'variantCommandsDispatched' => 0,
+                'removalCommandsDispatched' => 0,
+                'tagCommandsDispatched' => 0,
+                'skippedNodes' => 0,
+                'errors' => [trim($projectionStatus->summary . ' ' . $projectionStatus->hint)],
+            ]);
+        }
         $rules = $this->askRulesForPublicationTarget(WorkspaceName::fromString($workspaceName));
 
         $stalePropertyCommandsDispatched = 0;
