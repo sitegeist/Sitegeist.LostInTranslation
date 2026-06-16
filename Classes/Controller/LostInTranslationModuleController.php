@@ -10,6 +10,7 @@ use Neos\ContentRepository\Core\Dimension\Exception\ContentDimensionIdIsInvalid;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Error\Messages\Message;
+use Neos\Flow\I18n\Translator;
 use Neos\Fusion\View\FusionView;
 use Neos\Neos\Controller\Module\AbstractModuleController;
 use Neos\Flow\Annotations as Flow;
@@ -59,6 +60,9 @@ class LostInTranslationModuleController extends AbstractModuleController
 
     #[Flow\Inject]
     protected WorkspaceSynchronizer $workspaceSynchronizer;
+
+    #[Flow\Inject]
+    protected Translator $translator;
 
     #[Flow\InjectConfiguration(path: "nodeTranslation.contentRepositoryIdentifier")]
     protected string $contentRepositoryIdentifier;
@@ -136,7 +140,7 @@ class LostInTranslationModuleController extends AbstractModuleController
         $rules = SynchronizationRules::fromArray($this->synchronization);
         $rule = $rules->items[$ruleIndex] ?? null;
         if (!$rule instanceof SynchronizationRule) {
-            $this->addFlashMessage('Synchronization rule not found.', '', Message::SEVERITY_ERROR);
+            $this->addFlashMessage($this->translateById('flash.syncRuleNotFound'), '', Message::SEVERITY_ERROR);
             $this->forward('synchronizationStatus');
         }
 
@@ -163,43 +167,49 @@ class LostInTranslationModuleController extends AbstractModuleController
         $label = sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension);
         if ($result->skippedReason !== null) {
             $this->addFlashMessage(
-                sprintf('%s: skipped (%s)', $label, $result->skippedReason),
+                $this->translateById('flash.syncSkipped', [$label, $result->skippedReason]),
                 '',
                 Message::SEVERITY_WARNING,
             );
             return;
         }
-        $this->addFlashMessage(sprintf(
-            '%s: %d propert%s and %d variant%s translated, %d removed, %d tag change%s, %d skipped.',
+        // Counts are passed as separate placeholders with neutral label:count phrasing so the message can be
+        // localized without porting English inline pluralization (propert-y/-ies, tag change-/s) to other languages.
+        $this->addFlashMessage($this->translateById('flash.syncResult', [
             $label,
             $result->totalStalePropertyCommandsDispatched(),
-            $result->totalStalePropertyCommandsDispatched() === 1 ? 'y' : 'ies',
             $result->totalVariantCommandsDispatched(),
-            $result->totalVariantCommandsDispatched() === 1 ? '' : 's',
             $result->totalRemovalCommandsDispatched(),
             $result->totalTagCommandsDispatched(),
-            $result->totalTagCommandsDispatched() === 1 ? '' : 's',
             $result->totalSkippedNodes(),
-        ));
+        ]));
 
         $nodesRequiringFullSync = $result->totalNodesRequiringFullSync();
         if ($nodesRequiringFullSync > 0) {
             $this->addFlashMessage(
-                sprintf(
-                    '%s: %d node(s) were skipped because an ancestor document is missing in the target dimension '
-                    . 'and has no pending translation. A full sync is needed to create the missing ancestors — run '
-                    . 'on the CLI: ./flow lostintranslation:synchronize %s %s %s %s --full',
+                $this->translateById('flash.fullSyncNeeded', [
                     $label,
                     $nodesRequiringFullSync,
                     $rule->sourceWorkspaceName,
                     $rule->sourceDimension,
                     $rule->targetWorkspaceName,
                     $rule->targetDimension,
-                ),
+                ]),
                 '',
                 Message::SEVERITY_WARNING,
             );
         }
+    }
+
+    /**
+     * Resolves a backend-module flash message from the Modules.xlf catalog in the current backend UI language,
+     * falling back to the id itself if the catalog has no matching unit.
+     *
+     * @param array<int,string|int> $arguments
+     */
+    private function translateById(string $id, array $arguments = []): string
+    {
+        return $this->translator->translateById($id, $arguments, null, null, 'Modules', 'Sitegeist.LostInTranslation') ?? $id;
     }
 
     // Renders the fusion view for the form to store a custom deepl key
@@ -265,7 +275,7 @@ class LostInTranslationModuleController extends AbstractModuleController
         list ($source, $target) = explode(' -> ', $sourceAndTarget);
         $existingGlossary = $this->glossaryRepository->findOneBySourceAndTargetLanguageKey($source, $target);
         if ($existingGlossary instanceof Glossary) {
-            $this->addFlashMessage('Glossary already exists!', '', Message::SEVERITY_WARNING);
+            $this->addFlashMessage($this->translateById('flash.glossaryExists'), '', Message::SEVERITY_WARNING);
             $this->forward(actionName: 'showGlossary', arguments: ['glossary' => $existingGlossary]);
         }
         $glossary = Glossary::create($source, $target);
@@ -289,14 +299,14 @@ class LostInTranslationModuleController extends AbstractModuleController
             $deleted = $this->glossaryService->cleanupRemoteGlossaries();
             $removedNumber = count($deleted);
             if ($removedNumber == 0) {
-                $this->addFlashMessage("Glossary was uploaded", "");
+                $this->addFlashMessage($this->translateById('flash.glossaryUploaded'), "");
             } elseif ($removedNumber == 1) {
-                $this->addFlashMessage(sprintf("Glossary was uploaded, %s outdated glossary was removed", $removedNumber), "");
+                $this->addFlashMessage($this->translateById('flash.glossaryUploadedRemovedOne', [$removedNumber]), "");
             } else {
-                $this->addFlashMessage(sprintf("Glossary was uploaded, %s outdated glossaries were removed", $removedNumber), "");
+                $this->addFlashMessage($this->translateById('flash.glossaryUploadedRemovedMany', [$removedNumber]), "");
             }
         } else {
-            $this->addFlashMessage("Upload failed", "", Message::SEVERITY_ERROR);
+            $this->addFlashMessage($this->translateById('flash.uploadFailed'), "", Message::SEVERITY_ERROR);
         }
 
         if ($toIndex === true) {
@@ -312,7 +322,7 @@ class LostInTranslationModuleController extends AbstractModuleController
             $this->glossaryEntryRepository->remove($entry);
         }
         $this->glossaryRepository->remove($glossary);
-        $this->addFlashMessage('Glossary deleted');
+        $this->addFlashMessage($this->translateById('flash.glossaryDeleted'));
         $this->forward('index');
     }
 

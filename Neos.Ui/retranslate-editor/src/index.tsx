@@ -68,7 +68,14 @@ export function registerPostPublishSync(globalRegistry: IGlobalRegistry): void {
 
     const containersRegistry = globalRegistry.get('containers');
     if (containersRegistry) {
-        containersRegistry.set('Modals/LostInTranslationSyncDialog', SyncDialog);
+        // The dialog is mounted by the core `Modals` container, which sits inside the Redux provider (so `useDispatch`
+        // works) but outside our `NeosContext`. Wrap it so its `useI18n` hook can reach the global registry — without
+        // this provider the hook throws "Could not determine Neos Context." on every content-module load.
+        containersRegistry.set('Modals/LostInTranslationSyncDialog', () => (
+            <NeosContext.Provider value={{globalRegistry}}>
+                <SyncDialog />
+            </NeosContext.Provider>
+        ));
     } else {
         console.warn('[Sitegeist.LostInTranslation]: Could not find containers registry; post-publish sync dialog disabled.');
     }

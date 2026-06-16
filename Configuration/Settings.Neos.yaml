@@ -7,8 +7,8 @@ Neos:
       management:
         submodules:
           sitegeist_lostintranslation:
-            label: 'Lost In Translation'
-            description: 'DeepL based Translations for Neos'
+            label: 'Sitegeist.LostInTranslation:Modules:module.label'
+            description: 'Sitegeist.LostInTranslation:Modules:module.description'
             icon: 'icon-language'
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
             privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'

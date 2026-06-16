@@ -2,33 +2,33 @@ prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Compo
   renderer = afx`
     <div class="neos-content neos-container-fluid">
         <Neos.Fusion:Link.Action href.action="index" class="neos-button neos-active">
-            <i class="fas fa-language"></i>&nbsp;Glossaries
+            <i class="fas fa-book"></i>&nbsp;{I18n.translate('tabs.glossaries', 'Glossaries', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
         &nbsp;
         <Neos.Fusion:Link.Action href.action="showStatus" class="neos-button">
-            <i class="fas fa-cog"></i>&nbsp;API-Status
+            <i class="fas fa-cog"></i>&nbsp;{I18n.translate('tabs.apiStatus', 'API-Status', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
         &nbsp;
         <Neos.Fusion:Link.Action href.action="synchronizationStatus" class="neos-button">
-            <i class="fas fa-sync"></i>&nbsp;Synchronization
+            <i class="fas fa-sync"></i>&nbsp;{I18n.translate('tabs.synchronization', 'Synchronization', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
     </div>
 
-    <legend>Glossaries</legend>
+    <legend>{I18n.translate('glossaries.heading', 'Glossaries', [], 'Modules', 'Sitegeist.LostInTranslation')}</legend>
 
     <div @if={!glossaries}>
-        <p>No glossaries found!</p>
+        <p>{I18n.translate('glossaries.empty', 'No glossaries found!', [], 'Modules', 'Sitegeist.LostInTranslation')}</p>
     </div>
 
     <table class="neos-table" @if={glossaries}>
       <thead>
       <tr>
-        <th>Source</th>
-        <th>Target</th>
-        <th>Last Modified</th>
-        <th>Last Synchronized</th>
-        <th>Remote ID</th>
-        <th>Status</th>
+        <th>{I18n.translate('glossaries.col.source', 'Source', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+        <th>{I18n.translate('glossaries.col.target', 'Target', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+        <th>{I18n.translate('glossaries.col.lastModified', 'Last Modified', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+        <th>{I18n.translate('glossaries.col.lastSynchronized', 'Last Synchronized', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+        <th>{I18n.translate('glossaries.col.remoteId', 'Remote ID', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+        <th>{I18n.translate('glossaries.col.status', 'Status', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
         <th></th>
       </tr>
       </thead>
@@ -53,19 +53,19 @@ prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Compo
           <td>
             <i class="fas fa-check-circle" style="color:green;" @if={glossary.upToDate}></i>
             <i class="fas fa-exclamation-triangle" style="color:red;" @if={!glossary.upToDate}></i>
-            &nbsp;{glossary.upToDate ? 'up to date' : 'outdated'}
+            &nbsp;{glossary.upToDate ? I18n.translate('status.upToDate', 'up to date', [], 'Modules', 'Sitegeist.LostInTranslation') : I18n.translate('status.outdated', 'outdated', [], 'Modules', 'Sitegeist.LostInTranslation')}
 
           </td>
           <td class="neos-action">
-            <button class="neos-button neos-button-danger neos-pull-right" title="delete custom ley" data-toggle="modal" href={"#deleteGlossary" + iterator.index}>
-              <i class="fas fa-trash"></i> Delete Glossary
+            <button class="neos-button neos-button-danger neos-pull-right" title={I18n.translate('glossaries.delete.title', 'Delete glossary', [], 'Modules', 'Sitegeist.LostInTranslation')} data-toggle="modal" href={"#deleteGlossary" + iterator.index}>
+              <i class="fas fa-trash"></i> {I18n.translate('glossaries.delete', 'Delete Glossary', [], 'Modules', 'Sitegeist.LostInTranslation')}
             </button>
 
             <Neos.Fusion.Form:Form form.target.action="uploadGlossary" attributes.class="neos-inline neos-pull-right">
               <Neos.Fusion.Form:Hidden field.name="toIndex" field.value="1"/>
               <Neos.Fusion.Form:Hidden field.name="glossary" field.value={glossary}/>
-              <button class="neos-button neos-button-danger neos-pull-right" title="delete custom ley" data-toggle="modal" href={"#uploadGlossary" + iterator.index}>
-                <i class="fas fa-upload"></i> Upload Glossary
+              <button class="neos-button neos-button-success neos-pull-right" title={I18n.translate('glossaries.upload.title', 'Upload glossary', [], 'Modules', 'Sitegeist.LostInTranslation')} data-toggle="modal" href={"#uploadGlossary" + iterator.index}>
+                <i class="fas fa-upload"></i> {I18n.translate('glossaries.upload', 'Upload Glossary', [], 'Modules', 'Sitegeist.LostInTranslation')}
               </button>
             </Neos.Fusion.Form:Form>
 
@@ -73,16 +73,16 @@ prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Compo
               <div class="neos-modal">
                 <div class="neos-modal-header">
                   <button type="button" class="neos-close neos-button" data-dismiss="modal"></button>
-                  <div class="neos-header">Delete Glossary {glossary.label}</div>
+                  <div class="neos-header">{I18n.translate('glossaries.delete.confirmHeader', 'Delete Glossary {0}', [glossary.label], 'Modules', 'Sitegeist.LostInTranslation')}</div>
                 </div>
                 <div class="neos-modal-footer">
-                  <a href="#" class="neos-button" data-dismiss="modal">Cancel</a>
+                  <a href="#" class="neos-button" data-dismiss="modal">{I18n.translate('action.cancel', 'Cancel', [], 'Modules', 'Sitegeist.LostInTranslation')}</a>
                   <Neos.Fusion.Form:Form
                     form.target.action="deleteGlossary"
                     attributes.class="neos-inline"
                   >
                     <Neos.Fusion.Form:Hidden field.name="glossary" field.value={glossary}/>
-                    <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-danger">Delete Glossary
+                    <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-danger">{I18n.translate('glossaries.delete', 'Delete Glossary', [], 'Modules', 'Sitegeist.LostInTranslation')}
                     </Neos.Fusion.Form:Button>
                   </Neos.Fusion.Form:Form>
                 </div>
@@ -90,9 +90,12 @@ prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Compo
               <div class="neos-modal-backdrop neos-in"></div>
             </div>
 
-            <Neos.Fusion:Link.Action href.action="showGlossary" href.arguments.glossary={glossary}
-                                     class="neos-button  neos-pull-right">
-              <i class="fas fa-edit"></i> Edit Glossary
+            <Neos.Fusion:Link.Action
+              href.action="showGlossary"
+              href.arguments.glossary={glossary}
+              class="neos-button neos-pull-right"
+            >
+              <i class="fas fa-edit"></i> {I18n.translate('glossaries.edit', 'Edit Glossary', [], 'Modules', 'Sitegeist.LostInTranslation')}
             </Neos.Fusion:Link.Action>
 
           </td>
@@ -103,7 +106,7 @@ prototype(Sitegeist.LostInTranslation:Views.Index) < prototype(Neos.Fusion:Compo
 
     <Neos.Fusion:Fragment>
       <Neos.Fusion:Link.Action href.action="createGlossary" class="neos-button neos-button-primary">
-        Add new Glossary
+        {I18n.translate('glossaries.add', 'Add new Glossary', [], 'Modules', 'Sitegeist.LostInTranslation')}
       </Neos.Fusion:Link.Action>
     </Neos.Fusion:Fragment>
 

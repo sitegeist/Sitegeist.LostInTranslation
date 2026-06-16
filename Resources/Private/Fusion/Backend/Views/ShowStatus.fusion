@@ -3,68 +3,63 @@ prototype(Sitegeist.LostInTranslation:Views.ShowStatus) < prototype(Neos.Fusion:
 
     <div class="neos-content neos-container-fluid">
         <Neos.Fusion:Link.Action href.action="index" class="neos-button">
-            <i class="fas fa-language"></i>&nbsp;Glossaries
+            <i class="fas fa-book"></i>&nbsp;{I18n.translate('tabs.glossaries', 'Glossaries', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
         &nbsp;
         <Neos.Fusion:Link.Action href.action="showStatus" class="neos-button  neos-active">
-            <i class="fas fa-cog"></i>&nbsp;API-Status
+            <i class="fas fa-cog"></i>&nbsp;{I18n.translate('tabs.apiStatus', 'API-Status', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
         &nbsp;
         <Neos.Fusion:Link.Action href.action="synchronizationStatus" class="neos-button">
-            <i class="fas fa-sync"></i>&nbsp;Synchronization
+            <i class="fas fa-sync"></i>&nbsp;{I18n.translate('tabs.synchronization', 'Synchronization', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
     </div>
 
-    <legend>API-Status</legend>
+    <legend>{I18n.translate('status.heading', 'API-Status', [], 'Modules', 'Sitegeist.LostInTranslation')}</legend>
 
     <p @if={!status.connectionSuccessFull}>
-      <i class="fas fa-exclamation-triangle" style="color:red;"></i> !!! NO DeepL API connection, please check you
-      API-Key !!!
-
+      <i class="fas fa-exclamation-triangle" style="color:red;"></i> {I18n.translate('status.connectionFailed', '!!! NO DeepL API connection, please check your API-Key !!!', [], 'Modules', 'Sitegeist.LostInTranslation')}
     </p>
     <Neos.Fusion:Fragment @if={status.connectionSuccessFull}>
-      <p><i class="fas fa-check-circle" style="color:green;"></i> DeepL API connection
-        successful {status.freeApi ? ' (Free API)' : ' (Payed API)'}</p>
+      <p><i class="fas fa-check-circle" style="color:green;"></i> {I18n.translate('status.connectionSuccess', 'DeepL API connection successful', [], 'Modules', 'Sitegeist.LostInTranslation')}{status.freeApi ? I18n.translate('status.freeApi', ' (Free API)', [], 'Modules', 'Sitegeist.LostInTranslation') : I18n.translate('status.paidApi', ' (Paid API)', [], 'Modules', 'Sitegeist.LostInTranslation')}</p>
       <p @if={status.characterCount < status.characterLimit}><i class="fas fa-check-circle"
                                                                 style="color:green;"></i>{' '}
-        {status.characterCount} from {status.characterLimit} characters used
-        ({status.characterLimit > 0 ? Math.round(status.characterCount / status.characterLimit * 100) : 0}%)</p>
+        {I18n.translate('status.charactersUsed', '{0} from {1} characters used ({2}%)', [status.characterCount, status.characterLimit, status.characterLimit > 0 ? Math.round(status.characterCount / status.characterLimit * 100) : 0], 'Modules', 'Sitegeist.LostInTranslation')}</p>
       <p @if={status.characterCount >= status.characterLimit}><i class="fas fa-exclamation-triangle"
-                                                                 style="color:red;"></i> Character limit
-        of {status.characterLimit} reached. No further translations possible.</p>
+                                                                 style="color:red;"></i> {I18n.translate('status.limitReached', 'Character limit of {0} reached. No further translations possible.', [status.characterLimit], 'Modules', 'Sitegeist.LostInTranslation')}</p>
     </Neos.Fusion:Fragment>
 
     <br/>
 
     <Neos.Fusion:Fragment @if={!status.hasCustomKey}>
       <Neos.Fusion:Link.Action href.action="setCustomKey" class="neos-button">
-        <i class="fas fa-key"></i> Set API-Key
+        <i class="fas fa-key"></i> {I18n.translate('status.setKey', 'Set API-Key', [], 'Modules', 'Sitegeist.LostInTranslation')}
       </Neos.Fusion:Link.Action>
     </Neos.Fusion:Fragment>
 
     <Neos.Fusion:Fragment @if={status.hasCustomKey}>
       <Neos.Fusion:Link.Action href.action="setCustomKey" class="neos-button">
-        <i class="fas fa-pencil-alt"></i> Change custom API-Key
+        <i class="fas fa-pencil-alt"></i> {I18n.translate('status.changeKey', 'Change custom API-Key', [], 'Modules', 'Sitegeist.LostInTranslation')}
       </Neos.Fusion:Link.Action>
 
-      <button class="neos-button neos-button-danger" title="delete custom ley" data-toggle="modal"
+      <button class="neos-button neos-button-danger" title={I18n.translate('status.removeKey.title', 'Remove custom API-Key', [], 'Modules', 'Sitegeist.LostInTranslation')} data-toggle="modal"
               href="#deleteCustomKey">
-        <i class="fas fa-trash"></i> Remove custom API-Key
+        <i class="fas fa-trash"></i> {I18n.translate('status.removeKey', 'Remove custom API-Key', [], 'Modules', 'Sitegeist.LostInTranslation')}
       </button>
 
       <div class="neos-hide" id="deleteCustomKey">
         <div class="neos-modal">
           <div class="neos-modal-header">
             <button type="button" class="neos-close neos-button" data-dismiss="modal"></button>
-            <div class="neos-header">Remove custom API-key</div>
+            <div class="neos-header">{I18n.translate('status.removeKey', 'Remove custom API-Key', [], 'Modules', 'Sitegeist.LostInTranslation')}</div>
           </div>
           <div class="neos-modal-footer">
-            <a href="#" class="neos-button" data-dismiss="modal">Cancel</a>
+            <a href="#" class="neos-button" data-dismiss="modal">{I18n.translate('action.cancel', 'Cancel', [], 'Modules', 'Sitegeist.LostInTranslation')}</a>
             <Neos.Fusion.Form:Form
               form.target.action="removeCustomKey"
               attributes.class="neos-inline"
             >
-              <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-danger">Remove custom API-Key
+              <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-danger">{I18n.translate('status.removeKey', 'Remove custom API-Key', [], 'Modules', 'Sitegeist.LostInTranslation')}
               </Neos.Fusion.Form:Button>
             </Neos.Fusion.Form:Form>
           </div>

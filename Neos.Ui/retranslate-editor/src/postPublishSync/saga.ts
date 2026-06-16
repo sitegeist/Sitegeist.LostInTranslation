@@ -28,7 +28,7 @@ export function* watchPublishSucceeded(): Generator<unknown, void, any> {
         lastMode = typeof action?.payload?.mode === 'number' ? action.payload.mode : null;
     });
 
-    yield takeEvery(PUBLISHING_FINISHED, function* handlePublishFinished() {
+    yield takeEvery(PUBLISHING_FINISHED, function* handlePublishFinished(): Generator<unknown, void, any> {
         if (lastMode !== PUBLISHING_MODE_PUBLISH || handling) {
             return;
         }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { Button, Dialog } from '@neos-project/react-ui-components';
 import { actions } from '@neos-project/neos-ui-redux-store';
+import { useI18n } from '@sitegeist/lostintranslation-neos-bridge';
 import { endpoints } from '../hooks/backend';
 import { syncPromptBus, type SyncPromptPayload } from './promptBus';
 
@@ -12,6 +13,7 @@ import { syncPromptBus, type SyncPromptPayload } from './promptBus';
  */
 export const SyncDialog: React.FC = () => {
     const dispatch = useDispatch();
+    const t = useI18n();
     const [prompt, setPrompt] = useState<SyncPromptPayload | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -36,7 +38,7 @@ export const SyncDialog: React.FC = () => {
             if (result.errors && result.errors.length > 0) {
                 dispatch(actions.UI.FlashMessages.add(
                     `lost-in-translation-sync-error-${Date.now()}`,
-                    `Translation synchronization could not run: ${result.errors.join('; ')}`,
+                    t('syncDialog.error.couldNotRun', '', { errors: result.errors.join('; ') }, 'Sitegeist.LostInTranslation', 'Main'),
                     'error'
                 ));
                 setPrompt(null);
@@ -45,13 +47,15 @@ export const SyncDialog: React.FC = () => {
             const translated = result.stalePropertyCommandsDispatched + result.variantCommandsDispatched;
             // Removals and subtree-tag changes (e.g. hide/show) are only mirrored by `remove-target` / `sync-to-target`
             // rules, so only mention them when they actually happened — and surface removals explicitly because they are
-            // destructive.
-            const extras = [
-                result.removalCommandsDispatched > 0 ? `removed ${result.removalCommandsDispatched} node(s)` : null,
-                result.tagCommandsDispatched > 0 ? `updated ${result.tagCommandsDispatched} visibility/tag change(s)` : null,
-            ].filter(Boolean);
-            const message = `Translated ${translated} change(s) into the configured languages.`
-                + (extras.length > 0 ? ` Also ${extras.join(' and ')}.` : '');
+            // destructive. Each extra is its own appended sentence so the message localizes without English "X and Y"
+            // conjunction grammar.
+            let message = t('syncDialog.success', '', { count: String(translated) }, 'Sitegeist.LostInTranslation', 'Main');
+            if (result.removalCommandsDispatched > 0) {
+                message += ' ' + t('syncDialog.success.removed', '', { count: String(result.removalCommandsDispatched) }, 'Sitegeist.LostInTranslation', 'Main');
+            }
+            if (result.tagCommandsDispatched > 0) {
+                message += ' ' + t('syncDialog.success.tags', '', { count: String(result.tagCommandsDispatched) }, 'Sitegeist.LostInTranslation', 'Main');
+            }
             dispatch(actions.UI.FlashMessages.add(
                 `lost-in-translation-sync-${Date.now()}`,
                 message,
@@ -61,7 +65,7 @@ export const SyncDialog: React.FC = () => {
         } catch (error) {
             dispatch(actions.UI.FlashMessages.add(
                 `lost-in-translation-sync-error-${Date.now()}`,
-                'Translation synchronization failed. You can retry from the Lost In Translation backend module.',
+                t('syncDialog.error.failed', '', {}, 'Sitegeist.LostInTranslation', 'Main'),
                 'error'
             ));
         } finally {
@@ -72,20 +76,21 @@ export const SyncDialog: React.FC = () => {
     return (
         <Dialog
             isOpen
-            title="Translate published changes"
+            title={t('syncDialog.title', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
             onRequestClose={close}
             actions={[
-                <Button key="cancel" style="lighter" isDisabled={isSyncing} onClick={close}>
-                    Not now
+                <Button key="cancel" style="lighter" disabled={isSyncing} onClick={close}>
+                    {t('syncDialog.cancel', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                 </Button>,
-                <Button key="sync" style="success" isDisabled={isSyncing} onClick={sync}>
-                    {isSyncing ? 'Translating…' : 'Sync now'}
+                <Button key="sync" style="success" disabled={isSyncing} onClick={sync}>
+                    {isSyncing
+                        ? t('syncDialog.syncing', '', {}, 'Sitegeist.LostInTranslation', 'Main')
+                        : t('syncDialog.sync', '', {}, 'Sitegeist.LostInTranslation', 'Main')}
                 </Button>
             ]}
         >
             <div style={{ padding: '16px' }}>
-                {prompt.pendingCount} translation(s) are out of sync with the content you just published. Translate them
-                into the configured languages now?
+                {t('syncDialog.body', '', { pendingCount: String(prompt.pendingCount) }, 'Sitegeist.LostInTranslation', 'Main')}
             </div>
         </Dialog>
     );

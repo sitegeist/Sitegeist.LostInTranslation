@@ -60,8 +60,18 @@ class DeepLGlossaryService
         return $client->getGlossaryLanguages();
     }
 
+    /**
+     * Uploads the glossary to DeepL and returns the new remote id.
+     *
+     * DeepL's glossary API is immutable - an existing remote glossary cannot be edited in place,
+     * so "updating" means creating a fresh remote glossary and deleting the previous one. When the
+     * local glossary already references a remote glossary via its synchronizationIdentifier, that
+     * previous remote glossary is removed after the new one has been created successfully. Otherwise
+     * a new remote glossary is simply created.
+     */
     public function uploadRemoteGlossary(Glossary $glossary): ?string
     {
+        $previousRemoteId = $glossary->synchronizationIdentifier;
         try {
             $client = $this->deeplClientFactory->createDeepLClient();
             $info = $client->createGlossary(
@@ -70,11 +80,18 @@ class DeepLGlossaryService
                 $glossary->targetLanguageKey,
                 GlossaryEntries::fromEntries($glossary->getEntriesAsAssociativeArray())
             );
-            return $info->glossaryId;
         } catch (DeepLException $exception) {
             $this->logger?->critical('DeeplException caught: ' . $exception->getMessage());
             return null;
         }
+
+        // Only after the new glossary exists do we remove the one it replaces, so a failed
+        // upload never leaves the glossary without a usable remote counterpart.
+        if (is_string($previousRemoteId) && $previousRemoteId !== '' && $previousRemoteId !== $info->glossaryId) {
+            $this->deleteRemoteGlossary($previousRemoteId);
+        }
+
+        return $info->glossaryId;
     }
 
     /**

@@ -16,7 +16,7 @@ export const RetranslateView = ({for: target}: RetranslateViewProps) => {
     const t = useI18n();
     const nodeInfo = useNodeInfo(target);
     const { data: contentData, isLoading: contentIsLoading } = useContentInfo(nodeInfo.nodeId, nodeInfo.workspace, nodeInfo.dimensions);
-    const { isPending: translationPending, mutate: translate } = useTranslate({target});
+    const { isLoading: translationPending, mutate: translate } = useTranslate({target});
 
     if (contentIsLoading) {
         return (

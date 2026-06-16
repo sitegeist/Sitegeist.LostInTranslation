@@ -2,19 +2,19 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
   renderer = afx`
     <div class="neos-content neos-container-fluid">
         <Neos.Fusion:Link.Action href.action="index" class="neos-button">
-            <i class="fas fa-language"></i>&nbsp;Glossaries
+            <i class="fas fa-book"></i>&nbsp;{I18n.translate('tabs.glossaries', 'Glossaries', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
         &nbsp;
         <Neos.Fusion:Link.Action href.action="showStatus" class="neos-button">
-            <i class="fas fa-cog"></i>&nbsp;API-Status
+            <i class="fas fa-cog"></i>&nbsp;{I18n.translate('tabs.apiStatus', 'API-Status', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
         &nbsp;
         <Neos.Fusion:Link.Action href.action="synchronizationStatus" class="neos-button neos-active">
-            <i class="fas fa-sync"></i>&nbsp;Synchronization
+            <i class="fas fa-sync"></i>&nbsp;{I18n.translate('tabs.synchronization', 'Synchronization', [], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion:Link.Action>
     </div>
 
-    <legend>Synchronization</legend>
+    <legend>{I18n.translate('synchronization.heading', 'Synchronization', [], 'Modules', 'Sitegeist.LostInTranslation')}</legend>
 
     <div @if={!projectionStatus.isReady} class="neos-error">
         <p>
@@ -25,7 +25,7 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
     </div>
 
     <div @if={projectionStatus.isReady && !rules}>
-        <p>No synchronization rules are configured. Add rules under
+        <p>{I18n.translate('synchronization.noRules', 'No synchronization rules are configured. Add rules under', [], 'Modules', 'Sitegeist.LostInTranslation')}
           <code>Sitegeist.LostInTranslation.nodeTranslation.synchronization</code>.</p>
     </div>
 
@@ -33,11 +33,11 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
       <table class="neos-table">
         <thead>
         <tr>
-          <th>Source</th>
-          <th>Target</th>
-          <th>Scope</th>
-          <th>Mode</th>
-          <th>Status</th>
+          <th>{I18n.translate('synchronization.col.source', 'Source', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+          <th>{I18n.translate('synchronization.col.target', 'Target', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+          <th>{I18n.translate('synchronization.col.scope', 'Scope', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+          <th>{I18n.translate('synchronization.col.mode', 'Mode', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
+          <th>{I18n.translate('synchronization.col.status', 'Status', [], 'Modules', 'Sitegeist.LostInTranslation')}</th>
           <th></th>
         </tr>
         </thead>
@@ -46,17 +46,17 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
           <tr>
             <td>{rule.sourceWorkspaceName} / {rule.sourceDimension}</td>
             <td>{rule.targetWorkspaceName} / {rule.targetDimension}</td>
-            <td>{rule.scope}</td>
-            <td>{rule.mode}</td>
+            <td>{I18n.translate('synchronization.scope.' + rule.scope, rule.scope, [], 'Modules', 'Sitegeist.LostInTranslation')}</td>
+            <td>{I18n.translate('synchronization.mode.' + rule.mode, rule.mode, [], 'Modules', 'Sitegeist.LostInTranslation')}</td>
             <td>
               <Neos.Fusion:Fragment @if={!rule.targetWorkspaceExists}>
                 <i class="fas fa-times-circle" style="color:#ff460d;"></i>
-                &nbsp;target workspace does not exist
+                &nbsp;{I18n.translate('synchronization.targetMissing', 'target workspace does not exist', [], 'Modules', 'Sitegeist.LostInTranslation')}
               </Neos.Fusion:Fragment>
               <Neos.Fusion:Fragment @if={rule.targetWorkspaceExists}>
                 <i class="fas fa-check-circle" style="color:green;" @if={rule.pendingCount < 1}></i>
                 <i class="fas fa-exclamation-triangle" style="color:#ffae00;" @if={rule.pendingCount > 0}></i>
-                &nbsp;{rule.pendingCount > 0 ? rule.pendingCount + ' translation(s) pending' : 'up to date'}
+                &nbsp;{rule.pendingCount > 0 ? I18n.translate('synchronization.pending', '{0} translation(s) pending', [rule.pendingCount], 'Modules', 'Sitegeist.LostInTranslation') : I18n.translate('status.upToDate', 'up to date', [], 'Modules', 'Sitegeist.LostInTranslation')}
               </Neos.Fusion:Fragment>
             </td>
             <td class="neos-action">
@@ -68,7 +68,7 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
                    to the Eel-falsy zero, which would drop the value and make ruleIndex arrive empty for the first rule. -->
               <Neos.Fusion.Form:Form form.target.action="synchronizeRule" form.target.arguments.ruleIndex={rule.index} attributes.class="neos-inline neos-pull-right" attributes.onsubmit="var i = this.querySelector('button i'); if (i) i.className = 'fas fa-spinner fa-spin'; setTimeout(() => document.querySelectorAll('.js-sync-button').forEach(b => b.disabled = true), 0);">
                 <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary js-sync-button">
-                  <i class="fas fa-sync"></i> Sync now
+                  <i class="fas fa-sync"></i> {I18n.translate('synchronization.syncNow', 'Sync now', [], 'Modules', 'Sitegeist.LostInTranslation')}
                 </Neos.Fusion.Form:Button>
               </Neos.Fusion.Form:Form>
             </td>
@@ -79,7 +79,7 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
 
       <Neos.Fusion.Form:Form form.target.action="synchronizeAllRules" attributes.class="neos-inline" attributes.onsubmit="var i = this.querySelector('button i'); if (i) i.className = 'fas fa-spinner fa-spin'; setTimeout(() => document.querySelectorAll('.js-sync-button').forEach(b => b.disabled = true), 0);">
         <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary js-sync-button">
-          <i class="fas fa-sync"></i> Sync all rules ({pendingTotal} pending)
+          <i class="fas fa-sync"></i> {I18n.translate('synchronization.syncAll', 'Sync all rules ({0} pending)', [pendingTotal], 'Modules', 'Sitegeist.LostInTranslation')}
         </Neos.Fusion.Form:Button>
       </Neos.Fusion.Form:Form>
     </Neos.Fusion:Fragment>
