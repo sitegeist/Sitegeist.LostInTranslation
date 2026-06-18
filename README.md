@@ -175,6 +175,19 @@ variant. It is **not** gated by `scope` (a hidden Document hides in the target e
 mirror tags inline on publish (from the publish's own tag events); `ask` rules and the CLI (`--sync-tags`)
 reconcile them on the deliberate "sync now" run by diffing the target's tags against the source.
 
+#### Triggering synchronization from the backend
+
+The **Lost in Translation** backend module has a *Synchronization* overview listing every configured rule
+with how many nodes are currently out of sync, and whether its target workspace exists yet (rules never
+auto-create it). From here editors can run **Sync now** for a single rule or **Sync all** — the manual
+counterpart to the CLI, useful for `mode: ask` rules. The overview reads its counts from the
+stale-translation projection; if that projection has not been set up yet (a fresh install before
+`./flow cr:setup`) the module shows a guidance banner instead of failing.
+
+For `mode: ask` rules, publishing into the source workspace also raises a **post-publish prompt** in the
+Neos UI ("translations are out of date — synchronize now?") so reviewers are nudged without sync happening
+automatically. `mode: auto` rules need none of this — they translate inline on publish.
+
 Automatic synchronization is always stale-driven. The Flow CLI offers the same operations for scripting,
 cron jobs and one-off catch-ups:
 
