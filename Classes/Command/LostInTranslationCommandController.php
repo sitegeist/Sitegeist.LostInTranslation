@@ -41,12 +41,11 @@ class LostInTranslationCommandController extends CommandController
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
      *
-     * @param string $source
-     * @param string $target
+     * @param string $source The source language dimension value or a full coordinate as JSON string
+     * @param string $target The target language dimension value or a full coordinate as JSON string
      * @param string $contentRepository
      * @param string $workspace
      * @param string $nodePath
-     * @return void
      * @throws AccessDenied
      * @throws StopCommandException
      */
@@ -73,20 +72,13 @@ class LostInTranslationCommandController extends CommandController
         }
 
         # Create array with the default coordinates for the content repository
-        $contentDimensions = $cr->getContentDimensionSource()->getContentDimensionsOrderedByPriority();
-        $defaultDimensionConfiguration = [];
-        foreach ($contentDimensions as $contentDimension) {
-            $defaultValue = array_first($contentDimension->getRootValues())?->value;
-            if ($defaultValue !== null) {
-                $defaultDimensionConfiguration[$contentDimension->id->value] = $defaultValue;
-            }
-        }
+        $defaultDimensionConfiguration = $this->getDefaultDimensionConfiguration($cr);
 
         # Try to parse source and target as JSON stringified dimension coordinate.
         # If that fails, assume they are language values and merge the default dimension configuration with the given value to make sure we have a valid DSP.
         try {
             $sourceDimensionSpacePoint = DimensionSpacePoint::fromJsonString($source);
-        } catch (\TypeError) {
+        } catch (\TypeError|\Exception) {
             $sourceDimensionSpacePoint = DimensionSpacePoint::fromArray([
                 ...$defaultDimensionConfiguration,
                 $this->languageDimensionName => $source
@@ -94,7 +86,7 @@ class LostInTranslationCommandController extends CommandController
         }
         try {
             $targetDimensionSpacePoint = DimensionSpacePoint::fromJsonString($target);
-        } catch (\TypeError) {
+        } catch (\TypeError|\Exception) {
             $targetDimensionSpacePoint = DimensionSpacePoint::fromArray([
                 ...$defaultDimensionConfiguration,
                 $this->languageDimensionName => $target
@@ -156,7 +148,7 @@ class LostInTranslationCommandController extends CommandController
     /**
      * Retranslate (stale properties + missing variants) below the given node into the target language dimension.
      *
-     * `$target` is the target dimension value; the source is derived from its `referenceLanguage` preset.
+     * `$target` is the target language dimension value or a full coordinate as JSON string; the source is derived from its `referenceLanguage` preset.
      */
     public function retranslateNodeCommand(
         string $nodeAggregateId,
@@ -164,15 +156,30 @@ class LostInTranslationCommandController extends CommandController
         string $contentRepository,
         string $workspace,
     ): void {
+        $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepository));
+        $defaultDimensionConfiguration = $this->getDefaultDimensionConfiguration($cr);
+
+        # Try to parse target as JSON stringified dimension coordinate.
+        # If that fails, assume they are language values and merge the default dimension configuration with the given value to make sure we have a valid DSP.
+        try {
+            $targetDimensionSpacePoint = DimensionSpacePoint::fromJsonString($target);
+        } catch (\TypeError|\Exception) {
+            $targetDimensionSpacePoint = DimensionSpacePoint::fromArray([
+                ...$defaultDimensionConfiguration,
+                $this->languageDimensionName => $target
+            ]);
+        }
+
         $this->outputLine(
-            'Starting retranslation for node "%s" -> "%s" in workspace "%s"...',
-            [$nodeAggregateId, $target, $workspace]
+            'Starting retranslation for node "%s" -> "%s" in workspace "%s" in content repository "%s"…',
+            [$nodeAggregateId, $target, $workspace, $contentRepository]
         );
+
         $result = $this->retranslator->retranslateNode(
             ContentRepositoryId::fromString($contentRepository),
             WorkspaceName::fromString($workspace),
             NodeAggregateId::fromString($nodeAggregateId),
-            DimensionSpacePoint::fromArray([$this->languageDimensionName => $target]),
+            $targetDimensionSpacePoint,
         );
 
         // Distinct messages for skip / no-op / dispatched so misconfiguration is visible from CLI.
@@ -194,5 +201,22 @@ class LostInTranslationCommandController extends CommandController
             'Retranslation for node "%s" -> "%s": dispatched %d stale property update(s) and %d variant creation(s).',
             [$nodeAggregateId, $target, $result->stalePropertyCommandsDispatched, $result->variantCommandsDispatched],
         );
+    }
+
+    /**
+     * Create array with the default coordinates for the content repository
+     * @return array<string,string>
+     */
+    protected function getDefaultDimensionConfiguration(ContentRepository $cr): array
+    {
+        $contentDimensions = $cr->getContentDimensionSource()->getContentDimensionsOrderedByPriority();
+        $defaultDimensionConfiguration = [];
+        foreach ($contentDimensions as $contentDimension) {
+            $defaultValue = array_first($contentDimension->getRootValues())?->value;
+            if ($defaultValue !== null) {
+                $defaultDimensionConfiguration[$contentDimension->id->value] = $defaultValue;
+            }
+        }
+        return $defaultDimensionConfiguration;
     }
 }
