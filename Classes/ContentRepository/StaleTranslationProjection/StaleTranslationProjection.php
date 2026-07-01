@@ -252,14 +252,17 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeSpecializationVariantWasCreated(NodeSpecializationVariantWasCreated $event): void
     {
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeGeneralizationVariantWasCreated(NodeGeneralizationVariantWasCreated $event): void
     {
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodePeerVariantWasCreated(NodePeerVariantWasCreated $event): void
     {
     }
@@ -399,18 +402,27 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeReferencesWereSet(NodeReferencesWereSet $event): void
     {
         // todo: track reference properties
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeAggregateWasRemoved(NodeAggregateWasRemoved $event): void
     {
     }
 
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void
     {
-        /** @var array<int,array{workspaceName: string, nodeAggregateId: string, propertyNames: string}> $affectedRecords */
+        /**
+         * @var array<int,array{
+         *     workspaceName: string,
+         *     nodeAggregateId: string,
+         *     originDimensionSpacePointHash: string,
+         *     propertyNames: string
+         * }> $affectedRecords
+         */
         $affectedRecords = $this->dbal->executeQuery(
             'SELECT * FROM ' . $this->itemTableName . ' WHERE nodeAggregateId = :nodeAggregateId AND workspaceName = :workspaceName',
             [
