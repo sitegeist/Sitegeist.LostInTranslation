@@ -215,7 +215,7 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodeAggregateWithNodeWasCreated(NodeAggregateWithNodeWasCreated $event): void
     {
-        $targetDimensionSpacePoint = $this->referenceDimensionSpacePointResolver->tryResolveTargetDimensionSpacePoint(
+        $targetDimensionSpacePoints = $this->referenceDimensionSpacePointResolver->resolveTargetDimensionSpacePoints(
             $event->originDimensionSpacePoint->toDimensionSpacePoint()
         );
         $this->memorizeNodeTypeName(
@@ -238,7 +238,7 @@ class StaleTranslationProjection implements ProjectionInterface
             }
         }
 
-        if ($targetDimensionSpacePoint) {
+        foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
             $this->dbal->insert(
                 $this->itemTableName,
                 [
@@ -325,8 +325,10 @@ class StaleTranslationProjection implements ProjectionInterface
             }
         });
 
-        $targetDimensionSpacePoint = $this->referenceDimensionSpacePointResolver->tryResolveTargetDimensionSpacePoint($event->originDimensionSpacePoint->toDimensionSpacePoint());
-        if ($targetDimensionSpacePoint) {
+        $targetDimensionSpacePoints = $this->referenceDimensionSpacePointResolver->resolveTargetDimensionSpacePoints(
+            $event->originDimensionSpacePoint->toDimensionSpacePoint()
+        );
+        foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
             $this->dbal->transactional(function () use ($event, $targetDimensionSpacePoint, $translatablePropertyNames) {
                 $record = $this->dbal->executeQuery(
                     'SELECT propertyNames FROM ' . $this->itemTableName
