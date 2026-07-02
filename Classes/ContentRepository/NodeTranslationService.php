@@ -326,7 +326,7 @@ class NodeTranslationService
                 $propertyValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $propertyValue);
             }
             if (is_array($propertyValue)) {
-                $targetValue = $targetNode->getProperty($propertyName);
+                $targetValue = $sourceNode->getProperty($propertyName);
                 if ($connector = $translatableProperties->getTranslationObjectConnector($propertyName)) {
                     if (is_object($targetValue)) {
                         $targetValue = $connector->applyTranslations($targetValue, $propertyValue);
