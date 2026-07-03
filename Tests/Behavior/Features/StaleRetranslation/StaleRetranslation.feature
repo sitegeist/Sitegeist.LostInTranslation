@@ -11,7 +11,11 @@ Feature: Track the staleness state of translations and run retranslation on stal
           values:
             en: {}
             de:
-              referenceLanguage: en
+              options:
+                referenceLanguage: en
+            fr:
+              options:
+                referenceLanguage: en
         """
         And using the following node types:
         """yaml
@@ -131,7 +135,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             # ordered by node aggregate id by default
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command CreateNodeVariant is executed with payload:
             | Key             | Value                    |
@@ -142,7 +148,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # 1x ContentStreamWasForked, 2x NodeAggregateWithNodeWasCreated, 2x NodeVariantWasCreated, 2x NodePropertiesWereSet via autotranslation
         Then I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
         And I expect exactly the following stale translations:
-            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # change the original
         When the command SetNodeProperties is executed with payload:
@@ -171,12 +179,18 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"}
         Then I expect exactly the following stale translations:
-            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         And I expect exactly 14 events to be published on stream "ContentStream:user-cs-id"
         # 2 NodePropertiesWereSet for translations of "sir-david-nodenborough" and its tethered child "nodewyn-tetherton".
         # The Retranslator emits these in based on the node hierarchy (parent -> children -> grandchildren etc)
@@ -222,7 +236,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
             | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | child-doc       | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | parent-doc      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | parent-doc      | ["autoTranslatableStringProperty"] |
 
         When I retranslate node "parent-doc" in workspace "user-workspace" and dimension space point {"language":"de"}
 
@@ -230,6 +246,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
             | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | child-doc       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | parent-doc      | ["autoTranslatableStringProperty"] |
 
     Scenario: Retranslating into the source language is a no-op
         When I am in workspace "user-workspace"
@@ -240,7 +258,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # 1x ContentStreamWasForked (CreateWorkspace user-workspace) + 2x NodeAggregateWithNodeWasCreated
         And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
@@ -251,7 +271,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         # Event count untouched.
         And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
 
@@ -264,7 +286,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             # ordered by node aggregate id by default
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command CreateNodeVariant is executed with payload:
             | Key             | Value                    |
@@ -275,7 +299,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # 1x ContentStreamWasForked, 2x NodeAggregateWithNodeWasCreated, 2x NodeVariantWasCreated, 2x NodePropertiesWereSet via autotranslation
         Then I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
         And I expect exactly the following stale translations:
-            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # change the original
         When the command SetNodeProperties is executed with payload:
@@ -295,8 +321,11 @@ Feature: Track the staleness state of translations and run retranslation on stal
 
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Change base workspace
         When the command ChangeBaseWorkspace is executed with payload:
@@ -305,10 +334,16 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | baseWorkspaceName | "user-workspace"       |
         Then I expect exactly the following stale translations:
             | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | other-user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | other-user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command ChangeBaseWorkspace is executed with payload:
             | Key               | Value                  |
@@ -316,8 +351,11 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | baseWorkspaceName | "live"                 |
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Publish workspace
         When the command PublishWorkspace is executed with payload:
@@ -326,10 +364,16 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | newContentStreamId | "new-user-cs-id" |
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | live           | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase other workspace.
         # Pin the rebased content stream to a stable name so we can assert against it below — without `rebasedContentStreamId`,
@@ -340,21 +384,39 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | rebasedContentStreamId | "rebased-other-user-cs-id" |
         Then I expect exactly the following stale translations:
             | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | live                 | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | live                 | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | other-user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | other-user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Retranslate in other workspace
         When I retranslate node "sir-david-nodenborough" in workspace "other-user-workspace" and dimension space point {"language":"de"}
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-            | live           | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live                 | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         # Retranslate fires its commands against the workspace's CURRENT content stream,
         # which after the rebase above is the freshly-forked `rebased-other-user-cs-id` stream — NOT the original `user-cs-id`
         # (that one is frozen since the user-workspace publish).
@@ -394,16 +456,34 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName      | "other-user-workspace" |
             | newContentStreamId | "new-other-user-cs-id" |
         Then I expect exactly the following stale translations:
-            | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-            | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-            | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase workspace
         When the command RebaseWorkspace is executed with payload:
             | Key           | Value            |
             | workspaceName | "user-workspace" |
         Then I expect exactly the following stale translations:
-            | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+            | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+            | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     Scenario: Node Type Change
         When I am in workspace "user-workspace"
@@ -413,6 +493,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command ChangeNodeAggregateType is executed with payload:
             | Key             | Value                                                                       |
@@ -422,6 +503,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
 
         When the command PublishWorkspace is executed with payload:
             | Key                | Value            |
@@ -435,7 +517,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |
 
     # We explicitly ignore "NodeAggregateWasRemoved" events for now
 
@@ -447,7 +531,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command ChangeNodeAggregateType is executed with payload:
             | Key             | Value                                                           |
@@ -458,8 +544,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             # children are ignored (see top-level comment)
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             # NodeWithFewerTranslations has no `autoTranslatableStringProperty`
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
 
     Scenario: Publishing a workspace propagates stale records to the base workspace
         When I am in workspace "user-workspace"
@@ -469,7 +557,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         When the command PublishWorkspace is executed with payload:
             | Key                | Value            |
@@ -478,9 +568,13 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     Scenario: Partial publish propagates only the published nodes' stale records
         When I am in workspace "user-workspace"
@@ -491,9 +585,13 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodenberg              | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
         When the command PublishIndividualNodesFromWorkspace is executed with payload:
             | Key            | Value                      |
@@ -502,11 +600,17 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodenberg              | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     Scenario: Discarding a workspace drops all its stale records
         When I am in workspace "user-workspace"
@@ -516,7 +620,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
         When the command DiscardWorkspace is executed with payload:
             | Key                | Value                  |
@@ -534,9 +640,13 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodenberg              | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
         When the command DiscardIndividualNodesFromWorkspace is executed with payload:
             | Key                | Value                      |
@@ -546,7 +656,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                      |
             | user-workspace | {"language":"de"}         | nodenberg        | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodenberg        | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nody-mc-nodeface | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nody-mc-nodeface | ["autoTranslatableStringProperty"] |
 
     Scenario: Deleting a workspace drops all its stale records
         When I am in workspace "user-workspace"
@@ -556,7 +668,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         And I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
         When the command DeleteWorkspace is executed with payload:
             | Key           | Value            |
@@ -575,13 +689,17 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | live           | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
         When I change the content dimensions in content repository "default" to:
-            | Identifier | Values  | Generalizations |
-            | language   | en, ltz |                 |
+            | Identifier | Values      | Generalizations |
+            | language   | en, ltz, fr |                 |
         And the command MoveDimensionSpacePoint is executed with payload:
             | Key                  | Value              |
             | workspaceName        | "live"             |
@@ -591,6 +709,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
         Then I expect exactly the following stale translations:
             | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             | live           | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | live           | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | live           | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
