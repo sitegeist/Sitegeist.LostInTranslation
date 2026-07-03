@@ -56,7 +56,7 @@ class RetranslationController extends ActionController
         string $nodeAggregateId,
         string $workspaceName,
         string $coordinates,
-        string $contentRepositoryId = 'default',
+        string $contentRepositoryId,
     ): string {
         $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepositoryId));
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -95,14 +95,14 @@ class RetranslationController extends ActionController
 
         $contentGraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName));
         $sourceSubgraph = $contentGraph->getSubgraph(
-            $sourceDimensionSpacePoint,
-            NeosVisibilityConstraints::excludeRemoved(),
+            dimensionSpacePoint: $sourceDimensionSpacePoint,
+            visibilityConstraints: NeosVisibilityConstraints::excludeRemoved(),
         );
         $sourceSubtree = $sourceSubgraph->findSubtree(
-            NodeAggregateId::fromString($nodeAggregateId),
-            FindSubtreeFilter::create(
+            entryNodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
+            filter: FindSubtreeFilter::create(
                 nodeTypes: NodeTypeCriteria::createWithAllowedNodeTypeNames(
-                    NodeTypeNames::fromStringArray(['Neos.Neos:ContentCollection', 'Neos.Neos:Content'])
+                    nodeTypeNames: NodeTypeNames::fromStringArray(['Neos.Neos:ContentCollection', 'Neos.Neos:Content'])
                 ),
             ),
         );
@@ -134,15 +134,15 @@ class RetranslationController extends ActionController
         string $nodeAggregateId,
         string $workspaceName,
         string $targetCoordinates,
-        string $contentRepositoryId = 'default',
+        string $contentRepositoryId,
     ): string {
         /** @var array<string, string> $coordinatesArray */
         $coordinatesArray = \json_decode($targetCoordinates, true, flags: JSON_THROW_ON_ERROR);
         $result = $this->retranslator->retranslateNode(
-            ContentRepositoryId::fromString($contentRepositoryId),
-            WorkspaceName::fromString($workspaceName),
-            NodeAggregateId::fromString($nodeAggregateId),
-            DimensionSpacePoint::fromArray($coordinatesArray),
+            contentRepositoryId: ContentRepositoryId::fromString($contentRepositoryId),
+            workspaceName: WorkspaceName::fromString($workspaceName),
+            nodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromArray($coordinatesArray),
         );
 
         return $this->jsonResponse([
