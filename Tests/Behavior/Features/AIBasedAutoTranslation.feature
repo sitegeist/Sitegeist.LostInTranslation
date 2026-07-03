@@ -56,14 +56,14 @@ Feature: Create node variant and let the AI translate the properties
     Then I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
     And event at index 1 is of type "NodePeerVariantWasCreated" with payload:
       | Key | Expected |
-    And event metadata at index 1 is:
+    And event data at index 1 is:
       | Key              | Expected                     |
-      | initiatingUserId | "initiating-user-identifier" |
+      | metadata.initiatingUserId | "initiating-user-identifier" |
     And event at index 2 is of type "NodePropertiesWereSet" with payload:
       | Key | Expected |
-    And event metadata at index 2 is:
+    And event data at index 2 is:
       | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
     When I am in dimension space point {"language": "de"}
     Then I expect node aggregate identifier "nody-mc-nodeface" to lead to node user-cs-id;nody-mc-nodeface;{"language":"de"}
     And I expect this node to have the following properties:
@@ -78,9 +78,9 @@ Feature: Create node variant and let the AI translate the properties
     Then I expect exactly 4 events to be published on stream "ContentStream:user-cs-id"
     And event at index 3 is of type "NodePropertiesWereSet" with payload:
       | Key | Expected |
-    And event metadata at index 3 is:
+    And event data at index 3 is:
       | Key              | Expected                     |
-      | initiatingUserId | "initiating-user-identifier" |
+      | metadata.initiatingUserId | "initiating-user-identifier" |
 
     When I am in dimension space point {"language": "de"}
     Then I expect node aggregate identifier "nody-mc-nodeface" to lead to node user-cs-id;nody-mc-nodeface;{"language":"de"}
@@ -96,11 +96,11 @@ Feature: Create node variant and let the AI translate the properties
     Then I expect exactly 6 events to be published on stream "ContentStream:cs-identifier"
     And event at index 4 is of type "NodePropertiesWereSet" with payload:
       | Key | Expected |
-    And event metadata at index 4 is:
+    And event data at index 4 is:
       | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
     And event at index 5 is of type "NodePropertiesWereSet" with payload:
       | Key | Expected |
-    And event metadata at index 5 is:
+    And event data at index 5 is:
       | Key              | Expected                     |
-      | initiatingUserId | "initiating-user-identifier" |
+      | metadata.initiatingUserId | "initiating-user-identifier" |
