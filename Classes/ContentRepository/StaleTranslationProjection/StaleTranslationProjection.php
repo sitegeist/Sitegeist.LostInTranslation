@@ -215,7 +215,7 @@ class StaleTranslationProjection implements ProjectionInterface
 
     private function whenNodeAggregateWithNodeWasCreated(NodeAggregateWithNodeWasCreated $event): void
     {
-        $targetDimensionSpacePoint = $this->referenceDimensionSpacePointResolver->tryResolveTargetDimensionSpacePoint(
+        $targetDimensionSpacePoints = $this->referenceDimensionSpacePointResolver->resolveTargetDimensionSpacePoints(
             $event->originDimensionSpacePoint->toDimensionSpacePoint()
         );
         $this->memorizeNodeTypeName(
@@ -238,7 +238,7 @@ class StaleTranslationProjection implements ProjectionInterface
             }
         }
 
-        if ($targetDimensionSpacePoint) {
+        foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
             $this->dbal->insert(
                 $this->itemTableName,
                 [
@@ -252,14 +252,17 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeSpecializationVariantWasCreated(NodeSpecializationVariantWasCreated $event): void
     {
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeGeneralizationVariantWasCreated(NodeGeneralizationVariantWasCreated $event): void
     {
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodePeerVariantWasCreated(NodePeerVariantWasCreated $event): void
     {
     }
@@ -325,8 +328,10 @@ class StaleTranslationProjection implements ProjectionInterface
             }
         });
 
-        $targetDimensionSpacePoint = $this->referenceDimensionSpacePointResolver->tryResolveTargetDimensionSpacePoint($event->originDimensionSpacePoint->toDimensionSpacePoint());
-        if ($targetDimensionSpacePoint) {
+        $targetDimensionSpacePoints = $this->referenceDimensionSpacePointResolver->resolveTargetDimensionSpacePoints(
+            $event->originDimensionSpacePoint->toDimensionSpacePoint()
+        );
+        foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
             $this->dbal->transactional(function () use ($event, $targetDimensionSpacePoint, $translatablePropertyNames) {
                 $record = $this->dbal->executeQuery(
                     'SELECT propertyNames FROM ' . $this->itemTableName
@@ -397,18 +402,27 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeReferencesWereSet(NodeReferencesWereSet $event): void
     {
         // todo: track reference properties
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeAggregateWasRemoved(NodeAggregateWasRemoved $event): void
     {
     }
 
     private function whenNodeAggregateTypeWasChanged(NodeAggregateTypeWasChanged $event): void
     {
-        /** @var array<int,array{workspaceName: string, nodeAggregateId: string, propertyNames: string}> $affectedRecords */
+        /**
+         * @var array<int,array{
+         *     workspaceName: string,
+         *     nodeAggregateId: string,
+         *     originDimensionSpacePointHash: string,
+         *     propertyNames: string
+         * }> $affectedRecords
+         */
         $affectedRecords = $this->dbal->executeQuery(
             'SELECT * FROM ' . $this->itemTableName . ' WHERE nodeAggregateId = :nodeAggregateId AND workspaceName = :workspaceName',
             [
