@@ -126,6 +126,29 @@ Feature: Track the staleness state of translations and run retranslation on stal
             | baseWorkspaceName  | "live"                 |
             | newContentStreamId | "other-user-cs-id"     |
 
+    Scenario: Non-translatable properties don't lead to empty stale translations
+        When I am in workspace "user-workspace"
+        And the following CreateNodeAggregateWithNode commands are executed:
+            | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues         | tetheredDescendantNodeAggregateIds |
+            | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"stringProperty": "My Text"} | {"tethered": "nodewyn-tetherton"}  |
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                      |
+            # ordered by node aggregate id by default
+            # only the tethered nodes appear due to the property with default value
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
+
+        When the command SetNodeProperties is executed with payload:
+            | Key                       | Value                         |
+            | nodeAggregateId           | "sir-david-nodenborough"      |
+            | originDimensionSpacePoint | {"language": "en"}            |
+            | propertyValues            | {"stringProperty": "My Text"} |
+        And I expect exactly the following stale translations:
+            | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                      |
+            # no new entries
+            | user-workspace | {"language":"de"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
+            | user-workspace | {"language":"fr"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
+
     Scenario: Retranslate a node
         When I am in workspace "user-workspace"
         And the following CreateNodeAggregateWithNode commands are executed:

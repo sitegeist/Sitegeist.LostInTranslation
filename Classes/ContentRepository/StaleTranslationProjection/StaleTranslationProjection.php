@@ -238,6 +238,10 @@ class StaleTranslationProjection implements ProjectionInterface
             }
         }
 
+        if ($staleTranslations === []) {
+            return;
+        }
+
         foreach ($targetDimensionSpacePoints as $targetDimensionSpacePoint) {
             $this->dbal->insert(
                 $this->itemTableName,
