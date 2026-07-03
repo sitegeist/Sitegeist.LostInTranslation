@@ -17,6 +17,11 @@ Feature: Create node variant and let the AI translate the properties
       superTypes:
         'Neos.Neos:Node': true
       properties:
+        # special handling for this one
+        uriPathSegment:
+          type: string
+          options:
+            automaticTranslation: true
         inlineEditableStringProperty:
           type: string
           ui:
@@ -38,7 +43,7 @@ Feature: Create node variant and let the AI translate the properties
       | nodeTypeName    | "Neos.ContentRepository:Root" |
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId  | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                       |
-      | nody-mc-nodeface | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text"} |
+      | nody-mc-nodeface | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"uriPathSegment": "my-title", "inlineEditableStringProperty": "My Text"} |
     And the command CreateWorkspace is executed with payload:
       | Key                | Value            |
       | workspaceName      | "user-workspace" |
@@ -68,6 +73,7 @@ Feature: Create node variant and let the AI translate the properties
     Then I expect node aggregate identifier "nody-mc-nodeface" to lead to node user-cs-id;nody-mc-nodeface;{"language":"de"}
     And I expect this node to have the following properties:
       | Key                          | Value                |
+      | uriPathSegment | "my-title-translated" |
       | inlineEditableStringProperty | "My Text translated" |
 
     When the command SetNodeProperties is executed with payload:
