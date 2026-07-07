@@ -8,10 +8,10 @@ type UseTranslateParams = {
 
 export const useTranslate = ({target}: UseTranslateParams) => {
     const nodeInfo = useNodeInfo(target);
-    const { nodeId, dimensions, workspace } = nodeInfo;
+    const { nodeId, dimensions, workspace, contentRepositoryId } = nodeInfo;
 
     return useMutation({
-        mutationKey: ['lost-in-translation', 'translate', nodeId, dimensions, workspace, target],
+        mutationKey: ['lost-in-translation', 'translate', nodeId, dimensions, workspace, contentRepositoryId, target],
         mutationFn: async () => {
             if (!nodeId) {
                 throw new Error('Missing nodeId');
@@ -28,7 +28,8 @@ export const useTranslate = ({target}: UseTranslateParams) => {
             return endpoints().translate({
                 nodeAggregateId: nodeId,
                 workspaceName: workspace,
-                targetCoordinates: JSON.stringify(dimensions)
+                targetCoordinates: JSON.stringify(dimensions),
+                contentRepositoryId
             });
         },
         onSuccess: () => {
