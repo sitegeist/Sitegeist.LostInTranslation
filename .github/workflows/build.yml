@@ -37,7 +37,7 @@ jobs:
           composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
           cd "${{ env.NEOS_FOLDER }}"
           composer require fakerphp/faker "^1.23.0" --no-install --dev
-          composer require phpstan/phpstan "^1.10.0" --no-install --dev
+          composer require phpstan/phpstan "^2.0" --no-install --dev
           composer require squizlabs/php_codesniffer "^3.7" --no-install --dev
           composer require mockery/mockery "@stable" --no-install --dev
           composer config --no-plugins allow-plugins.neos/composer-plugin true
