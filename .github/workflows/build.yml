@@ -79,7 +79,7 @@ jobs:
       - name: Run stan tests
         run: |
           cd "${{ env.NEOS_FOLDER }}"
-          bin/phpstan analyse ${{ env.DIST_FOLDER }}/Classes
+          bin/phpstan analyse -c ${{ env.DIST_FOLDER }}/phpstan.neon
 
       - name: Run unit tests
         run: |
