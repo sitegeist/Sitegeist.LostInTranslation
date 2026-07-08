@@ -52,21 +52,21 @@ class DeepLCacheServiceTest extends UnitTestCase
     public function valueIsStoredInCacheAfterCalculatingEntryIdentifier(): void
     {
         $this->cacheIdentifierFactory->expects($this->once())->method('createEntryIdentifier')->with("source", "SL", "TL")->willReturn('__cache_key__');
-        $this->translationCache->expects($this->once())->method('set')->with("__cache_key__", )->willReturn(false);
+        $this->translationCache->expects($this->once())->method('set')->with("__cache_key__")->willReturn(false);
         $this->deepLCacheService->set("source", "target", "SL", "TL");
     }
 
     /** @test */
     public function serviceKnowsWhenCacheIsEnabled(): void
     {
-        $this->assertTrue( $this->deepLCacheService->isEnabled());
+        $this->assertTrue($this->deepLCacheService->isEnabled());
     }
 
     /** @test */
     public function serviceKnowsWhenCacheIsDisabled(): void
     {
         $this->inject($this->deepLCacheService, 'enabled', false);
-        $this->assertFalse( $this->deepLCacheService->isEnabled());
+        $this->assertFalse($this->deepLCacheService->isEnabled());
     }
 
     /** @test */

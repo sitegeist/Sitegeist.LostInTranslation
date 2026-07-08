@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php-versions: ['8.2', '8.3']
+        php-versions: ['8.2', '8.3', '8.4']
         neos-versions: ['9.0', '9.1']
     runs-on: ubuntu-latest
 
@@ -32,14 +32,10 @@ jobs:
           extensions: mbstring, xml, json, zlib, iconv, intl, pdo_sqlite, mysql, pgsql, redis, memcached, memcache, apcu
           ini-values: date.timezone="Africa/Tunis", opcache.fast_shutdown=0, apc.enable_cli=on
 
-      - name: Install Neos Project and other dependencies
+      - name: Install Neos Project
         run: |
           composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
           cd "${{ env.NEOS_FOLDER }}"
-          composer require fakerphp/faker "^1.23.0" --no-install --dev
-          composer require phpstan/phpstan "^1.10.0" --no-install --dev
-          composer require squizlabs/php_codesniffer "^3.7" --no-install --dev
-          composer require mockery/mockery "@stable" --no-install --dev
           composer config --no-plugins allow-plugins.neos/composer-plugin true
 
       - name: Checkout
@@ -52,6 +48,10 @@ jobs:
           cd "${{ env.NEOS_FOLDER }}"
           composer config repositories.lostintranslation '{ "type": "path", "url": "./${{ env.DIST_FOLDER }}", "options": { "symlink": false } }'
           composer require sitegeist/lostintranslation "@dev" --no-install
+          jq -r '(."require-dev" // {}) | to_entries[] | "\(.key) \(.value)"' "${{ env.DIST_FOLDER }}/composer.json" \
+            | while read -r package constraint; do
+                composer require "$package" "$constraint" --no-install --dev
+              done
 
       - name: Cache Composer packages
         id: composer-cache
@@ -79,7 +79,7 @@ jobs:
       - name: Run stan tests
         run: |
           cd "${{ env.NEOS_FOLDER }}"
-          bin/phpstan analyse ${{ env.DIST_FOLDER }}/Classes
+          bin/phpstan analyse -c ${{ env.DIST_FOLDER }}/phpstan.neon
 
       - name: Run unit tests
         run: |

@@ -1,6 +1,9 @@
 parameters:
-	level: 8
-	treatPhpDocTypesAsCertain: false
-	paths:
-		- Classes
-	reportUnmatchedIgnoredErrors: false
+    level: 8
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - Classes
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        -
+            message: "#^Constant FLOW_PATH_FLOW not found\\.$#"

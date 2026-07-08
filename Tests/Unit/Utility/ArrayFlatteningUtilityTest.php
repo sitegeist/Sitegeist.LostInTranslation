@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Tests\Unit\Utility;
@@ -6,8 +7,8 @@ namespace Sitegeist\LostInTranslation\Tests\Unit\Utility;
 use Neos\Flow\Tests\UnitTestCase;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
-class ArrayFlatteningUtilityTest  extends UnitTestCase {
-
+class ArrayFlatteningUtilityTest extends UnitTestCase
+{
     public function provideExamples(): \Generator
     {
         yield 'empty array' => [

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain\Directive;
 
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
+use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 
 /**
  * @implements \IteratorAggregate<string, TranslatablePropertyName>

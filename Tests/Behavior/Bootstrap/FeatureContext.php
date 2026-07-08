@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Behat\Behat\Context\Context;
 use Neos\Behat\FlowBootstrapTrait;
 use Neos\Behat\FlowEntitiesTrait;
@@ -19,6 +21,8 @@ class FeatureContext implements Context
     use FlowEntitiesTrait;
     use CRTestSuiteTrait;
     use CRBehavioralTestsSubjectProvider;
+    use StaleTranslations;
+    use NodeTypeResolution;
 
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 

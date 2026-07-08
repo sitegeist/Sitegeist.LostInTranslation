@@ -1,0 +1,6 @@
+Neos:
+  Flow:
+    mvc:
+      routes:
+        Sitegeist.LostInTranslation:
+          position: "before Neos.Neos"

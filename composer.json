@@ -1,77 +1,77 @@
 {
-    "description": "Automatic content translations for Neos using the DeepL Api",
-    "type": "neos-package",
-    "name": "sitegeist/lostintranslation",
-    "license": "GPL-3.0-or-later",
-    "require": {
-        "php": ">=8.2.0",
-        "deeplcom/deepl-php": "~1.11.0",
-        "neos/neos": "^9.0.0",
-        "neos/contentrepository-core": "^9.0.0",
-        "neos/http-factories": "^9.0.0"
-    },
-    "autoload": {
-        "psr-4": {
-            "Sitegeist\\LostInTranslation\\": "Classes/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Sitegeist\\LostInTranslation\\Tests\\": "Tests/"
-        }
-    },
-    "require-dev": {
-        "neos/buildessentials": "^9.0",
-        "squizlabs/php_codesniffer": "^3.7",
-        "phpunit/phpunit": "^9",
-        "mockery/mockery": "@stable",
-        "mikey179/vfsstream": "@stable",
-        "fakerphp/faker": "^1.23.0",
-        "phpstan/phpstan": "^2.0",
-        "neos/behat": "^9.0",
-        "neos/contentgraph-doctrinedbaladapter": "^9.0.0",
-        "neos/contentrepository-testsuite": "^9.0.0"
-    },
-    "scripts": {
-        "fix:style": "phpcbf --colors --standard=PSR12 Classes",
-        "fix": [
-            "@fix:style"
-        ],
-        "test:style": "phpcs --colors -n --standard=PSR12 Classes",
-        "test:stan": "phpstan analyse Classes",
-        "test:unit": "bin/phpunit --bootstrap Tests/UnitTestBootstrap.php --configuration Tests/UnitTests.xml",
-        "test:functional": "bin/phpunit --bootstrap Tests/FunctionalTestBootstrap.php --configuration Tests/FunctionalTests.xml",
-        "test:behavior": "export FLOW_CONTEXT=Testing/Behat && behat -c Tests/Behavior/behat.yml.dist",
-        "cc": "phpstan clear cache",
-        "test": [
-            "@test:style",
-            "@test:stan",
-            "@test:unit"
-        ],
-        "lint": [
-            "@test:style",
-            "@test:stan"
-        ]
-    },
-    "extra": {
-        "neos": {
-            "package-key": "Sitegeist.LostInTranslation"
-        }
-    },
-    "config": {
-        "bin-dir": "bin",
-        "vendor-dir": "Packages/Libraries",
-        "allow-plugins": {
-            "neos/composer-plugin": true,
-            "php-http/discovery": false
-        }
-    },
-    "archive": {
-        "exclude": [
-            ".editorconfig",
-            ".gitattributes",
-            ".github",
-            ".gitignore"
-        ]
-    }
+	"description": "Automatic content translations for Neos using the DeepL Api",
+	"type": "neos-package",
+	"name": "sitegeist/lostintranslation",
+	"license": "GPL-3.0-or-later",
+	"require": {
+		"php": ">=8.2.0",
+		"deeplcom/deepl-php": "~1.11.0",
+		"neos/neos": "^9.0.0",
+		"neos/contentrepository-core": "^9.0.0",
+		"neos/http-factories": "^9.0.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"Sitegeist\\LostInTranslation\\": "Classes/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"Sitegeist\\LostInTranslation\\Tests\\": "Tests/"
+		}
+	},
+	"require-dev": {
+		"neos/buildessentials": "^9.0",
+		"squizlabs/php_codesniffer": "^3.7",
+		"phpunit/phpunit": "^9",
+		"mockery/mockery": "@stable",
+		"mikey179/vfsstream": "@stable",
+		"fakerphp/faker": "^1.23.0",
+		"phpstan/phpstan": "^2.0",
+		"neos/behat": "^9.0",
+		"neos/contentgraph-doctrinedbaladapter": "^9.0.0",
+		"neos/contentrepository-testsuite": "^9.0.0"
+	},
+	"scripts": {
+		"fix:style": "phpcbf --colors",
+		"fix": [
+			"@fix:style"
+		],
+		"test:style": "phpcs --colors -n",
+		"test:stan": "phpstan analyse -c phpstan.neon -v",
+		"test:unit": "bin/phpunit --bootstrap Tests/UnitTestBootstrap.php --configuration Tests/UnitTests.xml",
+		"test:functional": "bin/phpunit --bootstrap Tests/FunctionalTestBootstrap.php --configuration Tests/FunctionalTests.xml",
+		"test:behavior": "export FLOW_CONTEXT=Testing/Behat && behat -c Tests/Behavior/behat.yml.dist",
+		"cc": "phpstan clear cache",
+		"test": [
+			"@test:style",
+			"@test:stan",
+			"@test:unit"
+		],
+		"lint": [
+			"@test:style",
+			"@test:stan"
+		]
+	},
+	"extra": {
+		"neos": {
+			"package-key": "Sitegeist.LostInTranslation"
+		}
+	},
+	"config": {
+		"bin-dir": "bin",
+		"vendor-dir": "Packages/Libraries",
+		"allow-plugins": {
+			"neos/composer-plugin": true,
+			"php-http/discovery": false
+		}
+	},
+	"archive": {
+		"exclude": [
+			".editorconfig",
+			".gitattributes",
+			".github",
+			".gitignore"
+		]
+	}
 }
