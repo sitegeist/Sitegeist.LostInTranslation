@@ -299,6 +299,10 @@ class Retranslator
         $stalledNodeVariationCommands = [];
         foreach ($staleTranslations as $staleTranslation) {
             $sourceNode = $sourceSubgraph->findNodeById($staleTranslation->nodeAggregateId);
+            if (!$sourceNode) {
+                // the source might be deleted by now, but the stale translation projection cannot keep track of that
+                continue;
+            }
             $command = $this->resolveRetranslationCommand(
                 $sourceNode,
                 $staleTranslation->propertyNames,
@@ -334,7 +338,8 @@ class Retranslator
                 $numberOfCreatedVariants++;
             }
         }
-       return new RetranslationResult(
+
+        return new RetranslationResult(
             stalePropertyCommandsDispatched: count($nodeModificationCommands),
             variantCommandsDispatched: $numberOfCreatedVariants,
         );
@@ -346,6 +351,9 @@ class Retranslator
         ContentSubgraphInterface $targetSubgraph,
     ): ?NodeAggregateId {
         $sourceParent = $sourceSubgraph->findParentNode($nodeAggregateId);
+        if (!$sourceParent) {
+            return null;
+        }
         $targetParent = $targetSubgraph->findNodeById($sourceParent->aggregateId);
         if ($targetParent) {
             return null;
