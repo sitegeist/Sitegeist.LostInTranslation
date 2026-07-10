@@ -14,9 +14,11 @@ use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWri
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\NodeType\NodeTypeNames;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
+use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
@@ -78,7 +80,7 @@ class Retranslator
      * no-ops via the dispatch counts on the returned {@see RetranslationResult}. Repeated invocations
      * are idempotent.
      */
-    public function retranslateNode(
+    public function retranslateSubtree(
         ContentRepositoryId $contentRepositoryId,
         WorkspaceName $workspaceName,
         NodeAggregateId $nodeAggregateId,
@@ -127,8 +129,16 @@ class Retranslator
         }
 
         $contentGraph = $cr->getContentGraph($workspaceName);
-        $sourceSubgraph = $contentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
-        $targetSubgraph = $contentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        // we don't want to translate removed content
+        $sourceSubgraph = $contentGraph->getSubgraph(
+            $sourceDimensionSpacePoint,
+            NeosVisibilityConstraints::excludeRemoved()
+        );
+        // we must evaluate removed targets because CreateVariant will fail otherwise
+        $targetSubgraph = $contentGraph->getSubgraph(
+            $targetDimensionSpacePoint,
+            VisibilityConstraints::createEmpty()
+        );
 
         // Scope to the current document: nested documents are out of scope for a retranslation run.
         // The entry node itself is always returned by `findSubtree`, so a document entry still gets its own properties retranslated.
@@ -175,39 +185,27 @@ class Retranslator
         while ($stack !== []) {
             $currentSubtree = array_pop($stack);
             $sourceNode = $currentSubtree->node;
-            if (
-                $cr->getNodeTypeManager()->getNodeType($sourceNode->nodeTypeName)
-                    ?->getConfiguration('options.automaticTranslation') !== true
-            ) {
-                continue;
-            }
-            $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
             $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
-            if ($stale !== null && $existsInTarget) {
-                $command = $this->tryBuildSetNodeProperties(
-                    nodeTypeManager: $nodeTypeManager,
-                    sourceNode: $sourceNode,
-                    stalePropertyNames: $stale->propertyNames,
-                    // Use the OriginDimensionSpacePoint from the stale record, not a freshly built
-                    // one — it reflects where the variant actually lives (matters for spec/gen
-                    // variants).
-                    targetOrigin: $stale->originDimensionSpacePoint,
-                    sourceDeeplLanguage: $sourceDeeplLanguage,
-                    targetDeeplLanguage: $targetDeeplLanguage,
+            if ($stale !== null) {
+                $command = $this->resolveRetranslationCommand(
+                    $sourceNode,
+                    $stale->propertyNames,
+                    $sourceDeeplLanguage,
+                    $targetDeeplLanguage,
+                    $targetOrigin,
+                    $targetSubgraph,
+                    $nodeTypeManager,
                 );
-                if ($command !== null) {
+                if ($command instanceof SetNodeProperties) {
                     $stalePropertyCommands[] = $command;
                 }
-            }
-
-            if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
-                $variantCommands[] = CreateNodeVariant::create(
-                    $sourceNode->workspaceName,
-                    $sourceNode->aggregateId,
-                    $sourceNode->originDimensionSpacePoint,
-                    OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
-                );
+                if ($command instanceof CreateNodeVariant) {
+                    /**
+                     * we only need a variation command here as SetNodeProperties is then subsequently handled by {@see TranslationCommandHook::onAfterHandle()}
+                     */
+                    $variantCommands[] = $command;
+                }
             }
 
             foreach (array_reverse([...$currentSubtree->children]) as $childSubtree) {
@@ -227,6 +225,171 @@ class Retranslator
             stalePropertyCommandsDispatched: count($stalePropertyCommands),
             variantCommandsDispatched: count($variantCommands),
         );
+    }
+
+    public function retranslateWorkspace(
+        ContentRepositoryId $contentRepositoryId,
+        WorkspaceName $workspaceName,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+    ): RetranslationResult {
+        $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
+        $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
+
+        $languageDimension = $cr->getContentDimensionSource()->getDimension($languageDimensionId);
+        if ($languageDimension === null) {
+            return RetranslationResult::skipped(sprintf(
+                'language dimension "%s" not configured in CR "%s"',
+                $this->languageDimensionName,
+                $contentRepositoryId->value,
+            ));
+        }
+
+        $resolver = new ReferenceDimensionSpacePointResolver(
+            allowedDimensionSubspace: $cr->getVariationGraph()->getDimensionSpacePoints(),
+            contentDimensionSource: $cr->getContentDimensionSource(),
+            languageDimensionId: $languageDimensionId,
+        );
+        $sourceDimensionSpacePoint = $resolver->tryResolveSourceDimensionSpacePoint($targetDimensionSpacePoint);
+        if ($sourceDimensionSpacePoint === null) {
+            return RetranslationResult::skipped(sprintf(
+                'no referenceLanguage configured for target DSP %s',
+                $targetDimensionSpacePoint->toJson(),
+            ));
+        }
+
+        $dimensionValueDirectiveFactory = new DimensionValueDirectiveFactory();
+        $sourceDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
+            $languageDimension,
+            OriginDimensionSpacePoint::fromDimensionSpacePoint($sourceDimensionSpacePoint),
+        )?->deeplSourceId;
+        $targetDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
+            $languageDimension,
+            OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
+        )?->deeplTargetId;
+        if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
+            return RetranslationResult::skipped(sprintf(
+                'DeepL language not resolvable for source %s or target %s',
+                $sourceDimensionSpacePoint->toJson(),
+                $targetDimensionSpacePoint->toJson(),
+            ));
+        }
+
+        $contentGraph = $cr->getContentGraph($workspaceName);
+        // we don't want to translate removed content
+        $sourceSubgraph = $contentGraph->getSubgraph(
+            $sourceDimensionSpacePoint,
+            NeosVisibilityConstraints::excludeRemoved()
+        );
+        // we must evaluate removed targets because CreateVariant will fail otherwise
+        $targetSubgraph = $contentGraph->getSubgraph(
+            $targetDimensionSpacePoint,
+            VisibilityConstraints::createEmpty()
+        );
+
+        $staleTranslations = $cr->projectionState(StaleTranslationReadModel::class)
+            ->staleTranslationFinder
+            ->findByWorkspace(
+                $workspaceName,
+                OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint)
+            );
+
+        $nodeVariationCommands = [];
+        $nodeModificationCommands = [];
+        /** @var array<string,CreateNodeVariant> $stalledNodeVariationCommands indexed by ancestor that has to be varied first */
+        $stalledNodeVariationCommands = [];
+        foreach ($staleTranslations as $staleTranslation) {
+            $sourceNode = $sourceSubgraph->findNodeById($staleTranslation->nodeAggregateId);
+            $command = $this->resolveRetranslationCommand(
+                $sourceNode,
+                $staleTranslation->propertyNames,
+                $sourceDeeplLanguage,
+                $targetDeeplLanguage,
+                OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
+                $targetSubgraph,
+                $cr->getNodeTypeManager(),
+            );
+
+            if ($command instanceof CreateNodeVariant) {
+                $requiredAncestor = $this->resolveAncestorThatHasToBeVariedFirst($command->nodeAggregateId, $sourceSubgraph, $targetSubgraph);
+                if ($requiredAncestor) {
+                    $stalledNodeVariationCommands[$requiredAncestor->value] = $command;
+                } else {
+                    $nodeVariationCommands[] = $command;
+                }
+            } elseif ($command instanceof SetNodeProperties) {
+                $nodeModificationCommands[] = $command;
+            }
+        }
+
+        foreach ($nodeModificationCommands as $command) {
+            // Mark commands as "triggered by AI"
+            $this->dispatchAsAi($cr, $command);
+        }
+        $numberOfCreatedVariants = 0;
+        foreach ($nodeVariationCommands as $command) {
+            $cr->handle($command);
+            $numberOfCreatedVariants++;
+            if (array_key_exists($command->nodeAggregateId->value, $stalledNodeVariationCommands)) {
+                $cr->handle($stalledNodeVariationCommands[$command->nodeAggregateId->value]);
+                $numberOfCreatedVariants++;
+            }
+        }
+       return new RetranslationResult(
+            stalePropertyCommandsDispatched: count($nodeModificationCommands),
+            variantCommandsDispatched: $numberOfCreatedVariants,
+        );
+    }
+
+    private function resolveAncestorThatHasToBeVariedFirst(
+        NodeAggregateId $nodeAggregateId,
+        ContentSubgraphInterface $sourceSubgraph,
+        ContentSubgraphInterface $targetSubgraph,
+    ): ?NodeAggregateId {
+        $sourceParent = $sourceSubgraph->findParentNode($nodeAggregateId);
+        $targetParent = $targetSubgraph->findNodeById($sourceParent->aggregateId);
+        if ($targetParent) {
+            return null;
+        } elseif ($sourceParent->classification->isTethered()) {
+            return $this->resolveAncestorThatHasToBeVariedFirst($sourceParent->aggregateId, $sourceSubgraph, $targetSubgraph);
+        } else {
+            return $sourceParent->aggregateId;
+        }
+    }
+
+    public function resolveRetranslationCommand(
+        Node $sourceNode,
+        PropertyNames $propertyNames,
+        string $sourceDeeplLanguage,
+        string $targetDeeplLanguage,
+        OriginDimensionSpacePoint $targetOrigin,
+        ContentSubgraphInterface $targetSubgraph,
+        NodeTypeManager $nodeTypeManager,
+    ): SetNodeProperties|CreateNodeVariant|null {
+        $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
+        if ($existsInTarget) {
+            return $this->tryBuildSetNodeProperties(
+                nodeTypeManager: $nodeTypeManager,
+                sourceNode: $sourceNode,
+                stalePropertyNames: $propertyNames,
+                targetOrigin: $targetOrigin,
+                sourceDeeplLanguage: $sourceDeeplLanguage,
+                targetDeeplLanguage: $targetDeeplLanguage,
+            );
+        } else {
+            if (
+                // variation will be handled automatically for tethered nodes
+                !$sourceNode->classification->isTethered()
+            ) {
+                return CreateNodeVariant::create(
+                    $sourceNode->workspaceName,
+                    $sourceNode->aggregateId,
+                    $sourceNode->originDimensionSpacePoint,
+                    OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
+                );
+            }
+        }
+
+        return null;
     }
 
     /**

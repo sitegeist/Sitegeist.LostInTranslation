@@ -128,7 +128,7 @@ class RetranslationController extends ActionController
     }
 
     /**
-     * Trigger {@see Retranslator::retranslateNode()} for the given node into the target dimension.
+     * Trigger {@see Retranslator::retranslateSubtree()} for the given node into the target dimension.
      */
     public function retranslateNodeAction(
         string $nodeAggregateId,
@@ -138,7 +138,7 @@ class RetranslationController extends ActionController
     ): string {
         /** @var array<string, string> $coordinatesArray */
         $coordinatesArray = \json_decode($targetCoordinates, true, flags: JSON_THROW_ON_ERROR);
-        $result = $this->retranslator->retranslateNode(
+        $result = $this->retranslator->retranslateSubtree(
             contentRepositoryId: ContentRepositoryId::fromString($contentRepositoryId),
             workspaceName: WorkspaceName::fromString($workspaceName),
             nodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),

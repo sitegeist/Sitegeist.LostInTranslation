@@ -7,7 +7,7 @@ namespace Sitegeist\LostInTranslation\Domain;
 use Neos\Flow\Annotations as Flow;
 
 /**
- * Outcome of a {@see Retranslator::retranslateNode()} call.
+ * Outcome of a {@see Retranslator::retranslateSubtree()} call.
  *
  * Returned (rather than `void`) so callers — especially the CLI — can distinguish a real successful
  * retranslation from a silent no-op caused by a configuration skip path (no `referenceLanguage`,

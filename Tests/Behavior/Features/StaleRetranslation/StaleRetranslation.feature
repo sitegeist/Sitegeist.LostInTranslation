@@ -286,7 +286,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                             |
       | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Parent Text"} |
       | child-doc       | parent-doc             | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Child Text"}  |
-    And I expect exactly the following stale translations:
+    Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
       | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"fr"}         | child-doc       | ["autoTranslatableStringProperty"] |
@@ -329,6 +329,86 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         # Event count untouched.
     And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
+
+  Scenario: Retranslating a workspace varies in hierarchical order and skips nodes with ancestors that have to be translated manually
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId            | parentNodeAggregateId  | nodeTypeName                                                                 | initialPropertyValues                                 | tetheredDescendantNodeAggregateIds    |
+      | z-translate-me-first       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation             | {"autoTranslatableStringProperty": "Ancestor Text"}   | {"tethered": "translate-me-tethered"} |
+      | a-translate-me-second      | translate-me-tethered  | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation         | {"autoTranslatableStringProperty": "Descendant Text"} | {}                                    |
+      | do-not-translate-me        | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation | {}                                                    | {}                                    |
+      | skip-me-during-translation | do-not-translate-me    | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation         | {"autoTranslatableStringProperty": "Descendant Text"} | {}                                    |
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId            | propertyNames                      |
+      | live          | {"language":"de"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"de"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"de"}         | translate-me-tethered      | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | translate-me-tethered      | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"de"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
+
+    When I retranslate workspace "live" in dimension space point {"language":"de"}
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId            | propertyNames                      |
+      | live          | {"language":"fr"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"de"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | translate-me-tethered      | ["autoTranslatableStringProperty"] |
+      | live          | {"language":"fr"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
+
+    And I expect exactly 13 events to be published on stream "ContentStream:cs-identifier"
+        # 1x ContentStreamWasCreated
+        # 1x RootNodeAggregateWithNodeWasCreated
+        # 5x NodeAggregateWithNodeWasCreated (4 commands and 1 tethered)
+        # 3x NodeVariantWasCreated
+        # 3x NodePropertiesWereSet for automatic translation
+    And event at index 7 is of type "NodePeerVariantWasCreated" with payload:
+      | Key                    | Expected                                                           |
+      | workspaceName          | "live"                                                             |
+      | contentStreamId        | "cs-identifier"                                                    |
+      | nodeAggregateId        | "z-translate-me-first"                                             |
+      | sourceOrigin           | {"language": "en"}                                                 |
+      | peerOrigin             | {"language": "de"}                                                 |
+      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
+    And event at index 8 is of type "NodePeerVariantWasCreated" with payload:
+      | Key                    | Expected                                                           |
+      | workspaceName          | "live"                                                             |
+      | contentStreamId        | "cs-identifier"                                                    |
+      | nodeAggregateId        | "translate-me-tethered"                                            |
+      | sourceOrigin           | {"language": "en"}                                                 |
+      | peerOrigin             | {"language": "de"}                                                 |
+      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
+    And event at index 9 is of type "NodePropertiesWereSet" with payload:
+      | Key                                                 | Expected                   |
+      | workspaceName                                       | "live"                     |
+      | contentStreamId                                     | "cs-identifier"            |
+      | nodeAggregateId                                     | "z-translate-me-first"     |
+      | originDimensionSpacePoint                           | {"language": "de"}         |
+      | propertyValues.autoTranslatableStringProperty.value | "Ancestor Text translated" |
+    And event at index 10 is of type "NodePropertiesWereSet" with payload:
+      | Key                                                 | Expected                     |
+      | workspaceName                                       | "live"                       |
+      | contentStreamId                                     | "cs-identifier"              |
+      | nodeAggregateId                                     | "translate-me-tethered"      |
+      | originDimensionSpacePoint                           | {"language": "de"}           |
+      | propertyValues.autoTranslatableStringProperty.value | "autoTranslateMe translated" |
+    And event at index 11 is of type "NodePeerVariantWasCreated" with payload:
+      | Key                    | Expected                                                           |
+      | workspaceName          | "live"                                                             |
+      | contentStreamId        | "cs-identifier"                                                    |
+      | nodeAggregateId        | "a-translate-me-second"                                            |
+      | sourceOrigin           | {"language": "en"}                                                 |
+      | peerOrigin             | {"language": "de"}                                                 |
+      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
+    And event at index 12 is of type "NodePropertiesWereSet" with payload:
+      | Key                                                 | Expected                     |
+      | workspaceName                                       | "live"                       |
+      | contentStreamId                                     | "cs-identifier"              |
+      | nodeAggregateId                                     | "a-translate-me-second"      |
+      | originDimensionSpacePoint                           | {"language": "de"}           |
+      | propertyValues.autoTranslatableStringProperty.value | "Descendant Text translated" |
 
   Scenario: Complete retranslation cycle: Create a node, translate it, change the original, publish, rebase on another workspace, retranslate there and publish/rebase it back to its origin
     When I am in workspace "user-workspace"
@@ -787,3 +867,4 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+

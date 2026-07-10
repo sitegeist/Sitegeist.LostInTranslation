@@ -9,6 +9,7 @@ use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\Projection\ProjectionStateInterface;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
 
 /**
@@ -31,6 +32,23 @@ final class StaleTranslationFinder implements ProjectionStateInterface
             <<<SQL
             SELECT * FROM {$this->tableName}
             SQL,
+        )->fetchAllAssociative();
+
+        return StaleTranslations::fromDatabaseRows($staleTranslationRows);
+    }
+
+    public function findByWorkspace(WorkspaceName $workspaceName, OriginDimensionSpacePoint $targetOriginSpacePoint): StaleTranslations
+    {
+        $staleTranslationRows = $this->dbal->executeQuery(
+            <<<SQL
+            SELECT * FROM {$this->tableName}
+                WHERE workspaceName = :workspaceName
+                AND originDimensionSpacePointHash = :originDimensionSpacePointHash
+            SQL,
+            [
+                'workspaceName' => $workspaceName->value,
+                'originDimensionSpacePointHash' => $targetOriginSpacePoint->hash,
+            ]
         )->fetchAllAssociative();
 
         return StaleTranslations::fromDatabaseRows($staleTranslationRows);
