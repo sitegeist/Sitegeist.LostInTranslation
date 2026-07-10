@@ -295,7 +295,7 @@ class Retranslator
 
         $nodeVariationCommands = [];
         $nodeModificationCommands = [];
-        /** @var array<string,CreateNodeVariant> $stalledNodeVariationCommands indexed by ancestor that has to be varied first */
+        /** @var array<string,list<CreateNodeVariant>> $stalledNodeVariationCommands indexed by ancestor that has to be varied first */
         $stalledNodeVariationCommands = [];
         foreach ($staleTranslations as $staleTranslation) {
             $sourceNode = $sourceSubgraph->findNodeById($staleTranslation->nodeAggregateId);
@@ -316,7 +316,7 @@ class Retranslator
             if ($command instanceof CreateNodeVariant) {
                 $requiredAncestor = $this->resolveAncestorThatHasToBeVariedFirst($command->nodeAggregateId, $sourceSubgraph, $targetSubgraph);
                 if ($requiredAncestor) {
-                    $stalledNodeVariationCommands[$requiredAncestor->value] = $command;
+                    $stalledNodeVariationCommands[$requiredAncestor->value][] = $command;
                 } else {
                     $nodeVariationCommands[] = $command;
                 }
@@ -334,8 +334,10 @@ class Retranslator
             $cr->handle($command);
             $numberOfCreatedVariants++;
             if (array_key_exists($command->nodeAggregateId->value, $stalledNodeVariationCommands)) {
-                $cr->handle($stalledNodeVariationCommands[$command->nodeAggregateId->value]);
-                $numberOfCreatedVariants++;
+                foreach ($stalledNodeVariationCommands[$command->nodeAggregateId->value] as $stalledNodeVariationCommand) {
+                    $cr->handle($stalledNodeVariationCommand);
+                    $numberOfCreatedVariants++;
+                }
             }
         }
 
