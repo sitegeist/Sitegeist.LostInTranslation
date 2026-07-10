@@ -175,6 +175,12 @@ class Retranslator
         while ($stack !== []) {
             $currentSubtree = array_pop($stack);
             $sourceNode = $currentSubtree->node;
+            if (
+                $cr->getNodeTypeManager()->getNodeType($sourceNode->nodeTypeName)
+                    ?->getConfiguration('options.automaticTranslation') !== true
+            ) {
+                continue;
+            }
             $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
             $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
