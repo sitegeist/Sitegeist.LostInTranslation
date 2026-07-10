@@ -248,7 +248,12 @@ ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de',
 # Output: ['Hallo Welt!', 'Mein Name ist...']
 ```
 
-### Translation Cache
+## The Retranslator service
+
+To build your own (re)translation workflow, the Retranslator allows for translating subtrees (e.g. documents and all their content) or whole workspace (e.g. when publishing to live).
+
+
+## Translation Cache
 
 The plugin includes a translation cache for the DeepL API that stores the individual text parts
 and their translated results for up to one week.
@@ -261,7 +266,7 @@ Sitegeist:
       enableCache: false
 ```
 
-### Content Governance Mode
+## Content Governance Mode
 
 To exactly track what write operations have been performed by human editors or their translation assistant,
 you can enable content governance mode by enabling the respective AuthProvider:
