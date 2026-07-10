@@ -20,6 +20,18 @@ Sitegeist.LostInTranslation is available via Packagist. Run `composer require si
 
 We use semantic versioning so every breaking change will increase the major version number.
 
+Since version 3.1 the package brings its own projection to keep track of stale translations for the retranslation feature to precisely translate only what has actually changed.
+
+To set it up, run
+
+```bash
+./flow cr:setup
+./flow subscription:replay Sitegeist.LostInTranslation:StaleTranslations
+```
+
+As all projections do, this will work retroactively for all Neos installations from 9 on.
+Since it is a separate projection from the content graph, it will not affect your site's state.
+
 ## How it works
 
 By default, all inline editable properties are translated using DeepL (see setting `translateInlineEditables`).
@@ -53,7 +65,7 @@ Also, automatic translation for all types derived from `Neos.Neos:Node` is enabl
 ```yaml
 'Neos.Neos:Node':
   options:
-      automaticTranslation: true
+    automaticTranslation: true
 ```
 
 ### Retranslate View
@@ -67,20 +79,20 @@ directly in the inspector.
 The resulting changes are created in the current workspace and can be reviewed via the normal editing and publishing
 workflow.
 
-Example configuration:
+Example configuration for retranslating German from English:
 
 ```yaml
 Neos:
-  ContentRepository:
-    contentDimensions:
-      'language':
-        presets:
-          'en':
-            label: 'English'
-            values: ['en']
-            flag: 'english'
-            options:
-              referenceLanguage: 'de'
+  ContentRepositoryRegistry:
+    contentRepositories:
+      default: # or other
+        contentDimensions:
+          language: # or similar
+            values:
+              'en': ...
+              'de':
+                options:
+                  referenceLanguage: 'en'
 ```
 
 ## Configuration
@@ -127,53 +139,32 @@ be configured explicitly for this preset via `options.deeplLanguage`.
 Neos:
   ContentRepository:
     contentDimensions:
-      'language':
-
-        #
-        # The `defaultPreset` marks the source for all translations with mode `sync`
-        #
-        label: 'Language'
-        default: 'en'
-        defaultPreset: 'en'
-
-        presets:
+      language: # or similar
+        values:
 
           #
           # English has to be configured differently for source and target as DeepL requires so,
           # the source and target are separated by a `:`
           #
           'en':
-            label: 'English'
-            values: ['en']
-            uriSegment: 'en'
-            options:
-              deeplLanguage: 'EN:EN-GB'
+            deeplLanguage: 'EN:EN-GB'
 
           #
           # Danish uses a different locale identifier than DeepL, so the `deeplLanguage` has to be configured explicitly
           #
           'dk':
-            label: 'Dansk'
-            values: ['dk']
-            uriSegment: 'dk'
             options:
               deeplLanguage: 'DA'
 
           #
           # For German, the dimension value de is used in uppercase
           #
-          'de':
-            label: 'Deutsch'
-            values: ['de']
-            uriSegment: 'de'
+          'de': ...
 
           #
           # The Bavarian language is not supported by DeepL and is disabled
           #
           'de_bar':
-            label: 'Bayrisch'
-            values: ['de_bar','de']
-            uriSegment: 'de_bar'
             options:
               deeplLanguage: false
 ```
@@ -305,3 +296,8 @@ We will gladly accept contributions. Please send us pull requests.
   * Strategy `sync` will auto-translate and sync the node every time a node is updated in the default preset language
 * The node setting `options.translateOnAdoption` has been renamed to `options.automaticTranslation`
 * The new node option `options.automaticTranslation` was introduced
+
+### 3.1.0
+
+* The retranslation feature was upmerged from 2.1 and backed by a custom projection to keep track precisely
+of what has changed in the reference language
