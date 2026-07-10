@@ -47,7 +47,9 @@ class NodeTypeTranslationDirectiveFactory
         if (array_key_exists($nodeType->name->value, $this->firstLevelCache)) {
             return $this->firstLevelCache[$nodeType->name->value];
         }
-        $propertyDefinitions = $nodeType->getProperties();
+        $propertyDefinitions = $nodeType->getConfiguration('options.automaticTranslation')
+            ? $nodeType->getProperties()
+            : [];
         $translateProperties = [];
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
             $type = $propertyDefinition['type'] ?? null;

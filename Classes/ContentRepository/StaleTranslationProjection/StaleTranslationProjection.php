@@ -228,6 +228,9 @@ class StaleTranslationProjection implements ProjectionInterface
         if (!$nodeType) {
             return;
         }
+        if ($nodeType->getConfiguration('options.automaticTranslation') !== true) {
+            return;
+        }
         $staleTranslations = [];
         $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
             ->getPropertyNames();
@@ -278,6 +281,9 @@ class StaleTranslationProjection implements ProjectionInterface
             workspaceName: $event->workspaceName
         );
         if (!$nodeType) {
+            return;
+        }
+        if ($nodeType->getConfiguration('options.automaticTranslation') !== true) {
             return;
         }
         $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
@@ -460,17 +466,28 @@ class StaleTranslationProjection implements ProjectionInterface
                 )
             );
             if ($newStaleProperties != $currentStaleProperties) {
-                $this->dbal->update(
-                    $this->itemTableName,
-                    [
-                        'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
-                    ],
-                    [
-                        'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
-                        'workspaceName' => $affectedRecord['workspaceName'],
-                        'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
-                    ],
-                );
+                if ($newStaleProperties === []) {
+                    $this->dbal->delete(
+                        $this->itemTableName,
+                        [
+                            'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                            'workspaceName' => $affectedRecord['workspaceName'],
+                            'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                        ],
+                    );
+                } else {
+                    $this->dbal->update(
+                        $this->itemTableName,
+                        [
+                            'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
+                        ],
+                        [
+                            'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                            'workspaceName' => $affectedRecord['workspaceName'],
+                            'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                        ],
+                    );
+                }
             }
         }
 
