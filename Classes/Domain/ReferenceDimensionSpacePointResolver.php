@@ -21,10 +21,10 @@ final readonly class ReferenceDimensionSpacePointResolver
     }
 
     /**
-     * Find every dimension space point that declares `$dimensionSpacePoint`'s language as its `referenceLanguage`. A
-     * source language can drive translation into more than one target (e.g. `de.referenceLanguage = en` and
-     * `es.referenceLanguage = en`), so the result is a set — empty if no target references this source or no resolved
-     * point lives in the allowed subspace.
+     * Find every dimension space point that declares `$dimensionSpacePoint`'s language as its `options.referenceLanguage`.
+     * A source language can drive translation into more than one target (e.g. `de.options.referenceLanguage = en` and
+     * `es.options.referenceLanguage = en`), so the result is a set — empty if no target references this source or no
+     * resolved point lives in the allowed subspace.
      */
     public function findAllTargetDimensionSpacePoints(DimensionSpacePoint $dimensionSpacePoint): DimensionSpacePointSet
     {
@@ -40,7 +40,7 @@ final readonly class ReferenceDimensionSpacePointResolver
 
         $targets = [];
         foreach ($languageDimension->values as $language) {
-            if (($language->configuration['referenceLanguage'] ?? null) !== $languageValue) {
+            if (($language->configuration['options']['referenceLanguage'] ?? null) !== $languageValue) {
                 continue;
             }
             $coordinates = $dimensionSpacePoint->coordinates;
@@ -67,7 +67,7 @@ final readonly class ReferenceDimensionSpacePointResolver
         }
 
         $language = $languageDimension->getValue($languageValue);
-        $sourceLanguageValue = $language->configuration['referenceLanguage'] ?? null;
+        $sourceLanguageValue = $language->configuration['options']['referenceLanguage'] ?? null;
         if ($sourceLanguageValue === null) {
             return null;
         }

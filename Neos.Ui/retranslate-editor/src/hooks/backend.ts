@@ -12,12 +12,14 @@ export type ContentInfoRequest = {
     nodeAggregateId: string;
     workspaceName: string;
     coordinates: Record<string, string | null>;
+    contentRepositoryId: string;
 };
 
 export type TranslateRequest = {
     nodeAggregateId: string;
     workspaceName: string;
     targetCoordinates: string;
+    contentRepositoryId: string;
 };
 
 export type TranslateResponse = {
@@ -66,7 +68,8 @@ export const endpoints = () => ({
         const searchParams = new URLSearchParams({
             nodeAggregateId: payload.nodeAggregateId,
             workspaceName: payload.workspaceName,
-            coordinates: JSON.stringify(payload.coordinates)
+            coordinates: JSON.stringify(payload.coordinates),
+            contentRepositoryId: payload.contentRepositoryId
         });
 
         return parseJsonResponse<ContentInfoResponse>(

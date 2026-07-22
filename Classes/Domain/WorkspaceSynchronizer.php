@@ -22,7 +22,7 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  * Workspace-level orchestrator on top of {@see Retranslator}.
  *
  * Loads every stale-translation record matching the target (workspace, originDimensionSpacePoint) and dispatches one
- * {@see Retranslator::retranslateNode()} call per record. The dispatch chain is idempotent: a parent's subtree walk
+ * {@see Retranslator::retranslateSubtree()} call per record. The dispatch chain is idempotent: a parent's subtree walk
  * that clears child stale records causes later iterations to come back as `RetranslationResult::isNoOp()` rather than
  * re-translating.
  *
@@ -141,7 +141,7 @@ class WorkspaceSynchronizer
         // parent to already cover the target dimension (CR `requireNodeAggregateToCoverDimensionSpacePoint`), so
         // synchronizing a child document before its parent would abort with "Node aggregate <parent> does currently
         // not cover dimension space point". We therefore pair each matching record with its source-tree depth and
-        // process them ancestor-before-descendant — a parent document's `retranslateNode` (which creates its variant)
+        // process them ancestor-before-descendant — a parent document's `retranslateSubtree` (which creates its variant)
         // runs before any descendant's. This mirrors the publish-driven {@see SynchronizationCommandHook}. PHP's sort
         // is stable (>= 8.0), so records at equal depth keep their original (id) order.
         /** @var list<array{depth:int,entry:StaleTranslation}> $plannedEntries */
@@ -196,7 +196,7 @@ class WorkspaceSynchronizer
                 );
                 continue;
             }
-            $result = $this->retranslator->retranslateNode(
+            $result = $this->retranslator->retranslateSubtree(
                 contentRepositoryId: $contentRepositoryId,
                 workspaceName: $targetWorkspaceName,
                 nodeAggregateId: $entry->nodeAggregateId,

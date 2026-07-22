@@ -29,7 +29,7 @@ use Sitegeist\LostInTranslation\Domain\Retranslator;
  *    source (reference) language. "In sync" is sourced from the {@see StaleTranslationProjection}:
  *    if no stale records exist below the node at the target origin, the UI shows the up-to-date
  *    state.
- *  - `retranslateNode` delegates to {@see Retranslator} (same path as the CLI command).
+ *  - `retranslateSubtree` delegates to {@see Retranslator} (same path as the CLI command).
  *
  * The reference language is derived from the target preset's `referenceLanguage` configuration via
  * {@see ReferenceDimensionSpacePointResolver}; if the target has no reference language configured
@@ -56,7 +56,7 @@ class RetranslationController extends ActionController
         string $nodeAggregateId,
         string $workspaceName,
         string $coordinates,
-        string $contentRepositoryId = 'default',
+        string $contentRepositoryId,
     ): string {
         $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepositoryId));
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -95,14 +95,14 @@ class RetranslationController extends ActionController
 
         $contentGraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName));
         $sourceSubgraph = $contentGraph->getSubgraph(
-            $sourceDimensionSpacePoint,
-            NeosVisibilityConstraints::excludeRemoved(),
+            dimensionSpacePoint: $sourceDimensionSpacePoint,
+            visibilityConstraints: NeosVisibilityConstraints::excludeRemoved(),
         );
         $sourceSubtree = $sourceSubgraph->findSubtree(
-            NodeAggregateId::fromString($nodeAggregateId),
-            FindSubtreeFilter::create(
+            entryNodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
+            filter: FindSubtreeFilter::create(
                 nodeTypes: NodeTypeCriteria::createWithAllowedNodeTypeNames(
-                    NodeTypeNames::fromStringArray(['Neos.Neos:ContentCollection', 'Neos.Neos:Content'])
+                    nodeTypeNames: NodeTypeNames::fromStringArray(['Neos.Neos:ContentCollection', 'Neos.Neos:Content'])
                 ),
             ),
         );
@@ -128,21 +128,21 @@ class RetranslationController extends ActionController
     }
 
     /**
-     * Trigger {@see Retranslator::retranslateNode()} for the given node into the target dimension.
+     * Trigger {@see Retranslator::retranslateSubtree()} for the given node into the target dimension.
      */
     public function retranslateNodeAction(
         string $nodeAggregateId,
         string $workspaceName,
         string $targetCoordinates,
-        string $contentRepositoryId = 'default',
+        string $contentRepositoryId,
     ): string {
         /** @var array<string, string> $coordinatesArray */
         $coordinatesArray = \json_decode($targetCoordinates, true, flags: JSON_THROW_ON_ERROR);
-        $result = $this->retranslator->retranslateNode(
-            ContentRepositoryId::fromString($contentRepositoryId),
-            WorkspaceName::fromString($workspaceName),
-            NodeAggregateId::fromString($nodeAggregateId),
-            DimensionSpacePoint::fromArray($coordinatesArray),
+        $result = $this->retranslator->retranslateSubtree(
+            contentRepositoryId: ContentRepositoryId::fromString($contentRepositoryId),
+            workspaceName: WorkspaceName::fromString($workspaceName),
+            nodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromArray($coordinatesArray),
         );
 
         return $this->jsonResponse([

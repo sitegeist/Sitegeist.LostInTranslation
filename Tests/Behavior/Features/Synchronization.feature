@@ -9,10 +9,12 @@ Feature: Automatic retranslation on workspace publish
           values:
             en: {}
             de:
-              referenceLanguage: en
+              options:
+                referenceLanguage: en
             # auto-sync from en_live to es_live
             es:
-              referenceLanguage: en
+              options:
+                referenceLanguage: en
         """
     And using the following node types:
         """yaml

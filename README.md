@@ -72,6 +72,10 @@ one-time steps so the stale-translation projection is built and existing content
    ./flow workspace:rebaseoutdated
    ```
 
+> The `stale_translations` tables are a separate Content Repository projection, not part of the content
+> graph — replaying it works retroactively for all Neos installations from 9 on and does not affect your
+> site's state.
+
 ## How it works
 
 By default, all inline editable properties are translated using DeepL (see setting `translateInlineEditables`).
@@ -105,7 +109,7 @@ Also, automatic translation for all types derived from `Neos.Neos:Node` is enabl
 ```yaml
 'Neos.Neos:Node':
   options:
-      automaticTranslation: true
+    automaticTranslation: true
 ```
 
 ### Retranslate View
@@ -122,20 +126,20 @@ workflow.
 > Staleness is tracked by a Content Repository projection (`stale_translations`). For the full mechanics see
 > [Documentation/RetranslationAndSynchronization.md](Documentation/RetranslationAndSynchronization.md).
 
-Example configuration:
+Example configuration for retranslating German from English:
 
 ```yaml
 Neos:
-  ContentRepository:
-    contentDimensions:
-      'language':
-        presets:
-          'en':
-            label: 'English'
-            values: ['en']
-            flag: 'english'
-            options:
-              referenceLanguage: 'de'
+  ContentRepositoryRegistry:
+    contentRepositories:
+      default: # or other
+        contentDimensions:
+          language: # or similar
+            values:
+              'en': ...
+              'de':
+                options:
+                  referenceLanguage: 'en'
 ```
 
 ### Synchronization
@@ -281,53 +285,32 @@ be configured explicitly for this preset via `options.deeplLanguage`.
 Neos:
   ContentRepository:
     contentDimensions:
-      'language':
-
-        #
-        # The `defaultPreset` marks the source for all translations with mode `sync`
-        #
-        label: 'Language'
-        default: 'en'
-        defaultPreset: 'en'
-
-        presets:
+      language: # or similar
+        values:
 
           #
           # English has to be configured differently for source and target as DeepL requires so,
           # the source and target are separated by a `:`
           #
           'en':
-            label: 'English'
-            values: ['en']
-            uriSegment: 'en'
-            options:
-              deeplLanguage: 'EN:EN-GB'
+            deeplLanguage: 'EN:EN-GB'
 
           #
           # Danish uses a different locale identifier than DeepL, so the `deeplLanguage` has to be configured explicitly
           #
           'dk':
-            label: 'Dansk'
-            values: ['dk']
-            uriSegment: 'dk'
             options:
               deeplLanguage: 'DA'
 
           #
           # For German, the dimension value de is used in uppercase
           #
-          'de':
-            label: 'Deutsch'
-            values: ['de']
-            uriSegment: 'de'
+          'de': ...
 
           #
           # The Bavarian language is not supported by DeepL and is disabled
           #
           'de_bar':
-            label: 'Bayrisch'
-            values: ['de_bar','de']
-            uriSegment: 'de_bar'
             options:
               deeplLanguage: false
 ```
@@ -411,7 +394,12 @@ ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de',
 # Output: ['Hallo Welt!', 'Mein Name ist...']
 ```
 
-### Translation Cache
+## The Retranslator service
+
+To build your own (re)translation workflow, the Retranslator allows for translating subtrees (e.g. documents and all their content) or whole workspace (e.g. when publishing to live).
+
+
+## Translation Cache
 
 The plugin includes a translation cache for the DeepL API that stores the individual text parts
 and their translated results for up to one week.
@@ -424,7 +412,7 @@ Sitegeist:
       enableCache: false
 ```
 
-### Content Governance Mode
+## Content Governance Mode
 
 To exactly track what write operations have been performed by human editors or their translation assistant,
 you can enable content governance mode by enabling the respective AuthProvider:
@@ -467,3 +455,8 @@ We will gladly accept contributions. Please send us pull requests.
   * Strategy `sync` will auto-translate and sync the node every time a node is updated in the default preset language
 * The node setting `options.translateOnAdoption` has been renamed to `options.automaticTranslation`
 * The new node option `options.automaticTranslation` was introduced
+
+### 3.1.0
+
+* The retranslation feature was upmerged from 2.1 and backed by a custom projection to keep track precisely
+of what has changed in the reference language

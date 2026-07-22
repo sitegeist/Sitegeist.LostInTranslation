@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="Sitegeist LostInTranslation">
+    <rule ref="PSR12"/>
+
+    <file>Classes</file>
+    <file>Tests</file>
+
+    <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
+        <exclude-pattern>Tests/Behavior/Bootstrap/*</exclude-pattern>
+    </rule>
+</ruleset>

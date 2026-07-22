@@ -236,6 +236,9 @@ class StaleTranslationProjection implements ProjectionInterface
         if (!$nodeType) {
             return;
         }
+        if ($nodeType->getConfiguration('options.automaticTranslation') !== true) {
+            return;
+        }
         $staleTranslations = [];
         $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
             ->getPropertyNames();
@@ -260,16 +263,19 @@ class StaleTranslationProjection implements ProjectionInterface
         }
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeSpecializationVariantWasCreated(NodeSpecializationVariantWasCreated $event): void
     {
         $this->clearStructuralStaleRecord($event->workspaceName, $event->nodeAggregateId, $event->specializationOrigin->hash);
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeGeneralizationVariantWasCreated(NodeGeneralizationVariantWasCreated $event): void
     {
         $this->clearStructuralStaleRecord($event->workspaceName, $event->nodeAggregateId, $event->generalizationOrigin->hash);
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodePeerVariantWasCreated(NodePeerVariantWasCreated $event): void
     {
         $this->clearStructuralStaleRecord($event->workspaceName, $event->nodeAggregateId, $event->peerOrigin->hash);
@@ -313,6 +319,9 @@ class StaleTranslationProjection implements ProjectionInterface
             workspaceName: $event->workspaceName
         );
         if (!$nodeType) {
+            return;
+        }
+        if ($nodeType->getConfiguration('options.automaticTranslation') !== true) {
             return;
         }
         $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
@@ -432,6 +441,7 @@ class StaleTranslationProjection implements ProjectionInterface
         });
     }
 
+    /** @phpstan-ignore method.unused */
     private function whenNodeAggregateWasRemoved(NodeAggregateWasRemoved $event): void
     {
         // Stale rows live at TARGET dimensions (e.g. "de" when "en" is the source). The event's
@@ -508,17 +518,28 @@ class StaleTranslationProjection implements ProjectionInterface
                 )
             )));
             if ($newStaleProperties != $currentStaleProperties) {
-                $this->dbal->update(
-                    $this->itemTableName,
-                    [
-                        'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
-                    ],
-                    [
-                        'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
-                        'workspaceName' => $affectedRecord['workspaceName'],
-                        'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
-                    ],
-                );
+                if ($newStaleProperties === []) {
+                    $this->dbal->delete(
+                        $this->itemTableName,
+                        [
+                            'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                            'workspaceName' => $affectedRecord['workspaceName'],
+                            'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                        ],
+                    );
+                } else {
+                    $this->dbal->update(
+                        $this->itemTableName,
+                        [
+                            'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
+                        ],
+                        [
+                            'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                            'workspaceName' => $affectedRecord['workspaceName'],
+                            'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                        ],
+                    );
+                }
             }
         }
 

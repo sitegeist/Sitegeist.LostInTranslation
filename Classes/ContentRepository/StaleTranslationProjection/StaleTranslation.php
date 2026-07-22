@@ -74,7 +74,9 @@ final class StaleTranslation
             workspaceName: WorkspaceName::fromString($databaseRow['workspaceName']),
             originDimensionSpacePoint: OriginDimensionSpacePoint::fromJsonString($databaseRow['originDimensionSpacePoint']),
             nodeAggregateId: NodeAggregateId::fromString($databaseRow['nodeAggregateId']),
-            propertyNames: PropertyNames::fromArray(\json_decode($databaseRow['propertyNames'], true, JSON_THROW_ON_ERROR)),
+            propertyNames: PropertyNames::fromArray(
+                \json_decode($databaseRow['propertyNames'], true, 512, JSON_THROW_ON_ERROR)
+            ),
         );
     }
 }

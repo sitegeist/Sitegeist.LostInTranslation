@@ -123,10 +123,23 @@ trait StaleTranslations
      */
     public function iRetranslateNode(string $nodeAggregateId, string $workspaceName, string $dimensionSpacePoint): void
     {
-        $this->getObject(Retranslator::class)->retranslateNode(
+        $this->getObject(Retranslator::class)->retranslateSubtree(
             contentRepositoryId: $this->currentContentRepository->id,
             workspaceName: WorkspaceName::fromString($workspaceName),
             nodeAggregateId: NodeAggregateId::fromString($nodeAggregateId),
+            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+        );
+    }
+
+    /**
+     * @When /^I retranslate workspace "([^"]*)" in dimension space point (.*)$/
+     * @throws Exception
+     */
+    public function iRetranslateWorkspace(string $workspaceName, string $dimensionSpacePoint): void
+    {
+        $this->getObject(Retranslator::class)->retranslateWorkspace(
+            contentRepositoryId: $this->currentContentRepository->id,
+            workspaceName: WorkspaceName::fromString($workspaceName),
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
         );
     }

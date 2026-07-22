@@ -33,11 +33,11 @@
 		"neos/contentrepository-testsuite": "^9.0.0"
 	},
 	"scripts": {
-		"fix:style": "phpcbf --colors --standard=PSR12 Classes Tests",
+		"fix:style": "phpcbf --colors",
 		"fix": [
 			"@fix:style"
 		],
-		"test:style": "phpcs --colors -n --standard=PSR12 Classes Tests",
+		"test:style": "phpcs --colors -n",
 		"test:stan": "phpstan analyse -c phpstan.neon -v",
 		"test:unit": "bin/phpunit --bootstrap Tests/UnitTestBootstrap.php --configuration Tests/UnitTests.xml",
 		"test:functional": "bin/phpunit --bootstrap Tests/FunctionalTestBootstrap.php --configuration Tests/FunctionalTests.xml",

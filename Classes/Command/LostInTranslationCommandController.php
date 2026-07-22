@@ -114,7 +114,7 @@ class LostInTranslationCommandController extends CommandController
         string $workspace,
     ): void {
         $this->outputLine('Starting retranslation for node "%s" -> "%s" in workspace "%s"...', [$nodeAggregateId, $target, $workspace]);
-        $result = $this->retranslator->retranslateNode(
+        $result = $this->retranslator->retranslateSubtree(
             ContentRepositoryId::fromString($contentRepository),
             WorkspaceName::fromString($workspace),
             NodeAggregateId::fromString($nodeAggregateId),

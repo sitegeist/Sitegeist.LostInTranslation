@@ -3,6 +3,8 @@ parameters:
     treatPhpDocTypesAsCertain: false
     paths:
         - Classes
+    scanDirectories:
+        - ../../Libraries/deeplcom/deepl-php
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         -

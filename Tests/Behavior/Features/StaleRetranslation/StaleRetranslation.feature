@@ -12,7 +12,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
           values:
             en: {}
             de:
-              referenceLanguage: en
+              options:
+                referenceLanguage: en
         """
     And using the following node types:
         """yaml
