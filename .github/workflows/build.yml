@@ -3,10 +3,10 @@ name: build
 on:
   push:
     branches:
-      - '3.0'
+      - '3.*'
   pull_request:
     branches:
-      - '3.0'
+      - '3.*'
 
 jobs:
   test:
