@@ -41,6 +41,12 @@ bootstrap_distribution() {
     cd "$DIST_DIR"
     composer config --no-plugins allow-plugins.neos/composer-plugin true
 
+    # The 9.1.x line of some Neos packages (e.g. neos/buildessentials) is only
+    # published as dev, so a plain "stable" root would fail to resolve. Allow dev
+    # while still preferring stable releases where they exist.
+    composer config minimum-stability dev
+    composer config prefer-stable true
+
     # Live symlink: composer keeps Packages/Application/Sitegeist.LostInTranslation
     # pointing at the bind-mounted source, so source edits need no reinstall.
     composer config repositories.lostintranslation \

@@ -205,9 +205,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # The whole retranslation is a system/AI operation: every emitted event is attributed to the AI service, NOT
         # the editor who triggered the run — including the structural NodePeerVariantWasCreated (index 12), consistent
         # with the publish-driven SynchronizationCommandHook.
-    And event metadata at index 10 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 10 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
     And event at index 11 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                               |
       | workspaceName                                       | "user-workspace"                       |
@@ -224,9 +224,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | sourceOrigin           | {"language": "en"}                                                 |
       | peerOrigin             | {"language": "de"}                                                 |
       | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
-    And event metadata at index 12 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 12 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
     And event at index 13 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                              |
       | workspaceName                                       | "user-workspace"                      |
@@ -235,9 +235,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | originDimensionSpacePoint                           | {"language": "de"}                    |
       | propertyValues.inlineEditableStringProperty.value   | "My Grandchild Text translated"       |
       | propertyValues.autoTranslatableStringProperty.value | "My Other Grandchild Text translated" |
-    And event metadata at index 13 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 13 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
 
   Scenario: A translatable property left at its NodeType default value is translated
     # `autoTranslatableStringProperty` is not set explicitly here, so it takes its NodeType default ("autoTranslateMe").

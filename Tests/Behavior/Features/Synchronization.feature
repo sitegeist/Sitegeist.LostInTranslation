@@ -999,21 +999,21 @@ Feature: Automatic retranslation on workspace publish
     # SynchronizationCommandHook returned [CV(page-home), CV(intro-text)], and TranslationCommandHook resets the AI
     # state at the start of every onAfterHandle — including between event 7's SetNodeProperties (the page-home
     # translation cascade) and event 8. Without re-setting in onBeforeHandle, event 8 would carry the editor's id.
-    And event metadata at index 5 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
-    And event metadata at index 6 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
-    And event metadata at index 7 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
-    And event metadata at index 8 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
-    And event metadata at index 9 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 5 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 6 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 7 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 8 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 9 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
 
     # Final stale state. live's es rows are fully cleared (document title, content properties AND the empty
     # content-collection record cleared by its variant event). live keeps only its de rows for the published nodes
@@ -1316,17 +1316,17 @@ Feature: Automatic retranslation on workspace publish
     And event at index 2 is of type "NodeAggregateWithNodeWasCreated" with payload:
       | Key             | Expected     |
       | nodeAggregateId | "parent-doc" |
-    And event metadata at index 2 is:
-      | Key              | Expected                     |
-      | initiatingUserId | "initiating-user-identifier" |
+    And event data at index 2 is:
+      | Key                       | Expected                     |
+      | metadata.initiatingUserId | "initiating-user-identifier" |
 
     # The auto-created es variant is attributed to the AI.
     And event at index 3 is of type "NodePeerVariantWasCreated" with payload:
       | Key             | Expected     |
       | nodeAggregateId | "parent-doc" |
-    And event metadata at index 3 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 3 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
 
     # The translation cascaded onto the es variant is attributed to the AI.
     And event at index 4 is of type "NodePropertiesWereSet" with payload:
@@ -1334,9 +1334,9 @@ Feature: Automatic retranslation on workspace publish
       | nodeAggregateId                                     | "parent-doc"             |
       | originDimensionSpacePoint                           | {"language": "es"}       |
       | propertyValues.autoTranslatableStringProperty.value | "Source Text translated" |
-    And event metadata at index 4 is:
-      | Key              | Expected            |
-      | initiatingUserId | "AI:dummy:my-dummy" |
+    And event data at index 4 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
 
     # The manual es edit is attributed to the editor, not the AI.
     And event at index 5 is of type "NodePropertiesWereSet" with payload:
@@ -1344,9 +1344,9 @@ Feature: Automatic retranslation on workspace publish
       | nodeAggregateId                                     | "parent-doc"       |
       | originDimensionSpacePoint                           | {"language": "es"} |
       | propertyValues.autoTranslatableStringProperty.value | "Hand Crafted"     |
-    And event metadata at index 5 is:
-      | Key              | Expected                     |
-      | initiatingUserId | "initiating-user-identifier" |
+    And event data at index 5 is:
+      | Key                       | Expected                     |
+      | metadata.initiatingUserId | "initiating-user-identifier" |
 
   Scenario: Full sync translates the CURRENT live source into a forked review workspace, even when the target lagged (cross-workspace)
     # Cross-workspace full sync. `live` holds the en source; a `de-review` workspace forked from live is where the de
