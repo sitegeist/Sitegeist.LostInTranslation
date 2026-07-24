@@ -23,8 +23,12 @@ Feature: Track the staleness state of translations and run retranslation on stal
           abstract: true
         'Neos.Neos:ContentCollection':
           abstract: true
+          options:
+            automaticTranslation: true
         'Neos.Neos:Document':
           abstract: true
+          options:
+            automaticTranslation: true
           properties:
             title:
               type: string

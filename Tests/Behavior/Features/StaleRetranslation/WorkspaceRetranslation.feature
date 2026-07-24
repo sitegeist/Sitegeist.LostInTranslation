@@ -21,8 +21,12 @@ Feature: Retranslate a whole workspace into a target language dimension
           abstract: true
         'Neos.Neos:ContentCollection':
           abstract: true
+          options:
+            automaticTranslation: true
         'Neos.Neos:Document':
           abstract: true
+          options:
+            automaticTranslation: true
         'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
           superTypes:
             'Neos.Neos:Content': true

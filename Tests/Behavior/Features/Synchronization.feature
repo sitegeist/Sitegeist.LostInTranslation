@@ -25,8 +25,12 @@ Feature: Automatic retranslation on workspace publish
           abstract: true
         'Neos.Neos:ContentCollection':
           abstract: true
+          options:
+            automaticTranslation: true
         'Neos.Neos:Document':
           abstract: true
+          options:
+            automaticTranslation: true
           properties:
             title:
               type: string
