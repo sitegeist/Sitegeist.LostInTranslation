@@ -34,7 +34,7 @@ jobs:
 
       - name: Install Neos Project
         run: |
-          composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
+          composer create --stability dev --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
           cd "${{ env.NEOS_FOLDER }}"
           composer config --no-plugins allow-plugins.neos/composer-plugin true
           composer config minimum-stability dev
