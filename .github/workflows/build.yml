@@ -34,7 +34,7 @@ jobs:
 
       - name: Install Neos Project
         run: |
-          composer create --stability dev --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
+          composer create --stability dev --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "~${{ matrix.neos-versions }}"
           cd "${{ env.NEOS_FOLDER }}"
           composer config --no-plugins allow-plugins.neos/composer-plugin true
           composer config minimum-stability dev
@@ -99,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php-versions: ['8.2', '8.3']
+        php-versions: ['8.2', '8.3', '8.4']
         neos-versions: ['9.0', '9.1']
     runs-on: ubuntu-latest
 
@@ -132,12 +132,8 @@ jobs:
 
       - name: Install Neos Project and other dependencies
         run: |
-          composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
+          composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "~${{ matrix.neos-versions }}"
           cd "${{ env.NEOS_FOLDER }}"
-          composer require fakerphp/faker "^1.23.0" --no-install --dev
-          composer require neos/behat "^${{ matrix.neos-versions }}" --no-install --dev
-          composer require neos/contentrepository-testsuite "^${{ matrix.neos-versions }}" --no-install --dev
-          composer require neos/contentgraph-doctrinedbaladapter "^${{ matrix.neos-versions }}" --no-install --dev
           composer config --no-plugins allow-plugins.neos/composer-plugin true
 
       - name: Checkout
@@ -150,6 +146,10 @@ jobs:
           cd "${{ env.NEOS_FOLDER }}"
           composer config repositories.lostintranslation '{ "type": "path", "url": "./${{ env.DIST_FOLDER }}", "options": { "symlink": false } }'
           composer require sitegeist/lostintranslation "@dev" --no-install
+          jq -r '(."require-dev" // {}) | to_entries[] | "\(.key) \(.value)"' "${{ env.DIST_FOLDER }}/composer.json" \
+            | while read -r package constraint; do
+                composer require "$package" "$constraint" --no-install --dev
+              done
 
       - name: Cache Composer packages
         id: composer-cache
