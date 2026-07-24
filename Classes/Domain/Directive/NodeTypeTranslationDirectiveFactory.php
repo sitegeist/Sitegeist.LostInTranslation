@@ -6,10 +6,10 @@ namespace Sitegeist\LostInTranslation\Domain\Directive;
 
 use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
-use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\ObjectManagement\ObjectManagerInterface;
 use Sitegeist\LostInTranslation\Domain\PostProcessor\TranslatedPropertyPostProcessorInterface;
+use Sitegeist\LostInTranslation\Domain\PostProcessor\UriPathSegmentPostProcessor;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 class NodeTypeTranslationDirectiveFactory
@@ -58,7 +58,7 @@ class NodeTypeTranslationDirectiveFactory
                 continue;
             }
 
-            $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ] ?? null;
+            $automaticTranslationIsEnabled = $propertyDefinition['options']['automaticTranslation'] ?? null;
             $isInlineEditable = $propertyDefinition['ui']['inlineEditable'] ?? false;
             $translationConnector = $this->translationConnectors[$type] ?? null;
 
@@ -70,6 +70,12 @@ class NodeTypeTranslationDirectiveFactory
             // configured via `properties.<name>.options.translationPostProcessor`. Applied to the translated scalar
             // value by the translation pipeline.
             $postProcessor = $this->resolvePostProcessor($propertyDefinition['options']['translationPostProcessor'] ?? null);
+
+            // A property named `uriPathSegment` has a strict slug charset that DeepL routinely violates. Default it to
+            // the slug post-processor unless the node type opts into an explicit one, mirroring the retranslation path.
+            if ($postProcessor === null && $propertyName === 'uriPathSegment') {
+                $postProcessor = $this->resolvePostProcessor(UriPathSegmentPostProcessor::class);
+            }
 
             if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
                 $translateProperties[] = new TranslatablePropertyName(PropertyName::fromString($propertyName), null, $postProcessor);
