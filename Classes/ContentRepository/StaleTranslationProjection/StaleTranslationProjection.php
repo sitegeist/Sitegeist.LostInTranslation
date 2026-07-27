@@ -492,8 +492,13 @@ class StaleTranslationProjection implements ProjectionInterface
             return;
         }
 
-        $translatablePropertyNames = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType)
-            ->getPropertyNames();
+        // A node retyped into a type excluded from automatic translation has no translatable properties left. Keeping
+        // the set empty lets the array_intersect below clear the stale set, so the records are deleted rather than
+        // lingering for a type that is never translated.
+        $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
+        $translatablePropertyNames = $directive->enabled
+            ? $directive->getPropertyNames()
+            : PropertyNames::createEmpty();
         $propertiesWithDefaultValue = [];
         foreach ($nodeType->getDefaultValuesForProperties() as $propertyName => $defaultValue) {
             // A default value makes its property a translation candidate when it actually carries content: a non-empty

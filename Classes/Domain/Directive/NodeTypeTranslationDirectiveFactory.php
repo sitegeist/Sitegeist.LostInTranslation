@@ -48,9 +48,11 @@ class NodeTypeTranslationDirectiveFactory
         if (array_key_exists($nodeType->name->value, $this->firstLevelCache)) {
             return $this->firstLevelCache[$nodeType->name->value];
         }
-        $propertyDefinitions = $nodeType->getConfiguration('options.automaticTranslation')
-            ? $nodeType->getProperties()
-            : [];
+        // Property detection is deliberately independent of the node type's `options.automaticTranslation`: the
+        // directive reports which properties *are* translatable, `enabled` decides whether translation runs.
+        // Consumers guard on `enabled` themselves (see TranslationCommandHook, FullWorkspaceSynchronizer and the
+        // explicit guards in StaleTranslationProjection).
+        $propertyDefinitions = $nodeType->getProperties();
         $translateProperties = [];
         foreach ($propertyDefinitions as $propertyName => $propertyDefinition) {
             $type = $propertyDefinition['type'] ?? null;
