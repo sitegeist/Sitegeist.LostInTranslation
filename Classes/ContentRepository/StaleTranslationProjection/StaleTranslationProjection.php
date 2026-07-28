@@ -522,29 +522,35 @@ class StaleTranslationProjection implements ProjectionInterface
                     iterator_to_array($translatablePropertyNames),
                 )
             )));
-            if ($newStaleProperties != $currentStaleProperties) {
-                if ($newStaleProperties === []) {
-                    $this->dbal->delete(
-                        $this->itemTableName,
-                        [
-                            'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
-                            'workspaceName' => $affectedRecord['workspaceName'],
-                            'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
-                        ],
-                    );
-                } else {
-                    $this->dbal->update(
-                        $this->itemTableName,
-                        [
-                            'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
-                        ],
-                        [
-                            'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
-                            'workspaceName' => $affectedRecord['workspaceName'],
-                            'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
-                        ],
-                    );
-                }
+            // An already-empty record does not CHANGE when the node is retyped, but it must still be dropped when
+            // the new type is excluded from automatic translation: an empty record is only legitimate for an
+            // enabled type (e.g. a tethered ContentCollection without translatable properties), and
+            // {@see \Sitegeist\LostInTranslation\Domain\Retranslator::tryBuildSetNodeProperties} relies on stale
+            // records existing only for translation-enabled types.
+            if ($newStaleProperties == $currentStaleProperties && $directive->enabled) {
+                continue;
+            }
+            if ($newStaleProperties === []) {
+                $this->dbal->delete(
+                    $this->itemTableName,
+                    [
+                        'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                        'workspaceName' => $affectedRecord['workspaceName'],
+                        'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                    ],
+                );
+            } else {
+                $this->dbal->update(
+                    $this->itemTableName,
+                    [
+                        'propertyNames' => \json_encode($newStaleProperties, JSON_THROW_ON_ERROR),
+                    ],
+                    [
+                        'nodeAggregateId' => $affectedRecord['nodeAggregateId'],
+                        'workspaceName' => $affectedRecord['workspaceName'],
+                        'originDimensionSpacePointHash' => $affectedRecord['originDimensionSpacePointHash']
+                    ],
+                );
             }
         }
 

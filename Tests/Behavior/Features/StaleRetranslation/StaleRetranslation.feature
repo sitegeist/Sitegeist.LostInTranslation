@@ -116,6 +116,22 @@ Feature: Track the staleness state of translations and run retranslation on stal
               type: string
           options:
             automaticTranslation: true
+        # Opted OUT at type level while still declaring translatable properties — the exclusion must win over
+        # every per-property opt-in (including the `title` inherited from Neos.Neos:Document).
+        'Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation':
+          superTypes:
+            'Neos.Neos:Document': true
+          properties:
+            autoTranslatableStringProperty:
+              type: string
+              options:
+                automaticTranslation: true
+            inlineEditableStringProperty:
+              type: string
+              ui:
+                inlineEditable: true
+          options:
+            automaticTranslation: false
         """
     And using identifier "default", I define a content repository
     And I am in content repository "default"
@@ -139,6 +155,29 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | workspaceName      | "other-user-workspace" |
       | baseWorkspaceName  | "live"                 |
       | newContentStreamId | "other-user-cs-id"     |
+
+  Scenario: Nodes of a type excluded from automatic translation don't get stale translation entries
+        # Type-level `automaticTranslation: false` short-circuits BOTH projection write paths: the creation
+        # handler and the property-set handler. The empty expectation table is meaningful rather than vacuous —
+        # a translation-enabled type is recorded even when nothing translatable carries a value (see "Changing a
+        # non-translatable property must not remove an existing (empty) stale record"), so a row would appear
+        # here the moment either guard regressed.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                                 | initialPropertyValues                                                                           |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation | {"autoTranslatableStringProperty": "My Text", "inlineEditableStringProperty": "My Inline Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                       |
+      | nodeAggregateId           | "sir-david-nodenborough"                                    |
+      | originDimensionSpacePoint | {"language": "en"}                                          |
+      | propertyValues            | {"inlineEditableStringProperty": "My Modified Inline Text"} |
+        # The property-set handler resolves the node type through the memorized-type table rather than from the
+        # event, so it needs its own exclusion guard — an edit on an excluded type must still record nothing.
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
   Scenario: Retranslate a node
     When I am in workspace "user-workspace"
@@ -490,6 +529,44 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
       | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |
+
+  Scenario: Changing a node's type to one excluded from automatic translation clears the stale translations
+        # Retyping into a type with `automaticTranslation: false` leaves no translatable properties, so the
+        # aggregate's stale records must be deleted rather than linger for a type that is never translated.
+        # Retranslator::tryBuildSetNodeProperties relies on exactly this invariant ("stale records only exist for
+        # translation-enabled node types") and therefore drops its own `directive->enabled` guard.
+        #
+        # `plain-node` covers the empty-record variant: a translation-enabled node whose translatable properties
+        # carry no value is recorded with an empty property list, so retyping it produces no CHANGE to the stored
+        # list. The handler's "nothing changed" short-circuit must not let that empty record survive the retype.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                                                        |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} |
+      | plain-node             | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations        | {"stringProperty": "Plain"}                                                                                                  |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | plain-node             | []                                                                |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    When the command ChangeNodeAggregateType is executed with payload:
+      | Key             | Value                                                                          |
+      | nodeAggregateId | "sir-david-nodenborough"                                                       |
+      | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation" |
+      | strategy        | "happypath"                                                                    |
+        # The non-empty record is gone; `plain-node` is untouched by its sibling's retype.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | plain-node      | []            |
+
+    When the command ChangeNodeAggregateType is executed with payload:
+      | Key             | Value                                                                          |
+      | nodeAggregateId | "plain-node"                                                                   |
+      | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation" |
+      | strategy        | "happypath"                                                                    |
+        # The already-empty record must go too: an empty record is only legitimate for a translation-enabled type.
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
   Scenario: Removing a node aggregate drops its own stale records but leaves descendants alone
         # Hierarchy is deliberately ignored (see top-level comment) — removing a parent does not
