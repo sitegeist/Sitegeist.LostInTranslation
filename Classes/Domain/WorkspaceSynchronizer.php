@@ -36,7 +36,7 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  * reads the latest source content (including via the `CreateNodeVariant` cascade, which reads the target's own source
  * dimension) — and materialises any source nodes the target had not yet seen. Conflicting target-side changes are
  * dropped (force); non-conflicting target-dimension review edits survive the rebase replay, which is the intended
- * source↔target divergence.
+ * source↔target divergence. A `$dryRun` skips the rebase, since it mutates the target irreversibly.
  *
  * `sourceDimension` must equal the configured `referenceLanguage` of `targetDimension`; a mismatch short-circuits with
  * {@see WorkspaceSynchronizationResult::skipped()} so the caller (typically the `synchronize` CLI) can surface a clear
@@ -120,7 +120,11 @@ class WorkspaceSynchronizer
 
         // Validate the target workspace (never auto-created) and, cross-workspace, force-rebase it onto the source so
         // the translation reads the latest source content. Fail gracefully with a skip reason the CLI / Neos UI shows.
-        $skipReason = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName);
+        // A dry run must not rebase: the rebase is a destructive, non-reversible mutation of the target workspace
+        // (new content stream, conflicting target edits dropped), and `--dry-run` promises to report only. The
+        // trade-off is that a cross-workspace dry run reports against the UN-rebased target, so its counts can differ
+        // from the real run — source nodes the target has not seen yet are missing, and their records are skipped.
+        $skipReason = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName, !$dryRun);
         if ($skipReason !== null) {
             return WorkspaceSynchronizationResult::skipped($skipReason);
         }

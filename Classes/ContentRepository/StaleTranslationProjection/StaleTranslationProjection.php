@@ -346,11 +346,13 @@ class StaleTranslationProjection implements ProjectionInterface
                     array_keys($event->propertyValues->values),
                     $this->convertPropertyNamesToStringArray($event->propertiesToUnset),
                 );
-                $remainingPropertyNames = array_diff($currentPropertyNames, $updatedPropertyNames);
-                $remainingPropertyNames = array_intersect(
-                    $remainingPropertyNames,
+                // `array_diff` / `array_intersect` PRESERVE keys, so the surviving names can end up at non-zero
+                // offsets (e.g. `[1 => 'text']`). Re-index before encoding — `json_encode` would otherwise emit a JSON
+                // object (`{"1":"text"}`) instead of the list (`["text"]`) every other reader of this column expects.
+                $remainingPropertyNames = array_values(array_intersect(
+                    array_diff($currentPropertyNames, $updatedPropertyNames),
                     $this->convertPropertyNamesToStringArray($translatablePropertyNames)
-                );
+                ));
 
                 if ($remainingPropertyNames === []) {
                     $this->dbal->delete(
@@ -395,11 +397,12 @@ class StaleTranslationProjection implements ProjectionInterface
                 );
                 if ($record) {
                     $currentPropertyNames = \json_decode($record['propertyNames'], true, 512, JSON_THROW_ON_ERROR);
-                    $newPropertyNames = array_unique(array_merge($currentPropertyNames, $updatedPropertyNames));
-                    $newPropertyNames = array_intersect(
-                        $newPropertyNames,
+                    // Re-indexed at the assignment (see the source-side branch above): `array_unique` /
+                    // `array_intersect` preserve keys, and this column must always hold a JSON list.
+                    $newPropertyNames = array_values(array_intersect(
+                        array_unique(array_merge($currentPropertyNames, $updatedPropertyNames)),
                         $this->convertPropertyNamesToStringArray($translatablePropertyNames)
-                    );
+                    ));
 
                     // A source-side property set can only ADD newly-stale properties to a target
                     // record (a union with the current set); it never makes a target translation
@@ -410,7 +413,7 @@ class StaleTranslationProjection implements ProjectionInterface
                     $this->dbal->update(
                         $this->itemTableName,
                         [
-                            'propertyNames' => \json_encode(array_values($newPropertyNames)),
+                            'propertyNames' => \json_encode($newPropertyNames),
                         ],
                         [
                             'workspaceName' => $event->workspaceName->value,
@@ -419,10 +422,12 @@ class StaleTranslationProjection implements ProjectionInterface
                         ]
                     );
                 } else {
-                    $newPropertyNames = array_intersect(
+                    // Re-indexed for the same reason as the source-side branch above: `array_intersect` preserves
+                    // keys, and this column must always hold a JSON list.
+                    $newPropertyNames = array_values(array_intersect(
                         $updatedPropertyNames,
                         $this->convertPropertyNamesToStringArray($translatablePropertyNames)
-                    );
+                    ));
 
                     if ($newPropertyNames !== []) {
                         $this->dbal->insert(

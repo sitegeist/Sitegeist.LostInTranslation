@@ -37,23 +37,6 @@ final class StaleTranslationFinder implements ProjectionStateInterface
         return StaleTranslations::fromDatabaseRows($staleTranslationRows);
     }
 
-    public function findByWorkspace(WorkspaceName $workspaceName, OriginDimensionSpacePoint $targetOriginSpacePoint): StaleTranslations
-    {
-        $staleTranslationRows = $this->dbal->executeQuery(
-            <<<SQL
-            SELECT * FROM {$this->tableName}
-                WHERE workspaceName = :workspaceName
-                AND originDimensionSpacePointHash = :originDimensionSpacePointHash
-            SQL,
-            [
-                'workspaceName' => $workspaceName->value,
-                'originDimensionSpacePointHash' => $targetOriginSpacePoint->hash,
-            ]
-        )->fetchAllAssociative();
-
-        return StaleTranslations::fromDatabaseRows($staleTranslationRows);
-    }
-
     /**
      * Find the stale-translation records for one (workspace, target-origin) slice — the slice the synchronizers and the
      * backend status actually act on. Scoped in SQL so callers no longer hydrate the whole projection via

@@ -80,8 +80,10 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  * queue would otherwise be handled with a null AI state and attributed to the publishing editor.
  *
  * We close that gap by tracking the cascade commands we emit and re-setting the AI state in {@see self::onBeforeHandle}
- * for as long as any of them are still pending. {@see self::onAfterHandle} detaches a command from the set once it is
- * processed; when the set drains the cascade is over and no further re-set happens.
+ * for exactly those commands — matched by object identity, not by "is a cascade in flight".
+ * {@see self::onAfterHandle} detaches a command once it is processed, and empties the tracker at the start of every
+ * publish. Identity matching is what makes an aborted cascade harmless: a command whose handling threw is never
+ * detached, but it can never match a later, unrelated command either.
  *
  * Walking the whole tree from the root (regardless of stale state) is deliberately NOT done here — that is the
  * separate, manual `synchronize --full` CLI command
@@ -132,10 +134,20 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
     public function onBeforeHandle(CommandInterface $command): CommandInterface
     {
-        // Re-set the AI runtime state for every command while a publish-driven cascade is still in flight (see class
-        // docblock). TranslationCommandHook will reset it again at the start of its own `onAfterHandle`; we make sure
-        // it is set when the auth provider reads it during command handling.
-        if ($this->pendingCascadeCommands->count() > 0) {
+        // Re-set the AI runtime state for each command WE queued from a publish-driven cascade (see class docblock).
+        // TranslationCommandHook resets it again at the start of its own `onAfterHandle`; we make sure it is set when
+        // the auth provider reads it during command handling.
+        //
+        // Matching on MEMBERSHIP (object identity) rather than "is a cascade in flight" is load-bearing. If a cascade
+        // command throws, `onAfterHandle` never runs for it and it stays attached; a `count() > 0` test would then
+        // keep flagging every later, unrelated command as AI-authored — and because
+        // {@see AISystemTranslationRuntimeState} also disables authorization checks, run it with those checks off.
+        // Identity can only ever match a command this hook queued, so a leftover is inert.
+        //
+        // This is safe for the cascade-of-a-cascade too: the translated `SetNodeProperties` that
+        // {@see TranslationCommandHook} emits for our `CreateNodeVariant` is not ours, but that hook sets the AI state
+        // for it itself before returning it.
+        if ($this->pendingCascadeCommands->contains($command)) {
             $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
         }
         return $command;
@@ -143,8 +155,8 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
     public function onAfterHandle(CommandInterface $command, PublishedEvents $events): Commands
     {
-        // A cascade command we previously queued has just been processed — drop it from the pending set so the count
-        // converges to zero once the cascade is fully drained.
+        // A cascade command we previously queued has just been processed — drop it from the pending set so it stops
+        // being re-flagged as AI-authored.
         if ($this->pendingCascadeCommands->contains($command)) {
             $this->pendingCascadeCommands->detach($command);
         }
@@ -157,6 +169,12 @@ final class SynchronizationCommandHook implements CommandHookInterface
         if (!($command instanceof PublishWorkspace) && !($command instanceof PublishIndividualNodesFromWorkspace)) {
             return Commands::createEmpty();
         }
+
+        // A publish is never part of a cascade, so anything still attached here is a leftover from an earlier cascade
+        // that aborted mid-flight (on an exception `onAfterHandle` never runs for the remaining commands). Drop it as
+        // soon as we know this is a publish — ahead of the remaining early returns — so the tracker cannot accumulate
+        // command objects across publishes.
+        $this->pendingCascadeCommands = new \SplObjectStorage();
 
         // The command itself does not carry the publish target — read it from the resulting event.
         $publicationTarget = $this->findPublicationTarget($events);
@@ -229,9 +247,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
             return Commands::createEmpty();
         }
 
-        // Fresh publish — reset the pending tracker. Any leftovers from a prior cascade that aborted mid-flight (e.g.
-        // an exception) are discarded so they cannot keep the AI state set on this and subsequent user commands.
-        $this->pendingCascadeCommands = new \SplObjectStorage();
+        // Track this publish's cascade (the tracker was already emptied above, at the start of the publish).
         foreach ($additionalCommands as $cmd) {
             $this->pendingCascadeCommands->attach($cmd);
         }

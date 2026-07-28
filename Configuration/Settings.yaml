@@ -150,8 +150,11 @@ Sitegeist:
       #     keep-target    = leave the target's subtree tags alone; the target dimension manages its own visibility (a
       #                      reviewer can hide/show translated nodes independently). The previous, unchanged behavior.
       #     sync-to-target = mirror source-language subtree-tag changes (e.g. the `disabled` hide/show tag) into the
-      #                      target dimension. Applies to any node type (NOT gated by `scope`). Only `auto` rules mirror
-      #                      tags, inline on publish; idempotent (a tag already matching the target is skipped).
+      #                      target dimension. Applies to any node type (NOT gated by `scope`) and is idempotent (a tag
+      #                      already matching the target's explicit state is skipped). Like `onSourceRemoval`, `auto`
+      #                      rules mirror inline on publish (from the publish's own tag events) while `ask` rules and
+      #                      the manual CLI reconcile on the deliberate "sync now" run (by diffing the target's
+      #                      explicit tags against the source).
       #
       # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
       # hook then iterates the stale-translation records already recorded for the rule's
@@ -162,11 +165,19 @@ Sitegeist:
       # Cross-workspace synchronization (`sourceWorkspaceName` != `targetWorkspaceName`, e.g. translating published
       # `live` content into a separate `de-review` workspace):
       #
-      #   - Publish-driven (these rules): the hook reads the SOURCE dimension from the TARGET workspace and acts on the
-      #     target workspace's own stale records. It does NOT rebase, and silently skips records whose source node is
-      #     not (yet) present in the target. So the target workspace must already hold the current source content — keep
-      #     it based on / rebased onto the source workspace, otherwise nodes are skipped or translated from a stale
-      #     source copy.
+      #   - Publish-driven (these rules): the target workspace is never auto-created and MUST already exist and be
+      #     based on the source workspace — a rule whose target is missing or based on something else is skipped for
+      #     that publish. Given that, the hook FORCE-REBASES the target onto the source on every publish, so the
+      #     target's source dimension is current before anything is translated; it then reads the SOURCE dimension
+      #     from the TARGET workspace and acts on the target workspace's own stale records, skipping any record whose
+      #     source node is still not present there.
+      #
+      #     Two consequences worth knowing:
+      #       * The rebase runs for `ask` rules too. Only the *translation* is deferred by `mode: ask`; the rebase is
+      #         not, so a reviewer's conflicting edit in the target can be dropped by someone else's publish before
+      #         the reviewer ever clicks "sync now".
+      #       * Force-rebase means "source wins" on genuine conflicts and mints a new content stream for the target;
+      #         non-conflicting target-dimension review edits survive the replay.
       #
       #   - Manual CLI `./flow lostintranslation:synchronize --source-workspace live --target-workspace de-review …`
       #     (and `--full`): reads the source content from `--source-workspace`, but dispatches the translated commands

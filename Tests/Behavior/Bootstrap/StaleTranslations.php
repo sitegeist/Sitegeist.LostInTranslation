@@ -132,19 +132,6 @@ trait StaleTranslations
     }
 
     /**
-     * @When /^I retranslate workspace "([^"]*)" in dimension space point (.*)$/
-     * @throws Exception
-     */
-    public function iRetranslateWorkspace(string $workspaceName, string $dimensionSpacePoint): void
-    {
-        $this->getObject(Retranslator::class)->retranslateWorkspace(
-            contentRepositoryId: $this->currentContentRepository->id,
-            workspaceName: WorkspaceName::fromString($workspaceName),
-            targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
-        );
-    }
-
-    /**
      * Shared runner for the manual ("sync now") {@see WorkspaceSynchronizer} steps below. Stores the result in
      * {@see self::$lastSynchronizationResult} so a following `Then` can assert the reported counts, and fails loudly if
      * the synchronizer short-circuited via `skipped(...)` (e.g. a mis-configured source/target).

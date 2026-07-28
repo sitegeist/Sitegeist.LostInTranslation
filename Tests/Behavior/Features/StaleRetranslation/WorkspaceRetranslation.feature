@@ -1,5 +1,5 @@
 @contentrepository
-Feature: Retranslate a whole workspace into a target language dimension
+Feature: Synchronize a whole workspace into a target language dimension
   Background:
     Given using the following content dimensions yaml configuration:
         """yaml
@@ -141,7 +141,7 @@ Feature: Retranslate a whole workspace into a target language dimension
       | newContentStreamId | "other-user-cs-id"     |
 
 
-  Scenario: Retranslating a workspace varies in hierarchical order and skips nodes with ancestors that have to be translated manually
+  Scenario: Synchronizing a workspace varies in hierarchical order and skips nodes with ancestors that have to be translated manually
     When I am in workspace "live"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId            | parentNodeAggregateId  | nodeTypeName                                                                 | initialPropertyValues                                         | tetheredDescendantNodeAggregateIds    |
@@ -163,7 +163,7 @@ Feature: Retranslate a whole workspace into a target language dimension
       | live          | {"language":"de"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
       | live          | {"language":"fr"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
 
-    When I retranslate workspace "live" in dimension space point {"language":"de"}
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
     Then I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId            | propertyNames                      |
       | live          | {"language":"fr"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
