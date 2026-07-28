@@ -143,6 +143,10 @@ Sitegeist:
       #                     nodes are removed (never Documents, symmetric with "Content never auto-creates Documents"),
       #                     under `Document` Documents are removed too. For `auto` rules the removal happens inline on
       #                     publish; for `ask` rules and the manual CLI it is reconciled on the deliberate "sync now" run.
+      #                     A Document kept under `Content` keeps its whole translated subtree: removing a source
+      #                     Document leaves the translated page intact rather than emptying it, so the two paths agree
+      #                     and an editor's target-only page (which `Content` scope expects) is never gutted. Content
+      #                     removed inside a Document that still exists in the source IS mirrored, as you would expect.
       #
       # Each rule may set an optional `onSourceTagging` (default `keep-target`):
       #

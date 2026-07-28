@@ -284,8 +284,8 @@ nodeTranslation:
   - `keep-target` — leave the translated variant in place; source and target may diverge on deletions
     (the original behaviour, so existing configs are unchanged).
   - `remove-target` — mirror the deletion into the target dimension. Gated by `scope` (symmetric with
-    creation): under `Content` only content nodes are removed (a removed Document is **kept**, only its
-    orphaned content beneath it is removed); under `Document` Documents are removed too. Removing the
+    creation): under `Content` only content nodes are removed — a removed Document is **kept, with its whole
+    translated subtree intact** — while under `Document` Documents are removed too. Removing the
     subtree root suffices — the CR cascades descendant removal in the target dimension.
     Detection differs by path (see §5): `auto` rules mirror **incrementally** from the publish's own
     `NodeAggregateWasRemoved` events; `ask` rules and the CLI reconcile by **diffing** the target
@@ -520,6 +520,20 @@ behaviour.
   symmetric with creation (Content keeps Documents). Known asymmetry: `auto` mirrors only the publish
   delta, whereas the manual/full diff is a full reconcile, so an orphan created while the flag was off is
   cleaned up only on the next manual/`--full` sync.
+- **A Document kept under `Content` scope keeps its whole subtree (the diff path does not descend into
+  it).** The diff path originally kept the orphan Document but descended to remove the orphaned content
+  beneath it, which the incremental path structurally cannot do: the CR emits `NodeAggregateWasRemoved`
+  only for the explicitly removed Document, so the hook sees no events for the cascade-removed content and
+  leaves the translated page whole. Beyond that asymmetry — an `auto` publish leaving a full page where an
+  `ask`/CLI sync left a gutted one — descending was actively lossy, because `findNodeById(...) === null`
+  cannot distinguish *"removed in the source"* from *"never in the source"*. Under `Content` scope a
+  target-only Document is an **expected** case (the scope exists precisely because adopting a Document is a
+  deliberate manual act), and every content node below such a page is target-only too, so a reconcile
+  emptied editor-owned pages. **Decision:** a kept orphan Document is out of scope entirely, subtree
+  included. This costs the cleanup of orphaned content inside a source-removed Document — content that sits
+  inside a page synchronization has explicitly decided not to manage, and that the `auto` path already left
+  behind. A Document present in *both* dimensions is not an orphan, so the walk still descends into it and
+  content removed inside a surviving page is mirrored as usual.
 - **Source-tagging mirror (`onSourceTagging: sync-to-target`) — event-scan (auto) + diff (manual), not
   scope-gated.** Mirrors source-language subtree-tag changes (the `disabled` hide/show tag and ANY other
   `SubtreeTag`) onto the target via `TagSubtree` / `UntagSubtree`, reusing the removal mirror's split: `auto`

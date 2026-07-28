@@ -2019,7 +2019,12 @@ Feature: Automatic retranslation on workspace publish
     Then the last synchronization reported 0 removal(s) and 0 tag change(s)
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
 
-  Scenario: Content-scope orphan removal keeps a removed Document but deletes orphaned content beneath it
+  Scenario: Content-scope orphan removal keeps a removed Document AND its whole translated subtree
+    # A Document kept under Content scope is out of scope entirely — the diff path does NOT descend into it. This is what
+    # makes the deliberate "sync now" diff path agree with the publish-driven auto path: the CR emits
+    # NodeAggregateWasRemoved only for the explicitly removed Document, so the hook never sees the cascade-removed
+    # content and leaves the translated page whole. Descending here would leave an `ask`/CLI sync with a gutted page
+    # where an `auto` publish leaves a full one.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
@@ -2035,10 +2040,49 @@ Feature: Automatic retranslation on workspace publish
       | nodeAggregateId              | "page-home"          |
       | coveredDimensionSpacePoint   | {"language":"en"}    |
       | nodeVariantSelectionStrategy | "allSpecializations" |
-    # Content scope keeps the orphan Document but still descends to remove the orphaned content beneath it.
+    # Content scope keeps the orphan Document and everything below it — no removals are even dispatched.
     When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
-    Then I expect node "intro-text" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    Then the last synchronization reported 0 removal(s) and 0 tag change(s)
     And I expect node "page-home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Home translated"
+    And I expect node "intro-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+    # Document scope, by contrast, removes the Document — and the CR cascades the content below it away.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document"
+    Then I expect node "page-home" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "intro-text" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+
+  Scenario: Content-scope orphan removal never touches an editor-created target-only Document or its content
+    # The diff (`findNodeById(...) === null`) cannot distinguish "removed in the source" from "never in the source".
+    # Under Content scope a target-only Document is an EXPECTED case — the scope exists precisely because adopting a
+    # Document into the target dimension is a deliberate manual editor action — and all content below such a page is
+    # target-only too. Descending into a kept Document would therefore empty every editor-owned page on a reconcile.
+    When I am in workspace "user-workspace"
+    # An es-only page with es-only content: no en source anywhere, so both are "orphans" by the diff's definition.
+    And the command CreateNodeAggregateWithNode is executed with payload:
+      | Key                                | Value                                       |
+      | workspaceName                      | "user-workspace"                            |
+      | nodeAggregateId                    | "es-only-page"                              |
+      | originDimensionSpacePoint          | {"language":"es"}                           |
+      | parentNodeAggregateId              | "lady-eleonode-rootford"                    |
+      | nodeTypeName                       | "Sitegeist.LostInTranslation.Document.Page" |
+      | initialPropertyValues              | {"title": "Sólo en español"}                |
+      | tetheredDescendantNodeAggregateIds | {"main": "es-only-page-main"}               |
+    And the command CreateNodeAggregateWithNode is executed with payload:
+      | Key                       | Value                                                                  |
+      | workspaceName             | "user-workspace"                                                       |
+      | nodeAggregateId           | "es-only-text"                                                         |
+      | originDimensionSpacePoint | {"language":"es"}                                                      |
+      | parentNodeAggregateId     | "es-only-page-main"                                                    |
+      | nodeTypeName              | "Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation" |
+      | initialPropertyValues     | {"autoTranslatableStringProperty": "Contenido propio"}                 |
+    # Content scope leaves the whole editor-owned page alone.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
+    Then the last synchronization reported 0 removal(s) and 0 tag change(s)
+    And I expect node "es-only-page" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Sólo en español"
+    And I expect node "es-only-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Contenido propio"
+    # Document scope DOES remove it: that scope declares the target dimension a mirror of the source structure, so a
+    # target-only page is by definition out of sync. Pinned here so the difference between the scopes stays deliberate.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document"
+    Then I expect node "es-only-page" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
 
   Scenario: keep-target (the default) leaves the target's subtree tags untouched
     When I am in workspace "user-workspace"

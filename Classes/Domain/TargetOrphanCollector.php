@@ -26,9 +26,10 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
  * This also self-heals deletions that happened before {@see SourceRemovalBehavior::RemoveTarget} was enabled.
  *
  * Removal is gated by {@see SynchronizationScope::mayRemoveNode()} — under {@see SynchronizationScope::Content} a
- * Document orphan is kept (symmetric with never auto-creating Documents), but the run still descends into it to remove
- * orphaned content beneath it. Removing a non-Document orphan stops the descent: the Content Repository cascades the
- * removal of its descendants in the target dimension.
+ * Document orphan is kept (symmetric with never auto-creating Documents) and its whole subtree is left alone, matching
+ * what the incremental hook path leaves behind. Removing a non-Document orphan likewise stops the descent: the Content
+ * Repository cascades the removal of its descendants in the target dimension. A Document that exists in BOTH dimensions
+ * is not an orphan, so the run descends into it as usual and still reconciles content removed inside it.
  */
 final class TargetOrphanCollector
 {
@@ -102,8 +103,13 @@ final class TargetOrphanCollector
                     );
                     continue;
                 }
-                // A Document orphan kept under Content scope: leave it, but its content descendants may still be
-                // orphaned and removable, so keep descending.
+                // A Document orphan kept under Content scope: leave the whole subtree alone. The diff cannot tell
+                // "removed in the source" from "never in the source" — under Content scope a target-only Document is an
+                // expected, editor-owned page (the scope exists precisely because adopting a Document is a manual act),
+                // and every content node below such a page is target-only too. Descending would delete all of it. Not
+                // descending also matches what the event-driven hook path leaves behind: it skips the Document under
+                // this scope and the CR emits no events for the cascade-removed content, so nothing below is touched.
+                continue;
             }
             self::collectBelow($child, $targetSubgraph, $sourceSubgraph, $nodeTypeManager, $scope, $targetWorkspaceName, $targetDimensionSpacePoint, $commands);
         }
