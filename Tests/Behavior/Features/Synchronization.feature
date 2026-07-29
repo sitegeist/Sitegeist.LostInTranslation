@@ -525,28 +525,28 @@ Feature: Automatic retranslation on workspace publish
     #   2-5   NodeAggregateWithNodeWasCreated (sir-david + tethered nodewyn-tetherton, nody-mc-nodeface, parent-doc)
     #   6-7   NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→de)
     #   8-9   NodePropertiesWereSet     (sir-david de + nodewyn-tetherton de translated, CreateNodeVariant cascade)
-    #   10    NodePropertiesWereSet     (nodewyn-tetherton de re-translated — the cascade above materialised its de
-    #                                    variant mid-walk, so when the walk reaches it, it is an existing variant
-    #                                    and `--full` refreshes every existing variant. A second DeepL call for the
-    #                                    same source value.)
-    #   11    NodePeerVariantWasCreated (nody-mc-nodeface en→de — the deep grandchild reached by the walk)
-    #   12    NodePropertiesWereSet     (nody-mc-nodeface de translated)
-    #   13    NodePeerVariantWasCreated (parent-doc en→de — the sibling document)
-    #   14    NodePropertiesWereSet     (parent-doc de translated)
-    Then I expect exactly 15 events to be published on stream "ContentStream:cs-identifier"
+    #   10    NodePeerVariantWasCreated (nody-mc-nodeface en→de — the deep grandchild reached by the walk)
+    #   11    NodePropertiesWereSet     (nody-mc-nodeface de translated)
+    #   12    NodePeerVariantWasCreated (parent-doc en→de — the sibling document)
+    #   13    NodePropertiesWereSet     (parent-doc de translated)
+    # NOTE what is NOT here: a second NodePropertiesWereSet for nodewyn-tetherton. The cascade at 9 materialised and
+    # translated it mid-walk, and `--full` refreshes every existing variant — so the walk used to reach it as an
+    # existing variant and re-translate it from the identical source, one wasted DeepL call per tethered node per run.
+    # The walk now skips what its own cascade has already translated.
+    Then I expect exactly 14 events to be published on stream "ContentStream:cs-identifier"
     And event at index 8 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                   |
       | nodeAggregateId                                     | "sir-david-nodenborough"   |
       | originDimensionSpacePoint                           | {"language": "de"}         |
       | propertyValues.inlineEditableStringProperty.value   | "My Text translated"       |
       | propertyValues.autoTranslatableStringProperty.value | "My Other Text translated" |
-    And event at index 12 is of type "NodePropertiesWereSet" with payload:
+    And event at index 11 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                           |
       | nodeAggregateId                                     | "nody-mc-nodeface"                 |
       | originDimensionSpacePoint                           | {"language": "de"}                 |
       | propertyValues.inlineEditableStringProperty.value   | "Grandchild Text translated"       |
       | propertyValues.autoTranslatableStringProperty.value | "Grandchild Other Text translated" |
-    And event at index 14 is of type "NodePropertiesWereSet" with payload:
+    And event at index 13 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                     |
       | nodeAggregateId                                     | "parent-doc"                 |
       | originDimensionSpacePoint                           | {"language": "de"}           |
@@ -601,10 +601,10 @@ Feature: Automatic retranslation on workspace publish
     #   10-11 NodePeerVariantWasCreated (nody-mc-nodeface + nodenberg en→de — only the untranslated subtree is
     #                                    built)
     #   12-13 NodePropertiesWereSet     (nody-mc-nodeface de + nodenberg de translated)
-    #   14    NodePropertiesWereSet     (nodenberg de re-translated — same as event 10 above: the cascade created
-    #                                    its de variant mid-walk, and `--full` refreshes every existing variant)
-    # The already-translated sir-david subtree is skipped: no further events for it.
-    Then I expect exactly 15 events to be published on stream "ContentStream:cs-identifier"
+    # The already-translated sir-david subtree is skipped: no further events for it. Nor is there a second
+    # NodePropertiesWereSet for the tethered nodenberg: its stale row would override `--skip-existing` and force a
+    # refresh, but the cascade at 13 has just translated it from the same source, so the walk leaves it alone.
+    Then I expect exactly 14 events to be published on stream "ContentStream:cs-identifier"
     And event at index 12 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                |
       | nodeAggregateId                                     | "nody-mc-nodeface"      |
@@ -2195,15 +2195,17 @@ Feature: Automatic retranslation on workspace publish
     And the translation service translated 0 text(s)
     And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
 
-    # The real run agrees on the variants but reports one property update the preview cannot foresee: dispatching
-    # sir-david's CreateNodeVariant cascades the tethered `nodewyn-tetherton` into de mid-walk, and the walk then
-    # reaches it as an existing variant and re-translates it. A preview dispatches nothing, so that node is still
-    # absent (and tethered) when it comes past. The gap is inherent to previewing a run that reacts to its own
-    # writes, and it is bounded by the cascade — which the variant count already stands for, since cascaded
-    # translations are never counted individually either.
+    # The real run agrees node for node. It used to report one property update more: dispatching sir-david's
+    # CreateNodeVariant cascades the tethered `nodewyn-tetherton` into de mid-walk, and the walk then reached it as an
+    # existing variant and re-translated it — work a preview, which dispatches nothing, structurally cannot foresee.
+    # That was a redundant DeepL call rather than a preview defect, and removing it is what makes the two agree.
     When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
-    Then the last synchronization reported 2 variant(s) and 1 property update(s)
+    Then the last synchronization reported 2 variant(s) and 0 property update(s)
+    # The counter is what the reported counts stand for, and the reason this matters: three nodes, three translated
+    # texts. The tethered child is translated once — by the cascade — not once by the cascade and again by the walk.
+    And the translation service translated 3 text(s)
     And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    And I expect node "nodewyn-tetherton" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "autoTranslateMe translated"
 
     # Now every de variant exists, so a second full sync re-translates them all instead of creating anything. The
     # preview must say so — and still not translate.

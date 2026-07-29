@@ -438,9 +438,11 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
   source values alone, and the Behat suite counts what reaches the translation service to keep it that way.
   `planSubtree()` returns node **ids**, not counts, because the stale-driven run walks a subtree per record and
   relies on the projection clearing rows to avoid doing a node twice; a preview clears nothing, so it
-  deduplicates by id instead. Two gaps are inherent and accepted: a cross-workspace preview reads the
-  **un-rebased** target and therefore under-reports, and `--full` cannot foresee that dispatching a
-  `CreateNodeVariant` materialises tethered children mid-walk which the same walk then re-translates.
+  deduplicates by id instead. One gap is inherent and accepted: a cross-workspace preview reads the
+  **un-rebased** target and therefore under-reports. (`--full` used to have a second one — it could not
+  foresee the tethered children its own cascade materialises mid-walk and then re-translates. That was
+  redundant work rather than a blind spot in the preview, and removing it made the two agree; see
+  [C](#c-full-workspace--fullworkspacesynchronizer-cli-synchronize---full).)
 - **Tag mirror (diff path).** After the stale-driven pass it converges each target node's EXPLICIT subtree
   tags onto the source by diffing the two dimensions (`TargetTagReconciler`): a `TagSubtree` per tag the
   target lacks, an `UntagSubtree` per tag it has extra — for any tag, including `removed`, which is how this
@@ -470,6 +472,16 @@ Match the **literal** action string, not an imported constant (a wrong import pa
   problem). Per node: skip if not translatable; `CreateNodeVariant` if target absent + non-tethered;
   otherwise a translated `SetNodeProperties` covering **all** translatable properties — including for target
   variants that already exist, since the target is a projection of the source.
+- **It skips what its own cascade has already translated.** This is the only driver that dispatches *inline,
+  mid-walk* (the other two collect first and dispatch afterwards), so it is the only one that can meet its own
+  writes: a `CreateNodeVariant` materialises the node's tethered descendants in the target and the
+  `TranslationCommandHook` translates them, and moments later the walk reaches each one as an *existing*
+  variant, which `--full` refreshes by default. That was a second DeepL call per tethered node per run for a
+  result that cannot differ. The walk therefore carries the set of nodes its own cascade covered — a node
+  whose variant it created, plus every tethered descendant *declared by the parent node type*, which is how
+  the hook's cascade picks them. Matching on the declaration rather than on graph classification alone is
+  deliberate: a node tethered in the graph but no longer declared gets a variant from the CR's cascade yet
+  never reaches the hook's, so it must keep being refreshed by the walk.
 - `--skip-existing` is the one deliberate exception to that: it keeps a target variant that exists and has no
   stale row, preserving target-side property edits the source has not touched. It defaults to **off** because
   the projection model says the source wins; it exists because re-asserting a *property* costs a DeepL call
@@ -698,9 +710,6 @@ behaviour.
   fix (`replaceWorkspaceEntries(new, base)` on creation) perturbs exact-stale assertions, so it was
   left out of scope.
 - **Partial-publish stale propagation** copies the whole source stale set (see [§5](#5-synchronization)).
-- **`--full` re-translates an already-cascaded tethered child once more** (it pre-fetches the stale
-  set once, so a child stale at start is re-hit after its parent's cascade already translated it).
-  DeepL-cached and last-write-wins, so harmless but redundant.
 - **Concurrency** has no retry-on-`ConcurrencyException` and no "variant already exists" tolerance
   yet (self-healing covers the functional gap).
 - Several projection handlers were specified as red TDD scenarios (Behat `todo` profile) but not all

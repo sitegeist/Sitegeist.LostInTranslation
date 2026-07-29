@@ -39,20 +39,24 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
  *     full-properties `SetNodeProperties` automatically.
  *   - target variant absent + tethered → skip; the tethered variant is created (and translated) by its non-tethered
  *     ancestor's `CreateNodeVariant` cascade.
+ *   - already translated by *this run's* cascade → skip; see {@see self::wasTranslatedByCascadeOf}.
  *   - target variant present + `$skipExisting` + no stale row → skip.
  *   - target variant present otherwise (i.e. the default `!$skipExisting`, OR a stale record exists) → translated
  *     `SetNodeProperties` for *every* translatable property. This applies to tethered children too: once their variant
  *     exists, a property change on the source is refreshed directly. The stale-record case is the load-bearing
  *     override: a stale node is always refreshed even under `$skipExisting`.
  *
- * `$skipExisting` defaults to **false**, i.e. `--full` re-translates every existing target variant. It is the deliberate
+ * `$skipExisting` defaults to **false**, i.e. `--full` re-translates every target variant that already existed when the
+ * run started (a variant the run creates itself is translated once, by the cascade). It is the deliberate
  * exception to "the target dimension is a projection of the source": switching it on preserves target-side property edits
  * on nodes the source has not touched, at the cost of no longer converging them. It exists because re-asserting a
  * property costs a DeepL call per node, unlike re-asserting a tag — so on a large workspace the cheap-but-divergent run
  * is sometimes what you want. Opt in with the CLI's `--skip-existing`.
  *
  * Sole entry point {@see self::synchronizeWorkspaceFull} (CLI `synchronize --full`) dispatches inline, delegating
- * per-node decisions to {@see self::decideCommandForNode} and traversal to {@see self::traverseSourceSubtrees}.
+ * per-node decisions to {@see self::decideActionForNode} and traversal to {@see self::traverseSourceSubtrees}.
+ * Dispatching inline is what makes this the only driver that can meet its own writes mid-walk — the reason
+ * {@see self::wasTranslatedByCascadeOf} exists.
  *
  * Source and target workspace may differ: the source subtree is read from `sourceWorkspaceName` while every emitted
  * command (variant creation, property update) is dispatched into `targetWorkspaceName`. This supports workflows like a
@@ -163,7 +167,16 @@ class FullWorkspaceSynchronizer
         $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, VisibilityConstraints::createEmpty());
 
         $perNodeResults = [];
-        foreach ($this->traverseSourceSubtrees($sourceContentGraph, $sourceSubgraph) as $node) {
+        /** @var array<string, true> $translatedByOwnCascade */
+        $translatedByOwnCascade = [];
+        foreach ($this->traverseSourceSubtrees($sourceContentGraph, $sourceSubgraph) as [$parentNode, $node]) {
+            // Nothing to do for a node this run's own CreateNodeVariant cascade has already translated — see
+            // wasTranslatedByCascadeOf(). Skipped without pruning, exactly like the variant branch below: the cascade's
+            // own NodePropertiesWereSet clears the stale row, so the row is not unsatisfiable and must not be pruned.
+            if ($parentNode !== null && $this->wasTranslatedByCascadeOf($nodeTypeManager, $parentNode, $node, $translatedByOwnCascade)) {
+                $translatedByOwnCascade[$node->aggregateId->value] = true;
+                continue;
+            }
             $action = $this->decideActionForNode(
                 $nodeTypeManager,
                 $node,
@@ -174,6 +187,9 @@ class FullWorkspaceSynchronizer
                 $skipExisting,
             );
             if ($action instanceof CreateNodeVariant) {
+                // Marked on a dry run too, although nothing is dispatched: it is what makes the preview walk the same
+                // branches as the real run, so the two agree on the tethered descendants they report.
+                $translatedByOwnCascade[$node->aggregateId->value] = true;
                 $perNodeResults[] = new PerNodeSynchronizationResult(
                     $node->aggregateId,
                     new RetranslationResult(stalePropertyCommandsDispatched: 0, variantCommandsDispatched: 1),
@@ -307,10 +323,50 @@ class FullWorkspaceSynchronizer
     }
 
     /**
+     * Whether the `CreateNodeVariant` this run dispatched for an ancestor has *already translated* `$node`, making the
+     * walk's own `SetNodeProperties` for it a second DeepL call for a result that cannot differ.
+     *
+     * The redundancy exists because this synchronizer dispatches inline, mid-walk (the other drivers collect first and
+     * dispatch afterwards): creating a variant materialises the node's tethered descendants in the target and
+     * {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook} translates each of them
+     * from the same source values — so by the time the walk reaches such a child it is an existing variant, which
+     * `--full` refreshes by default. One wasted call per tethered node per run, forever.
+     *
+     * `$translatedByOwnCascade` holds the closure built up along the walk: the nodes we emitted a `CreateNodeVariant`
+     * for, plus everything reached from them through this predicate. Since the traversal is depth-first pre-order, the
+     * parent is always decided before its children, so testing the immediate parent is enough.
+     *
+     * The tethered child is matched the way the hook's cascade matches it — by the *parent node type's* tethered
+     * definitions, not by classification alone. That is deliberate: a node tethered in the graph but no longer declared
+     * by its parent's node type is created by the CR's variant cascade yet never reaches the hook's translation
+     * cascade, so it must keep being refreshed by the walk.
+     *
+     * @param array<string, true> $translatedByOwnCascade
+     */
+    private function wasTranslatedByCascadeOf(
+        NodeTypeManager $nodeTypeManager,
+        Node $parentNode,
+        Node $node,
+        array $translatedByOwnCascade,
+    ): bool {
+        if (!isset($translatedByOwnCascade[$parentNode->aggregateId->value])) {
+            return false;
+        }
+        if (!$node->classification->isTethered() || $node->name === null) {
+            return false;
+        }
+        return $nodeTypeManager->getNodeType($parentNode->nodeTypeName)
+            ?->tetheredNodeTypeDefinitions->contain($node->name) === true;
+    }
+
+    /**
      * Depth-first pre-order traversal of every root aggregate's source-dimension subtree. Children are followed
      * unfiltered (Document/ContentCollection/Content alike), mirroring the legacy `translateCommand` walk.
      *
-     * @return \Generator<Node>
+     * Yields each node together with its parent (null for a root), which {@see self::wasTranslatedByCascadeOf} needs to
+     * decide whether the node rode along with an ancestor's variant cascade.
+     *
+     * @return \Generator<array{?Node, Node}>
      */
     private function traverseSourceSubtrees(
         ContentGraphInterface $contentGraph,
@@ -321,18 +377,18 @@ class FullWorkspaceSynchronizer
             if ($rootNode === null) {
                 continue;
             }
-            yield from $this->traverseSubtree($sourceSubgraph, $rootNode);
+            yield from $this->traverseSubtree($sourceSubgraph, null, $rootNode);
         }
     }
 
     /**
-     * @return \Generator<Node>
+     * @return \Generator<array{?Node, Node}>
      */
-    private function traverseSubtree(ContentSubgraphInterface $sourceSubgraph, Node $node): \Generator
+    private function traverseSubtree(ContentSubgraphInterface $sourceSubgraph, ?Node $parentNode, Node $node): \Generator
     {
-        yield $node;
+        yield [$parentNode, $node];
         foreach ($sourceSubgraph->findChildNodes($node->aggregateId, FindChildNodesFilter::create()) as $childNode) {
-            yield from $this->traverseSubtree($sourceSubgraph, $childNode);
+            yield from $this->traverseSubtree($sourceSubgraph, $node, $childNode);
         }
     }
 
