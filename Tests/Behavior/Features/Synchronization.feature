@@ -1630,6 +1630,8 @@ Feature: Automatic retranslation on workspace publish
     # de-review does not exist yet — synchronizing must be skipped, not auto-create it.
     Then synchronizing translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"} is skipped because of "does not exist"
     And I expect workspace "de-review" to not exist
+    # The backend module shows the same verdict, from the same preflight the sync just ran.
+    And the synchronization status from workspace "live" dimension "en" to workspace "de-review" dimension "de" reports target problem "missing"
 
   Scenario: Full sync into a not-yet-existing target is skipped instead of auto-creating it
     # Same guarantee for FullWorkspaceSynchronizer (`synchronize --full`): a missing target workspace is reported as a
@@ -1653,6 +1655,17 @@ Feature: Automatic retranslation on workspace publish
       | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doc Text"} |
 
     Then synchronizing translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "other-user-workspace" dimension space point {"language":"de"} is skipped because of "must be based on source workspace"
+
+    # The backend module must say so too. This is the case the module used to be blind to: it only asked "does the
+    # target workspace exist", and `other-user-workspace` does — so a rule that every publish and every manual sync
+    # skips was rendered as a green "up to date". Both surfaces now read the same preflight.
+    And the synchronization status from workspace "user-workspace" dimension "en" to workspace "other-user-workspace" dimension "de" reports target problem "notBasedOnSource"
+    # And a rule that cannot run reports no pending work — otherwise the module would stay permanently out of sync and
+    # the post-publish prompt would keep offering a sync that short-circuits.
+    And the out-of-sync count from workspace "user-workspace" dimension "en" to workspace "other-user-workspace" dimension "de" is 0
+    # Control: the SAME target workspace is unblocked for the source it is actually based on — the check is about the
+    # source/target pairing, not about the target alone.
+    And the synchronization status from workspace "live" dimension "en" to workspace "other-user-workspace" dimension "de" reports no target problem
 
   Scenario: Publishing the source force-rebases the target onto it, conflicting target edits are dropped (source wins)
     # When the source workspace (live) is published, the cross-workspace rule force-rebases the target (content-review)

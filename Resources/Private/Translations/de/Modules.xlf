@@ -185,9 +185,13 @@
                 <source>Status</source>
                 <target state="translated">Status</target>
             </trans-unit>
-            <trans-unit id="synchronization.targetMissing" xml:space="preserve" approved="yes">
+            <trans-unit id="synchronization.targetProblem.missing" xml:space="preserve" approved="yes">
                 <source>target workspace does not exist</source>
                 <target state="translated">Ziel-Workspace existiert nicht</target>
+            </trans-unit>
+            <trans-unit id="synchronization.targetProblem.notBasedOnSource" xml:space="preserve" approved="yes">
+                <source>target workspace is not based on the source workspace</source>
+                <target state="translated">Ziel-Workspace basiert nicht auf dem Quell-Workspace</target>
             </trans-unit>
             <trans-unit id="synchronization.pending" xml:space="preserve" approved="yes">
                 <source>{0} translation(s) pending</source>

@@ -127,7 +127,9 @@ class LostInTranslationModuleController extends AbstractModuleController
                 'scope' => $status->rule->scope->value,
                 'mode' => $status->rule->mode->value,
                 'pendingCount' => $status->pendingCount,
-                'targetWorkspaceExists' => $status->targetWorkspaceExists,
+                // The enum's VALUE, not the enum: the view uses it as the trailing segment of a translation key, the
+                // same way it renders scope and mode. Null (the rule can run) renders as no problem at all.
+                'targetProblem' => $status->targetProblem?->value,
             ];
         }
 

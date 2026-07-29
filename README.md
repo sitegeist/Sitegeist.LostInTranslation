@@ -193,8 +193,10 @@ independent visibility, do not point a rule at it.
 #### Triggering synchronization from the backend
 
 The **Lost in Translation** backend module has a *Synchronization* overview listing every configured rule
-with how many nodes are currently out of sync, and whether its target workspace exists yet (rules never
-auto-create it). From here editors can run **Sync now** for a single rule or **Sync all** — the manual
+with how many nodes are currently out of sync — or, if the rule cannot run at all, why: its target workspace
+does not exist (rules never auto-create it), or the target is not based on the source workspace, which a
+cross-workspace rule requires. A blocked rule reports no pending count, because nothing would ever act on it.
+From here editors can run **Sync now** for a single rule or **Sync all** — the manual
 counterpart to the CLI, useful for `mode: ask` rules. The overview reads its counts from the
 stale-translation projection; if that projection has not been set up yet (a fresh install before
 `./flow cr:setup`) the module shows a guidance banner instead of failing.

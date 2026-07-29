@@ -11,6 +11,7 @@ use Neos\ContentRepository\Core\Factory\CommandHookFactoryInterface;
 use Neos\ContentRepository\Core\Factory\CommandHooksFactoryDependencies;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
+use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
@@ -31,12 +32,23 @@ class SynchronizationCommandHookFactory implements CommandHookFactoryInterface
     #[Flow\InjectConfiguration(path: 'nodeTranslation.synchronization')]
     public array $synchronization = [];
 
+    protected ?LoggerInterface $logger = null;
+
     public function __construct(
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         protected readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
         protected readonly TranslationServiceInterface $translationService,
         protected readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
     ) {
+    }
+
+    /**
+     * Setter injection rather than a constructor argument: the CR builds this factory through the object manager, and
+     * the logger is optional for the hook (see its constructor).
+     */
+    public function injectLogger(LoggerInterface $logger): void
+    {
+        $this->logger = $logger;
     }
 
     public function build(CommandHooksFactoryDependencies $commandHooksFactoryDependencies): CommandHookInterface
@@ -71,6 +83,7 @@ class SynchronizationCommandHookFactory implements CommandHookFactoryInterface
             $this->translationService,
             $languageDimension,
             $this->aiSystemTranslationRuntimeState,
+            $this->logger,
         );
     }
 }

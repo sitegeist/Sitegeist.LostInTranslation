@@ -26,6 +26,7 @@ use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
 use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizationResult;
@@ -462,6 +463,71 @@ trait StaleTranslations
             $targetDimension,
             $actual,
         ));
+    }
+
+    /**
+     * Assert what the backend module's status column shows for a rule: either the reason the rule cannot run at all,
+     * or nothing (it can run, and the pending count is meaningful). Read through
+     * {@see SynchronizationStatusProvider::forRules()}, i.e. exactly what the module renders.
+     *
+     * @Then /^the synchronization status from workspace "([^"]*)" dimension "([^"]*)" to workspace "([^"]*)" dimension "([^"]*)" reports target problem "([^"]*)"$/
+     * @throws Exception
+     */
+    public function theSynchronizationStatusReportsTargetProblem(
+        string $sourceWorkspaceName,
+        string $sourceDimension,
+        string $targetWorkspaceName,
+        string $targetDimension,
+        string $expectedProblem,
+    ): void {
+        Assert::assertSame($expectedProblem, $this->targetProblemFor(
+            $sourceWorkspaceName,
+            $sourceDimension,
+            $targetWorkspaceName,
+            $targetDimension,
+        ), 'reported target problem');
+    }
+
+    /**
+     * @Then /^the synchronization status from workspace "([^"]*)" dimension "([^"]*)" to workspace "([^"]*)" dimension "([^"]*)" reports no target problem$/
+     * @throws Exception
+     */
+    public function theSynchronizationStatusReportsNoTargetProblem(
+        string $sourceWorkspaceName,
+        string $sourceDimension,
+        string $targetWorkspaceName,
+        string $targetDimension,
+    ): void {
+        Assert::assertNull($this->targetProblemFor(
+            $sourceWorkspaceName,
+            $sourceDimension,
+            $targetWorkspaceName,
+            $targetDimension,
+        ), 'reported target problem');
+    }
+
+    /**
+     * @throws Exception
+     */
+    private function targetProblemFor(
+        string $sourceWorkspaceName,
+        string $sourceDimension,
+        string $targetWorkspaceName,
+        string $targetDimension,
+    ): ?string {
+        $rule = new SynchronizationRule(
+            sourceWorkspaceName: $sourceWorkspaceName,
+            sourceDimension: $sourceDimension,
+            targetWorkspaceName: $targetWorkspaceName,
+            targetDimension: $targetDimension,
+            scope: SynchronizationScope::Content,
+        );
+        $statuses = $this->getObject(SynchronizationStatusProvider::class)->forRules(
+            $this->currentContentRepository->id,
+            new SynchronizationRules($rule),
+        );
+        Assert::assertCount(1, $statuses);
+        return $statuses[0]->targetProblem?->value;
     }
 
     /**

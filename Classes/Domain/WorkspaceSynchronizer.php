@@ -125,9 +125,9 @@ class WorkspaceSynchronizer
         // (new content stream, conflicting target edits dropped), and `--dry-run` promises to report only. The
         // trade-off is that a cross-workspace dry run reports against the UN-rebased target, so its counts can differ
         // from the real run — source nodes the target has not seen yet are missing, and their records are skipped.
-        $skipReason = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName, !$dryRun);
-        if ($skipReason !== null) {
-            return WorkspaceSynchronizationResult::skipped($skipReason);
+        $targetProblem = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName, !$dryRun);
+        if ($targetProblem !== null) {
+            return WorkspaceSynchronizationResult::skipped($targetProblem->message($sourceWorkspaceName, $targetWorkspaceName));
         }
 
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);

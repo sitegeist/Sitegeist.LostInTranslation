@@ -23,30 +23,34 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 final class CrossWorkspaceSynchronizationTarget
 {
     /**
-     * Returns null when synchronization may proceed (including the same-workspace case), or a human-readable skip
-     * reason when it cannot — the target workspace does not exist, or (cross-workspace) is not based on the source.
+     * Returns null when synchronization may proceed (including the same-workspace case), or the
+     * {@see TargetWorkspaceProblem} blocking it — the target workspace does not exist, or (cross-workspace) is not
+     * based on the source.
      *
-     * @param bool $rebase whether to actually perform the force-rebase (pass false for a dry run)
+     * This is the ONLY place those two conditions are decided. Every reader — the CLI, the backend module's status
+     * column, the Neos UI prompt and the publish-driven hook — asks here rather than re-deriving them, so a rule that
+     * cannot run reads as blocked everywhere at once instead of in whichever surface happens to check.
+     *
+     * With `$rebase = false` the call is side-effect free, which is what makes it usable from the read-only status
+     * paths and from `--dry-run`.
+     *
+     * @param bool $rebase whether to actually perform the force-rebase (pass false for a dry run or a read-only check)
      */
     public static function prepare(
         ContentRepository $contentRepository,
         WorkspaceName $sourceWorkspaceName,
         WorkspaceName $targetWorkspaceName,
         bool $rebase = true,
-    ): ?string {
+    ): ?TargetWorkspaceProblem {
         $targetWorkspace = $contentRepository->findWorkspaceByName($targetWorkspaceName);
         if ($targetWorkspace === null) {
-            return sprintf('target workspace "%s" does not exist', $targetWorkspaceName->value);
+            return TargetWorkspaceProblem::Missing;
         }
         if ($sourceWorkspaceName->equals($targetWorkspaceName)) {
             return null;
         }
         if ($targetWorkspace->baseWorkspaceName === null || !$targetWorkspace->baseWorkspaceName->equals($sourceWorkspaceName)) {
-            return sprintf(
-                'target workspace "%s" must be based on source workspace "%s" for cross-workspace synchronization',
-                $targetWorkspaceName->value,
-                $sourceWorkspaceName->value,
-            );
+            return TargetWorkspaceProblem::NotBasedOnSource;
         }
         if ($rebase) {
             $contentRepository->handle(

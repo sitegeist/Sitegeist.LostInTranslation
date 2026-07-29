@@ -371,7 +371,11 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
 3. Per rule: `rebaseTargetOntoSource(rule)` — cross-workspace preflight + force-rebase
    (`CrossWorkspaceSynchronizationTarget`). This runs **even for `ask` rules**, so the projection /
    backend module reflects what still needs syncing instead of the target lagging. Skip the rule on
-   failure (target missing / not based on source).
+   failure (target missing / not based on source), logging the reason as a warning — a publish has
+   nowhere to return it to, and this is the one path where a blocked rule would otherwise be silent.
+   This rebase is also the hook's **only** direct dispatch: it cannot be a returned command, because
+   the returned batch runs after `onAfterHandle` finishes while steps 5-8 already need the rebased
+   target.
 4. If `rule.mode === Ask` → skip steps 5-8 (translation deferred); steps 9-10 still run.
 5. Read stale rows at `(rule.targetWorkspaceName, targetDimension)` via the finder.
 6. Per stale record, with the **scope gate**: under `Content`, skip if the record's closest Document
@@ -498,6 +502,18 @@ Match the **literal** action string, not an imported constant (a wrong import pa
   source, so auto-creating the target would re-materialize it on every publish. Instead, skip with a
   clear reason when the target is absent; surface it (CLI `<error>` + non-zero exit; controller
   `errors[]`; dialog flash). Creating the workspace is a manual action.
+- **One preflight, four surfaces.** `CrossWorkspaceSynchronizationTarget::prepare()` is the only place
+  the two blocking conditions are decided; it returns a typed `TargetWorkspaceProblem` so each reader
+  can take the form it needs — a sentence for the CLI and flash messages, a log warning for the hook,
+  a translation key for the module's status column. Passing `rebase: false` makes the call
+  side-effect free, which is what lets the read-only status paths and `--dry-run` use it. The module
+  used to answer "can this rule run?" with its own `findWorkspaceByName` check, and so reported a
+  green *up to date* for a rule whose target existed but was based on the wrong workspace — one that
+  every publish and every manual sync silently skips.
+- **A blocked rule has no pending count.** `SynchronizationStatusProvider` reports 0 for it rather
+  than counting rows nothing will act on; otherwise the module would sit permanently "out of sync"
+  and the post-publish prompt would keep offering a sync that short-circuits. Same reasoning as the
+  deleted-source-node filter above.
 - **Out-of-sync count is measured on the target, never the source.** For `live/en → de-review/de`,
   syncing clears `de-review`'s rows but never `live`'s `de` rows (those are intentionally never
   translated in the review pattern). Counting the source would report "out of sync" forever.

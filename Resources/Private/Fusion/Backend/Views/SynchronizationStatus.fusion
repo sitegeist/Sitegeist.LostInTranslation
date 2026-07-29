@@ -49,11 +49,14 @@ prototype(Sitegeist.LostInTranslation:Views.SynchronizationStatus) < prototype(N
             <td>{I18n.translate('synchronization.scope.' + rule.scope, rule.scope, [], 'Modules', 'Sitegeist.LostInTranslation')}</td>
             <td>{I18n.translate('synchronization.mode.' + rule.mode, rule.mode, [], 'Modules', 'Sitegeist.LostInTranslation')}</td>
             <td>
-              <Neos.Fusion:Fragment @if={!rule.targetWorkspaceExists}>
+              <!-- A rule that cannot run at all (target workspace missing, or not based on the source) reports WHY
+                   instead of a pending count — the count is 0 for such a rule, which would otherwise read as a green
+                   "up to date" for work no publish and no manual sync will ever do. -->
+              <Neos.Fusion:Fragment @if={rule.targetProblem}>
                 <i class="fas fa-times-circle" style="color:#ff460d;"></i>
-                &nbsp;{I18n.translate('synchronization.targetMissing', 'target workspace does not exist', [], 'Modules', 'Sitegeist.LostInTranslation')}
+                &nbsp;{I18n.translate('synchronization.targetProblem.' + rule.targetProblem, rule.targetProblem, [], 'Modules', 'Sitegeist.LostInTranslation')}
               </Neos.Fusion:Fragment>
-              <Neos.Fusion:Fragment @if={rule.targetWorkspaceExists}>
+              <Neos.Fusion:Fragment @if={!rule.targetProblem}>
                 <i class="fas fa-check-circle" style="color:green;" @if={rule.pendingCount < 1}></i>
                 <i class="fas fa-exclamation-triangle" style="color:#ffae00;" @if={rule.pendingCount > 0}></i>
                 &nbsp;{rule.pendingCount > 0 ? I18n.translate('synchronization.pending', '{0} translation(s) pending', [rule.pendingCount], 'Modules', 'Sitegeist.LostInTranslation') : I18n.translate('status.upToDate', 'up to date', [], 'Modules', 'Sitegeist.LostInTranslation')}

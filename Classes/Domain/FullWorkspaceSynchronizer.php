@@ -142,9 +142,9 @@ class FullWorkspaceSynchronizer
 
         // Validate the target workspace (never auto-created) and, cross-workspace, force-rebase it onto the source — a
         // dry run only reports, so it must not rebase. Fail gracefully with a skip reason the CLI / Neos UI shows.
-        $skipReason = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName, !$dryRun);
-        if ($skipReason !== null) {
-            return WorkspaceSynchronizationResult::skipped($skipReason);
+        $targetProblem = CrossWorkspaceSynchronizationTarget::prepare($cr, $sourceWorkspaceName, $targetWorkspaceName, !$dryRun);
+        if ($targetProblem !== null) {
+            return WorkspaceSynchronizationResult::skipped($targetProblem->message($sourceWorkspaceName, $targetWorkspaceName));
         }
 
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);

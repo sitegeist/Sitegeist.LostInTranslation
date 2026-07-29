@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain;
 
+use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
@@ -29,6 +30,11 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
  * that has not yet been rebased onto the source the number is a lower bound — it only sees source changes already
  * materialised in the target.
  *
+ * Whether a rule can run at all is not re-derived here — it comes from the same preflight every driver uses
+ * ({@see CrossWorkspaceSynchronizationTarget::prepare()}, with the rebase suppressed). That matters: this surface used
+ * to check only "does the target workspace exist", so a rule whose target existed but was based on the wrong workspace
+ * — one that every publish and every manual sync skips — was reported as a green "up to date".
+ *
  * Rows whose source node has been DELETED (soft-removed, i.e. carrying the `removed` tag) are skipped. The projection
  * deliberately does not handle tag events, so deleting a node leaves its stale rows behind, and no driver will ever
  * satisfy them — a deleted node is not a translation source. Counting them would leave the backend module permanently
@@ -53,13 +59,11 @@ class SynchronizationStatusProvider
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $statuses = [];
         foreach ($rules as $rule) {
-            $targetWorkspaceExists = $cr->findWorkspaceByName(
-                WorkspaceName::fromString($rule->targetWorkspaceName)
-            ) !== null;
+            $targetProblem = $this->targetProblemForRule($cr, $rule);
             $statuses[] = new RuleSynchronizationStatus(
                 $rule,
-                $this->pendingCountForRule($contentRepositoryId, $rule),
-                $targetWorkspaceExists,
+                $targetProblem === null ? $this->countPending($cr, $rule) : 0,
+                $targetProblem,
             );
         }
         return $statuses;
@@ -68,12 +72,33 @@ class SynchronizationStatusProvider
     public function pendingCountForRule(ContentRepositoryId $contentRepositoryId, SynchronizationRule $rule): int
     {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
-        $targetWorkspaceName = WorkspaceName::fromString($rule->targetWorkspaceName);
-        // A target workspace that does not exist cannot be out of sync (synchronizing into it is skipped — see
-        // WorkspaceSynchronizer); report zero rather than faulting on a missing workspace.
-        if ($cr->findWorkspaceByName($targetWorkspaceName) === null) {
+        // A rule that cannot run at all has no pending work to report: synchronizing it is skipped outright (see
+        // WorkspaceSynchronizer), so counting its rows would leave the module permanently out of sync and keep
+        // re-raising the Neos UI's post-publish prompt for a sync that does nothing.
+        if ($this->targetProblemForRule($cr, $rule) !== null) {
             return 0;
         }
+        return $this->countPending($cr, $rule);
+    }
+
+    /**
+     * Ask the shared preflight — the same one every driver runs — whether this rule can run, WITHOUT rebasing: this is
+     * a read-only status path and the force-rebase it would otherwise perform is a destructive mutation of the target
+     * workspace.
+     */
+    private function targetProblemForRule(ContentRepository $cr, SynchronizationRule $rule): ?TargetWorkspaceProblem
+    {
+        return CrossWorkspaceSynchronizationTarget::prepare(
+            $cr,
+            WorkspaceName::fromString($rule->sourceWorkspaceName),
+            WorkspaceName::fromString($rule->targetWorkspaceName),
+            rebase: false,
+        );
+    }
+
+    private function countPending(ContentRepository $cr, SynchronizationRule $rule): int
+    {
+        $targetWorkspaceName = WorkspaceName::fromString($rule->targetWorkspaceName);
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint(
             DimensionSpacePoint::fromArray([$this->languageDimensionName => $rule->targetDimension])
         );

@@ -142,8 +142,11 @@
             <trans-unit id="synchronization.col.status">
                 <source>Status</source>
             </trans-unit>
-            <trans-unit id="synchronization.targetMissing">
+            <trans-unit id="synchronization.targetProblem.missing">
                 <source>target workspace does not exist</source>
+            </trans-unit>
+            <trans-unit id="synchronization.targetProblem.notBasedOnSource">
+                <source>target workspace is not based on the source workspace</source>
             </trans-unit>
             <trans-unit id="synchronization.pending">
                 <source>{0} translation(s) pending</source>

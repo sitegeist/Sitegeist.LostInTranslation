@@ -33,6 +33,7 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeVariantSelectionStrategy;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
+use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
@@ -76,9 +77,15 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  * node's own `CreateNodeVariant`.
  *
  * The hook only reads the {@see StaleTranslationFinder} (the projection has already caught up by the time
- * `onAfterHandle` runs, per the CR contract) and returns commands; it does not dispatch directly. AI authorship is
- * flagged via {@see AISystemTranslationRuntimeState} so the returned commands' events are attributed to the AI service
- * rather than the publishing editor.
+ * `onAfterHandle` runs, per the CR contract) and returns the translation, tagging and removal work as commands. AI
+ * authorship is flagged via {@see AISystemTranslationRuntimeState} so those commands' events are attributed to the AI
+ * service rather than the publishing editor.
+ *
+ * The one thing it does dispatch itself is the cross-workspace force rebase ({@see self::rebaseTargetOntoSource()},
+ * `contentRepository->handle(RebaseWorkspace…)` from inside `onAfterHandle`). That cannot be a returned command: the
+ * returned batch runs only AFTER this method has finished, whereas everything below reads the target's stale rows and
+ * subgraphs and so needs the rebase to have already happened. It is also a workspace-level command, not a node
+ * command, so it does not belong in a batch whose ordering contract is about node hierarchy.
  *
  * **AI authorship across the cascade.** {@see TranslationCommandHook::onAfterHandle} unconditionally resets the AI
  * runtime state at the start of every entry; for `CreateNodeVariant` it then re-sets the state before cascading its
@@ -120,6 +127,9 @@ final class SynchronizationCommandHook implements CommandHookInterface
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
         private readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
+        // Nullable so the hook stays constructible without a logger (tests, and any setup where Flow's PSR logger is
+        // not injected into the factory); the one call site is null-safe.
+        private readonly ?LoggerInterface $logger = null,
     ) {
         $this->pendingCascadeCommands = new \SplObjectStorage();
     }
@@ -544,14 +554,34 @@ final class SynchronizationCommandHook implements CommandHookInterface
      * projection that the backend status reads) reflect the just-published source content — see
      * {@see CrossWorkspaceSynchronizationTarget}. Returns false when the rule cannot run at all and the caller must
      * skip it (target workspace missing, or — cross-workspace — not based on the source).
+     *
+     * A publish has nowhere to return a skip reason to — unlike the CLI and the backend module, which show it — so a
+     * blocked rule would otherwise be invisible at exactly the moment it fails to do its job. We log it as a warning,
+     * once per publish per blocked rule: this is a configuration fault that persists until someone fixes the workspace
+     * setup, and the same fault is reported (translated, and without needing the log) in the module's status column
+     * via {@see \Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider}.
      */
     private function rebaseTargetOntoSource(SynchronizationRule $rule): bool
     {
-        return CrossWorkspaceSynchronizationTarget::prepare(
+        $sourceWorkspaceName = WorkspaceName::fromString($rule->sourceWorkspaceName);
+        $targetWorkspaceName = WorkspaceName::fromString($rule->targetWorkspaceName);
+        $targetProblem = CrossWorkspaceSynchronizationTarget::prepare(
             $this->contentRepositoryRegistry->get($this->contentRepositoryId),
-            WorkspaceName::fromString($rule->sourceWorkspaceName),
-            WorkspaceName::fromString($rule->targetWorkspaceName),
-        ) === null;
+            $sourceWorkspaceName,
+            $targetWorkspaceName,
+        );
+        if ($targetProblem === null) {
+            return true;
+        }
+        $this->logger?->warning(sprintf(
+            'Sitegeist.LostInTranslation: skipping synchronization rule %s/%s -> %s/%s on publish: %s',
+            $rule->sourceWorkspaceName,
+            $rule->sourceDimension,
+            $rule->targetWorkspaceName,
+            $rule->targetDimension,
+            $targetProblem->message($sourceWorkspaceName, $targetWorkspaceName),
+        ));
+        return false;
     }
 
     /**
