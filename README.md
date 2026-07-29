@@ -161,23 +161,34 @@ Sitegeist:
           targetDimension: de
           scope: Document                # Document (mirror documents + content) | Content (content only)
           mode: auto                     # auto (translate on publish) | ask (defer to a manual "sync now")
-          onSourceRemoval: keep-target   # keep-target (default) | remove-target (mirror source deletions)
-          onSourceTagging: keep-target   # keep-target (default) | sync-to-target (mirror hide/show + other tags)
 ```
 
-`onSourceRemoval` decides what happens to the target dimension when a node is **removed** in the source
-language. The default `keep-target` leaves the translated variant in place (source and target may diverge on
-deletions — the previous behaviour). `remove-target` mirrors the deletion, gated by `scope`: under `Content`
-only content nodes are removed (never Documents, symmetric with never auto-*creating* them), under `Document`
-Documents are removed too. For `auto` rules the deletion is mirrored inline on publish (from the publish's own
-removal events); for `ask` rules it is reconciled on the deliberate "sync now" run, like translations.
+**What synchronization means.** The target dimension is a **projection of the source dimension**: the source
+language is the single source of truth for properties, structure and subtree tags. Changes made on the target
+side are overwritten when a synchronization runs. That is intended — nothing tries to preserve them — and it is
+why a rule has only two knobs.
 
-`onSourceTagging` decides whether subtree-tag changes in the source language — the `disabled` (hide/show)
-tag and any other `SubtreeTag` — are mirrored into the target. The default `keep-target` leaves the target's
-tags alone (a reviewer manages visibility independently); `sync-to-target` mirrors them onto the target
-variant. It is **not** gated by `scope` (a hidden Document hides in the target either way). `auto` rules
-mirror tags inline on publish (from the publish's own tag events); `ask` rules and the CLI (`--sync-tags`)
-reconcile them on the deliberate "sync now" run by diffing the target's tags against the source.
+`scope` governs what synchronization may **create**: `Document` mirrors the whole structure, while `Content`
+only fills in content below Documents that already exist in the target dimension, because adopting a Document
+into a target language stays a deliberate manual action. It governs nothing else.
+
+`mode` governs **when the translation runs** — inline on publish (`auto`) or on a deliberate "sync now"
+(`ask`) — and never what synchronization does. For the same source-side change both modes reach the same
+target state. Everything cheap happens inline on every publish under either mode: subtree tags, deletions,
+and the cross-workspace rebase. Only translating, which costs a DeepL call per node, is deferred by `ask`.
+
+**Subtree tags and deletions are always synchronized**, with no per-rule setting. Source-language tag changes —
+the `disabled` hide/show tag, the `removed` soft-removal tag and any custom `SubtreeTag` — are mirrored onto the
+target variant. Deleting a node *is* a tag change: Neos 9.1 soft-removes by tagging `removed`, so deletions ride
+the same mirror, and restoring from the trash bin mirrors back. When a soft removal becomes a hard one is Neos's
+own garbage collector's business, per dimension. Because the source owns the target's tag state, hiding or
+deleting only the *translation* does not stick — the next synchronization converges it back. If a dimension needs
+independent visibility, do not point a rule at it.
+
+> **Upgrading:** the `onSourceRemoval` and `onSourceTagging` rule keys have been **removed**. Both defaulted to
+> "leave the target alone", and mirroring is now unconditional, so a configuration still carrying them is
+> rejected with a clear error rather than silently starting to hide and delete nodes in the target dimension.
+> Remove the keys; if you relied on the old default, remove the rule instead.
 
 #### Triggering synchronization from the backend
 
@@ -211,13 +222,13 @@ required.
 
 **`lostintranslation:synchronize`** — reconcile a whole workspace/dimension instead of a single node. By default
 it is stale-driven (only nodes the projection flagged as out of date); with `--full` it walks the entire source
-subtree and considers every translatable node, leaving target variants that already exist and have no stale row
-untouched (manual edits are preserved). Source and target workspace may differ for cross-workspace flows — the
-target is force-rebased onto its base (which must be the source workspace) before translating. `--dry-run` reports
-what would happen without dispatching any commands.
+subtree and considers every translatable node, re-translating existing target variants as well. Source and target
+workspace may differ for cross-workspace flows — the target is force-rebased onto its base (which must be the
+source workspace) before translating. `--dry-run` reports what would happen without dispatching any commands.
+Either mode also converges the target dimension's subtree tags onto the source.
 
 ```
-./flow lostintranslation:synchronize --source-workspace=<sourceWorkspace> --source-dimension=<sourceDimension> --target-workspace=<targetWorkspace> --target-dimension=<targetDimension> [--content-repository=default] [--full] [--dry-run] [--remove-orphans] [--sync-tags]
+./flow lostintranslation:synchronize --source-workspace=<sourceWorkspace> --source-dimension=<sourceDimension> --target-workspace=<targetWorkspace> --target-dimension=<targetDimension> [--content-repository=default] [--full] [--dry-run] [--skip-existing]
 
 #   --source-workspace   workspace the source content is read from
 #   --source-dimension   source language value; must equal the target dimension's referenceLanguage
@@ -225,8 +236,10 @@ what would happen without dispatching any commands.
 #   --target-dimension   target language value, e.g. "de"
 #   --full               walk the whole subtree instead of only stale records
 #   --dry-run            report the affected records/nodes without writing anything
-#   --remove-orphans     also remove target nodes whose source variant no longer exists (mirror deletions)
-#   --sync-tags          also reconcile subtree tags (hide/show + any other tag) onto the source
+#   --skip-existing      only with --full: keep target variants that already exist and have no stale row, instead
+#                        of re-translating them. Preserves target-side edits the source has not touched — the one
+#                        deliberate exception to "the target is a projection of the source", since re-asserting a
+#                        property costs a DeepL call per node.
 ```
 
 **`lostintranslation:reconcile`** — housekeeping. The projection only clears the directly-removed aggregate on

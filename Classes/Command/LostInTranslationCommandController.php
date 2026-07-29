@@ -26,8 +26,6 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\PerNodeSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
-use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
-use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 class LostInTranslationCommandController extends CommandController
@@ -142,8 +140,12 @@ class LostInTranslationCommandController extends CommandController
      *  - **default (stale-driven)**: dispatches one retranslation per record the projection has flagged stale at
      *    `(targetWorkspace, targetDimension)`.
      *  - **`--full`**: walks the entire source-dimension subgraph from every root aggregate down and considers every
-     *    translatable node, regardless of stale state. Nodes whose target variant already exists and have no stale
-     *    row are kept untouched (manual edits are preserved).
+     *    translatable node, regardless of stale state, re-translating existing target variants too (see
+     *    --skip-existing).
+     *
+     * Either mode also converges the target dimension's subtree tags onto the source — hide/show, the `removed`
+     * soft-removal tag (i.e. deletions and restores) and any other tag. That is unconditional: the target dimension is a
+     * projection of the source language, so target-side changes are overwritten by design.
      *
      * Source and target workspace may differ (cross-workspace sync): the source content is read from
      * --source-workspace while the resulting variant/property commands are dispatched into --target-workspace, e.g.
@@ -161,12 +163,10 @@ class LostInTranslationCommandController extends CommandController
      * @param string $contentRepository Content repository id (defaults to "default").
      * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.
      * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
-     * @param bool $removeOrphans If set, also remove target-dimension nodes whose source variant no longer exists
-     *                            (mirror source-language deletions). Removes Documents and Content alike — the manual
-     *                            counterpart of a rule's `onSourceRemoval: remove-target`.
-     * @param bool $syncTags If set, also reconcile subtree tags (e.g. hide/show, and any other tag): converge each
-     *                       target node's explicit tags onto the source — the manual counterpart of a rule's
-     *                       `onSourceTagging: sync-to-target`.
+     * @param bool $skipExisting Only with --full: keep target variants that already exist and have no stale row, instead
+     *                           of re-translating them. Preserves target-side property edits on nodes the source has not
+     *                           touched — the deliberate exception to "the target is a projection of the source",
+     *                           because re-asserting a property costs a DeepL call per node.
      * @throws StopCommandException
      */
     public function synchronizeCommand(
@@ -177,8 +177,7 @@ class LostInTranslationCommandController extends CommandController
         string $contentRepository = 'default',
         bool $dryRun = false,
         bool $full = false,
-        bool $removeOrphans = false,
-        bool $syncTags = false,
+        bool $skipExisting = false,
     ): void {
         $contentRepositoryId = ContentRepositoryId::fromString($contentRepository);
         $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]);
@@ -193,9 +192,8 @@ class LostInTranslationCommandController extends CommandController
                 sourceDimensionSpacePoint: $sourceDsp,
                 targetWorkspaceName: $targetWorkspaceName,
                 targetDimensionSpacePoint: $targetDsp,
+                skipExisting: $skipExisting,
                 dryRun: $dryRun,
-                removeOrphans: $removeOrphans,
-                syncTags: $syncTags,
             )
             : $this->workspaceSynchronizer->synchronizeWorkspace(
                 contentRepositoryId: $contentRepositoryId,
@@ -204,8 +202,6 @@ class LostInTranslationCommandController extends CommandController
                 targetWorkspaceName: $targetWorkspaceName,
                 targetDimensionSpacePoint: $targetDsp,
                 dryRun: $dryRun,
-                onSourceRemoval: $removeOrphans ? SourceRemovalBehavior::RemoveTarget : SourceRemovalBehavior::KeepTarget,
-                onSourceTagging: $syncTags ? SourceTaggingBehavior::SyncToTarget : SourceTaggingBehavior::KeepTarget,
             );
 
         if ($result->skippedReason !== null) {

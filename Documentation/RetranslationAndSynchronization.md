@@ -53,6 +53,7 @@ Companion tables:
 | `NodePeer/Specialization/GeneralizationVariantWasCreated` | `clearStructuralStaleRecord`: drop the row at the variant's target origin **only when it has no translatable properties** (an empty `[]` row) — see "load-bearing empty rows" below. |
 | `NodeAggregateWasRemoved` | `DELETE` rows for the aggregate at each affected covered DSP **unioned with its referenceLanguage targets** (so removing the `en` variant also clears the `de`/`es` rows that hung off it). Strict-scoped to affected DSPs, not aggregate-wide. |
 | `WorkspaceWasPublished` / `WasRebased` / `BaseWorkspaceWasChanged` / `WasDiscarded` / `WasRemoved` / `WasCreated` | Maintain rows across the workspace hierarchy via `replaceWorkspaceEntries(source, target)` (DELETE target rows; INSERT … SELECT source rows as target rows). |
+| `SubtreeWasTagged` / `SubtreeWasUntagged` | **Explicitly not handled.** Tagging does not change what needs translating — with one wrinkle: since Neos 9.1 *deletes* by tagging `removed`, a deleted node keeps its stale rows. Nothing will ever satisfy them (a deleted node is not a translation source), so `SynchronizationStatusProvider` filters them out at read time. Deliberately not pruned in the projection: a restore from the trash bin then brings the pending translation back with it. |
 
 ### Why a projection (and why these design choices)
 
@@ -265,44 +266,58 @@ nodeTranslation:
       targetDimension: de
       scope: Document                # Document | Content          (REQUIRED — config validation throws if missing)
       mode: auto                     # auto | ask                  (default: auto)
-      onSourceRemoval: keep-target   # keep-target | remove-target  (default: keep-target)
-      onSourceTagging: keep-target   # keep-target | sync-to-target (default: keep-target)
 ```
 
-- **`SynchronizationScope`** (required, no default):
+**The governing idea: the target dimension is a projection of the source dimension.** The source language is
+the single source of truth for properties, structure and subtree tags; target-side changes are overwritten
+when a synchronization runs. That is intended, not a limitation — no mechanism preserves them, and none
+should be added. Everything below follows from it, and it is why a rule has exactly two knobs.
+
+- **`SynchronizationScope`** (required, no default) — governs what synchronization may **create**, and
+  nothing else:
   - `Document` — mirror the whole structure: create missing Document variants **and** their content.
   - `Content` — only act on records whose closest self-or-ancestor Document already exists in the
     target dimension (`FindClosestNodeFilter::create('Neos.Neos:Document')`); **never** auto-create
     Documents. Creating a Document in the target is a deliberate manual action.
-- **`SynchronizationMode`** (default `auto`):
+
+  Subtree tags and removals are **not** scope-gated: a node hidden or deleted in the source language is
+  hidden or deleted in the target under either scope. All three drivers apply the creation gate — the
+  publish hook, "sync now" and (as `Document`, since it has no rule) the `--full` CLI.
+- **`SynchronizationMode`** (default `auto`) — governs **when the translation runs**, and nothing else:
   - `auto` — translate inline during the publish (publish blocks on DeepL).
   - `ask` — defer translation to a deliberate manual sync (Neos UI prompt / backend module "sync
-    now") so the publish stays fast and atomic. (The cross-workspace rebase still happens on publish
-    for `ask` rules — only the translation is deferred.)
-- **`SourceRemovalBehavior`** (default `keep-target`): what happens to the target dimension when a node
-  is **removed** in the source language.
-  - `keep-target` — leave the translated variant in place; source and target may diverge on deletions
-    (the original behaviour, so existing configs are unchanged).
-  - `remove-target` — mirror the deletion into the target dimension. Gated by `scope` (symmetric with
-    creation): under `Content` only content nodes are removed — a removed Document is **kept, with its whole
-    translated subtree intact** — while under `Document` Documents are removed too. Removing the
-    subtree root suffices — the CR cascades descendant removal in the target dimension.
-    Detection differs by path (see §5): `auto` rules mirror **incrementally** from the publish's own
-    `NodeAggregateWasRemoved` events; `ask` rules and the CLI reconcile by **diffing** the target
-    dimension against the source on the deliberate sync. See `SynchronizationScope::mayRemoveNode()` and
-    `TargetOrphanCollector`.
-- **`SourceTaggingBehavior`** (default `keep-target`): what happens to the target dimension when a subtree
-  tag (e.g. the `disabled` hide/show tag, or any other `SubtreeTag`) is added/removed in the source language.
-  - `keep-target` — leave the target's tags alone; the target dimension manages its own visibility (the
-    original behaviour, so existing configs are unchanged).
-  - `sync-to-target` — mirror the source tag change, emitting `TagSubtree` / `UntagSubtree` on the target
-    variant. **Not** gated by `scope` (a hidden Document hides in the target whether the rule mirrors
-    structure or only content). Mirrored only for `auto` rules, **incrementally** from the publish's own
-    `SubtreeWasTagged` / `SubtreeWasUntagged` events. For `ask` rules and the CLI (`--sync-tags`) it is instead
-    reconciled on the deliberate sync by **diffing** each node's explicit tag set against the source
-    (`TargetTagReconciler`) — mirroring the removal feature's auto-incremental / manual-full split. The emit is
-    idempotent either way — a tag already matching the target's *explicit* state is skipped, so the CR never
-    trips `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged` and re-runs are safe.
+    now") so the publish stays fast and atomic.
+
+  Everything *cheap* happens inline on every publish under **both** modes: subtree-tag mirroring
+  (and therefore deletions), mirrored hard removals, and the cross-workspace rebase. Only translating,
+  which costs a DeepL call per node, is what `ask` defers. See
+  [the mode invariant in §5](#the-mode-invariant-ask-and-auto-differ-only-in-when-never-in-what).
+
+**Subtree tags and deletions are always synchronized** — there is no per-rule setting:
+
+- Source-language tag changes are mirrored onto the target variant with `TagSubtree` / `UntagSubtree`: the
+  `disabled` hide/show tag, the `removed` soft-removal tag, and any custom `SubtreeTag`. Sync owns the target
+  dimension's whole tag space; a dimension that needs independent tag state should not have a rule pointing
+  at it.
+- Only **explicit** tags are mirrored — inherited ones reproduce themselves once their tagged ancestor is
+  reconciled, so the source's tag *structure* is what gets reproduced, not merely its effective state.
+- The emit is **idempotent**: a tag already matching the target's explicit state is skipped, so the CR never
+  trips `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged` and re-runs are safe.
+- **Deleting a node is a tag change.** Neos 9.1 soft-removes by tagging `removed` rather than destroying the
+  node (`NeosSubtreeTag::removed()`; hard `RemoveNodeAggregate` outside `live` is explicitly undesired in
+  Neos, since it destroys the hierarchy information the trash bin and conflict detection need). Deletions
+  therefore ride the tag mirror, and restoring from the trash bin mirrors back the other way. When a soft
+  removal becomes a *hard* one is `SoftRemovalGarbageCollector`'s business, per dimension — not
+  synchronization's. A hard removal that a publish happens to carry is mirrored too, from the publish's own
+  `NodeAggregateWasRemoved` events.
+- Because the source owns the target's tag state, hiding or deleting **only the translation** does not stick:
+  the publish hook converges a tag event that touched only the target dimension back onto the source's
+  current state, and the deliberate sync's diff reaches the same result.
+
+> **Upgrading.** The `onSourceRemoval` and `onSourceTagging` rule keys were **removed**; see
+> [§7](#7-evolution--superseded-decisions). `SynchronizationRule::fromArray()` **throws** on either, rather
+> than ignoring it: both defaulted to "leave the target alone", so silently accepting an old config would
+> start hiding and deleting nodes in the target dimension without anyone asking for it.
 
 A `SynchronizationRule` is an immutable readonly VO; `SynchronizationRules::forPublicationTarget()`
 returns **all** rules matching a publish target (one publish may fan out to multiple targets).
@@ -321,6 +336,31 @@ preserving other coordinates (e.g. `{language:en,country:us} → {language:es,co
 There are three drivers, all returning `WorkspaceSynchronizationResult` (an aggregate of
 `PerNodeSynchronizationResult` = `NodeAggregateId` + `RetranslationResult`).
 
+### The mode invariant: `ask` and `auto` differ only in *when*, never in *what*
+
+`mode` selects **when** a rule's TRANSLATION runs — inline during the publish (`auto`) or on a
+deliberate "sync now" / CLI run (`ask`). It must never change the **result**. Everything cheap (tag
+mirroring, and therefore deletions; mirrored hard removals; the cross-workspace rebase) runs inline on
+every publish under both modes, precisely so there is less left that could diverge. For one and the same
+source-side change, all three drivers have to converge on the same target state. Any difference in the
+*decision* a driver makes about that change — which nodes are in scope, whether a tag is mirrored,
+whether a kept subtree is descended into — is a **bug**, not a mode difference. When reviewing or
+extending this feature, treat a driver-specific outcome as a defect until proven otherwise; two of the
+entries in [§7](#7-evolution--superseded-decisions) exist because exactly that went unnoticed.
+
+**The one permitted difference is coverage, not semantics.** The publish hook only ever sees the delta
+of the publish it is reacting to (§4: walking the whole tree on publish is deliberately not done); the
+deliberate runs diff the whole target dimension against the source. So a deliberate run additionally
+catches up on changes the hook could never have seen — made before the rule existed, or outside any
+publish. That is a difference in what each driver can **observe**,
+not in what it does with what it observes. Wherever both paths observe the same change, they must
+handle it identically.
+
+Practical rule when the two paths disagree: the publish path's "stay incremental, never walk the target
+tree" contract is the harder constraint, so the fix is normally to bring the *diff* path in line — or to
+let the hook act on an event it **already has in the publish delta**, which is still incremental. Making
+the hook walk the target tree to catch up with the diff path is not an option.
+
 ### A. Automatic, on publish — `SynchronizationCommandHook`
 
 Registered in `Configuration/Settings.Neos.yaml` under `commandHooks`, **after** `TranslationCommandHook`.
@@ -332,7 +372,7 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
    (`CrossWorkspaceSynchronizationTarget`). This runs **even for `ask` rules**, so the projection /
    backend module reflects what still needs syncing instead of the target lagging. Skip the rule on
    failure (target missing / not based on source).
-4. If `rule.mode === Ask` → `continue` (translation deferred).
+4. If `rule.mode === Ask` → skip steps 5-8 (translation deferred); steps 9-10 still run.
 5. Read stale rows at `(rule.targetWorkspaceName, targetDimension)` via the finder.
 6. Per stale record, with the **scope gate**: under `Content`, skip if the record's closest Document
    doesn't exist in the target dimension.
@@ -341,21 +381,31 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
    exists → translated `SetNodeProperties`. Unsatisfiable no-op rows are pruned via
    `StaleRecordReconciler`.
 8. **Order commands ancestor-before-descendant** by source-tree depth (`NodeTreeDepth`).
-9. **Tagging mirror** (only for `auto` rules with `onSourceTagging: sync-to-target`): scan this publish's
-   `SubtreeWasTagged` / `SubtreeWasUntagged` events whose `affectedDimensionSpacePoints` include the rule's
-   **source** DSP. For each whose target variant exists, append a `TagSubtree` / `UntagSubtree` for the target
-   variant (`allSpecializations` at the target DSP) — unless the target is already in the desired *explicit*
-   state (idempotent, avoids `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged`). A node *created* in this same
-   publish (its id is among step 7's `CreateNodeVariant`s) also gets its `TagSubtree`, relying on the batch
-   being dispatched in order (create then tag) onto the freshly-created, untagged variant. Not scope-gated.
-   Emitted **before** the removal mirror so a node tagged-and-removed in one publish is tagged while it exists.
-10. **Removal mirror** (only for `auto` rules with `onSourceRemoval: remove-target`): scan this publish's
-   `PublishedEvents` for `NodeAggregateWasRemoved` whose `affectedCoveredDimensionSpacePoints` include the
-   rule's **source** DSP (this gate distinguishes a source-side removal from an editor deleting only the
-   target variant). For each, if the target variant still exists and the scope permits removing it
-   (`SynchronizationScope::mayRemoveNode()`), append a `RemoveNodeAggregate` for the target variant
-   (`allSpecializations` at the target DSP). Cheap and precise — only the publish delta is inspected, never
-   the whole target tree.
+9. **Tagging mirror** (always; both modes): scan this publish's `SubtreeWasTagged` / `SubtreeWasUntagged`
+   events and normalise each into one question — should the target variant carry this tag explicitly?
+   - the event's `affectedDimensionSpacePoints` include the rule's **source** DSP → mirror the event's own
+     direction;
+   - they include only the **target** DSP (someone tagged, hid or deleted the *translation* directly) →
+     converge that tag onto the source's **current** explicit state, which reverts the target-side change.
+     Reading the source rather than inverting the event is what makes this order-independent. A node with no
+     source counterpart is skipped — an editor-owned target-only node is none of sync's business;
+   - neither → skip (a third language).
+
+   Then emit `TagSubtree` / `UntagSubtree` for the target variant (`allSpecializations` at the target DSP)
+   unless it is already in the desired *explicit* state (idempotent, avoids `SubtreeIsAlreadyTagged` /
+   `SubtreeIsNotTagged`). A node *created* in this same publish (its id is among step 7's
+   `CreateNodeVariant`s) also gets its `TagSubtree`, relying on the batch being dispatched in order (create
+   then tag) onto the freshly-created, untagged variant. Not scope-gated. **This is also the deletion
+   mirror**, since Neos 9.1 deletes by tagging `removed`. Emitted **before** the removal mirror so a node
+   tagged-and-hard-removed in one publish is tagged while it still exists.
+10. **Hard-removal mirror** (always; both modes): scan this publish's `PublishedEvents` for
+   `NodeAggregateWasRemoved` whose `affectedCoveredDimensionSpacePoints` include the rule's **source** DSP
+   (this gate distinguishes a source-side removal from an editor deleting only the target variant). For each
+   whose target variant still exists, append a `RemoveNodeAggregate` for the target variant
+   (`allSpecializations` at the target DSP), keeping only subtree-root removals so the CR's own cascade is not
+   fought. Not scope-gated. Cheap and precise — only the publish delta is inspected, never the whole target
+   tree. Note this is *not* the editor's delete path (step 9 is); it covers a hard removal a fixture or script
+   put into the publish.
 11. Flag AI authorship and **return** the `Commands` — the hook does *not* dispatch inline (it can't,
    mid-publish); the CR dispatches the returned commands as separate commits after the publish.
 
@@ -366,23 +416,28 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
 - `SynchronizationStatusProvider::pendingCountForRule()` is the shared, side-effect-free counter used
   by both the UI prompt and the module, so they agree. It counts stale rows at the **target**
   workspace+origin whose aggregate still exists in the target graph; returns 0 if the target is
-  absent.
+  absent. Rows whose **source node was deleted** (carries the `removed` tag) are skipped — the projection
+  ignores tag events, so a deletion leaves its stale rows behind and nothing will ever satisfy them; counting
+  them would report "out of sync" forever and keep re-raising the post-publish prompt. Filtered at read time
+  rather than pruned, so restoring the node from the trash bin brings its pending translation back.
 - `WorkspaceSynchronizer` validates `sourceWorkspace != targetWorkspace` and that `sourceDimension`
-  equals the target's `referenceLanguage`; cross-workspace force-rebases the target; then dispatches
-  one `Retranslator::retranslateNode()` per stale record, depth-ordered.
-- **Removal mirror (diff path).** When the rule is `remove-target`, after the stale-driven pass it
-  reconciles deletions by **diffing** rather than reading events (the publish is long gone): walk the
-  target-dimension subgraph and dispatch a `RemoveNodeAggregate` for every node whose aggregate has no
-  variant in the source dimension, scope-gated (`TargetOrphanCollector`). `synchronizeRule()` passes the
-  rule's `onSourceRemoval` + `scope`, so the UI "sync now" and backend module reconcile deletions too;
-  `ask` rules defer their removal to exactly this run. This also self-heals deletions from before the flag
-  was enabled. (The full reconcile is acceptable here because "sync now" is already a deliberate, heavier
-  operation — unlike the publish hook, which must stay incremental.)
-- **Tag mirror (diff path).** When the rule is `sync-to-target`, after the stale-driven pass it converges each
-  target node's EXPLICIT subtree tags onto the source by diffing the two dimensions (`TargetTagReconciler`):
-  a `TagSubtree` per tag the target lacks, an `UntagSubtree` per tag it has extra — for any tag, not just
-  `disabled`. `synchronizeRule()` passes the rule's `onSourceTagging`, so `ask` rules reconcile tags on this
-  run. The reconciler re-reads a fresh subgraph, so a variant created earlier in the same run is tagged too.
+  equals the target's `referenceLanguage`; cross-workspace force-rebases the target; applies the rule's
+  **scope gate** (identical to the hook's — under `Content`, skip a record whose closest Document is absent
+  from the target dimension, so clicking "sync now" cannot create the Documents the scope keeps out); then
+  dispatches one `Retranslator::retranslateSubtree()` per stale record, depth-ordered.
+- **Tag mirror (diff path).** After the stale-driven pass it converges each target node's EXPLICIT subtree
+  tags onto the source by diffing the two dimensions (`TargetTagReconciler`): a `TagSubtree` per tag the
+  target lacks, an `UntagSubtree` per tag it has extra — for any tag, including `removed`, which is how this
+  path mirrors **deletions and restores**. Always runs; there is nothing to configure. The reconciler re-reads
+  fresh subgraphs so a variant created earlier in the same run is tagged too, and reads both sides with FULL
+  visibility (`VisibilityConstraints::createEmpty()`) because soft-removed nodes on either side are exactly
+  what it must see. (The full reconcile is acceptable here because "sync now" is already a deliberate,
+  heavier operation — unlike the publish hook, which must stay incremental. It is also what self-heals
+  changes no publish carried.)
+- There is no separate removal pass. `TargetOrphanCollector` — a diff of "present in target, absent in
+  source" — was **deleted**: it could not tell "deleted in the source" from "never in the source", which under
+  `Content` scope is the expected case, so it emptied editor-owned target-only pages. See
+  [§7](#7-evolution--superseded-decisions).
 - The backend module lists **all** rules (source→target, dimensions, scope, mode, live out-of-sync
   count) with "Sync now"/"Sync all", ignoring `mode` on purpose — it doubles as a manual catch-up for
   rules that errored mid-cascade.
@@ -397,16 +452,19 @@ Match the **literal** action string, not an imported constant (a wrong import pa
 
 - Walks every root aggregate's source subgraph top-down (so it never has the ancestor-ordering
   problem). Per node: skip if not translatable; `CreateNodeVariant` if target absent + non-tethered;
-  keep untouched if target exists + no stale row (manual edits preserved); otherwise a translated
-  `SetNodeProperties` covering **all** translatable properties.
+  otherwise a translated `SetNodeProperties` covering **all** translatable properties — including for target
+  variants that already exist, since the target is a projection of the source.
+- `--skip-existing` is the one deliberate exception to that: it keeps a target variant that exists and has no
+  stale row, preserving target-side property edits the source has not touched. It defaults to **off** because
+  the projection model says the source wins; it exists because re-asserting a *property* costs a DeepL call
+  per node, unlike re-asserting a tag, so on a large workspace the cheap-but-divergent run is sometimes what
+  you want. A stale row always forces a refresh regardless.
 - Same `--dry-run` semantics; for cross-workspace it force-rebases the target first (skipped on
   dry-run).
-- **Removal mirror.** With `--remove-orphans` (CLI) / `removeOrphans: true`, the same diff-based
-  `TargetOrphanCollector` pass runs after the translation walk, removing target-dimension nodes absent
-  from the source. The CLI has no rule, so it removes Documents **and** content (`Document` removal
-  scope); a rule-driven run passes the rule's `scope`.
-- **Tag mirror.** With `--sync-tags` (CLI) / `syncTags: true`, the diff-based `TargetTagReconciler` pass runs
-  after the translation walk, converging each target node's explicit subtree tags onto the source.
+- The CLI has no rule, hence no scope: `--full` always behaves as `Document` scope.
+- **Tag mirror.** The diff-based `TargetTagReconciler` pass runs after the translation walk, converging each
+  target node's explicit subtree tags onto the source — including `removed`, so deletions and restores are
+  mirrored here too. Unconditional; the `--remove-orphans` and `--sync-tags` flags are gone.
 
 ### Cross-workspace mechanics (the crux)
 
@@ -483,10 +541,15 @@ inside the projection and handling moves; judged out of scope). `findAll()` is u
 because it must scan all workspaces for orphans; the hot paths use the SQL-scoped
 `findByWorkspaceAndOrigin` instead.
 
-> Not to be confused with `onSourceRemoval: remove-target` (§4–5): `reconcile` prunes orphan
-> **stale-tracking rows** left in the projection table after a deletion; `remove-target` removes the
-> actual orphaned **target-language nodes** in the content graph. They are complementary — the former is
-> projection housekeeping, the latter mirrors deletions.
+> Not to be confused with the deletion mirror (§4–5): `reconcile` prunes orphan **stale-tracking rows** left
+> in the projection table after a node was hard-removed; the tag mirror propagates a *deletion* to the
+> target-language node in the content graph. They are complementary — the former is projection housekeeping,
+> the latter mirrors editor intent.
+>
+> Note `reconcile` only helps after a **hard** removal, since a soft-removed aggregate still exists. Stale rows
+> belonging to a soft-removed (deleted) node are instead filtered at read time by
+> `SynchronizationStatusProvider`, so they neither inflate the out-of-sync count nor get pruned — a restore from
+> the trash bin brings the pending translation back with it.
 
 ---
 
@@ -506,52 +569,65 @@ behaviour.
   descendant) so a parent's `CreateNodeVariant` materializes before a child's. (Limitation: a parent
   that is missing from the target *and* has no stale row is unreachable by stale-driven sync — that's
   `--full`'s job.)
-- **Source-removal mirror (`onSourceRemoval: remove-target`) — event-scan + diff (current) vs a
-  projection tombstone table (rejected).** Mirroring source deletions needed a signal of *what* was
-  removed. A persistent "removal tombstone" table in the projection was rejected: the projection is
-  rule-agnostic, so it would record tombstones even for `keep-target` rules that never consume them (a
-  leak), and it would have to replicate every workspace-lifecycle handler (`replaceWorkspaceEntries`,
-  publish/rebase/discard/remove). Instead the rule-aware consumers detect removals directly — `auto` rules
-  scan the publish's own `NodeAggregateWasRemoved` events (cheap, incremental, honours the hook's
-  no-full-walk contract), while `ask`/CLI runs diff the target dimension against the source
-  (`TargetOrphanCollector`) since the events are gone by then. **Decisions:** (1) opt-in per-rule **enum**
-  `keep-target | remove-target` (default `keep-target`) — not a boolean and not default-on, so existing
-  configs are unchanged and the destructive behaviour is explicit; (2) removal **respects `scope`**
-  symmetric with creation (Content keeps Documents). Known asymmetry: `auto` mirrors only the publish
-  delta, whereas the manual/full diff is a full reconcile, so an orphan created while the flag was off is
-  cleaned up only on the next manual/`--full` sync.
-- **A Document kept under `Content` scope keeps its whole subtree (the diff path does not descend into
-  it).** The diff path originally kept the orphan Document but descended to remove the orphaned content
-  beneath it, which the incremental path structurally cannot do: the CR emits `NodeAggregateWasRemoved`
-  only for the explicitly removed Document, so the hook sees no events for the cascade-removed content and
-  leaves the translated page whole. Beyond that asymmetry — an `auto` publish leaving a full page where an
-  `ask`/CLI sync left a gutted one — descending was actively lossy, because `findNodeById(...) === null`
-  cannot distinguish *"removed in the source"* from *"never in the source"*. Under `Content` scope a
-  target-only Document is an **expected** case (the scope exists precisely because adopting a Document is a
-  deliberate manual act), and every content node below such a page is target-only too, so a reconcile
-  emptied editor-owned pages. **Decision:** a kept orphan Document is out of scope entirely, subtree
-  included. This costs the cleanup of orphaned content inside a source-removed Document — content that sits
-  inside a page synchronization has explicitly decided not to manage, and that the `auto` path already left
-  behind. A Document present in *both* dimensions is not an orphan, so the walk still descends into it and
-  content removed inside a surviving page is mirrored as usual.
-- **Source-tagging mirror (`onSourceTagging: sync-to-target`) — event-scan (auto) + diff (manual), not
-  scope-gated.** Mirrors source-language subtree-tag changes (the `disabled` hide/show tag and ANY other
-  `SubtreeTag`) onto the target via `TagSubtree` / `UntagSubtree`, reusing the removal mirror's split: `auto`
-  rules event-scan `SubtreeWasTagged` / `SubtreeWasUntagged` from the publish; `ask` rules and the CLI
-  (`--sync-tags`) diff each node's explicit tag set against the source (`TargetTagReconciler`).
-  **Decisions:** (1) opt-in per-rule **enum** `keep-target | sync-to-target` (default `keep-target`), so a
-  target reviewer keeps independent visibility unless the rule opts in; (2) **not** gated by `scope` — unlike
-  create/remove, hiding is not a structural change, and a hidden source Document should hide in the target
-  regardless of Content/Document scope; (3) **idempotent** — skip when the target's *explicit* tag state
-  already matches, because the CR throws `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged` otherwise; (4) only
-  EXPLICIT tags are diffed/mirrored (inherited ones reproduce once their ancestor is reconciled), reproducing
-  the source's tag structure. **Create-and-tag in one publish** is handled on the `auto` path by emitting the
-  mirrored `TagSubtree` after the node's own `CreateNodeVariant` in the returned batch — the CR dispatches the
-  batch sequentially, so the (untagged) variant exists by the time the tag is applied. `CreateNodeVariant` does
-  **not** copy explicit subtree tags onto a peer variant (verified by test), so the optimistic tag is safe;
-  this covers nodes the sync creates via a direct `CreateNodeVariant` (a node with no translatable property, or
-  a custom tag on a tethered node, is left to the diff path; note Neos forbids the `disabled` / `removed` tags
-  on tethered nodes entirely, so "hide a tethered node" is impossible to begin with).
+- **The removal-sync feature (`onSourceRemoval`) — built, then DELETED.** Mirroring source deletions went
+  through three designs. (1) A projection "removal tombstone" table was rejected: the projection is
+  rule-agnostic, so it would record tombstones even for rules that never consume them, and it would have to
+  replicate every workspace-lifecycle handler. (2) So the consumers detected removals themselves — the publish
+  hook scanned the publish's own `NodeAggregateWasRemoved` events, while the deliberate runs diffed the target
+  dimension against the source (`TargetOrphanCollector`), gated by an opt-in per-rule enum
+  `keep-target | remove-target` and by `scope` (`SynchronizationScope::mayRemoveNode()`). (3) That whole
+  apparatus was then **deleted**, because it turned out to be solving a problem Neos does not have and could
+  not solve it correctly anyway:
+  - **Neos 9.1 does not hard-remove.** Deleting a node in a workspace SOFT-removes it — `TagSubtree` with
+    `NeosSubtreeTag::removed()`, which is what `Neos.Workspace.Ui`'s trash bin reads; hard removals outside
+    `live` are explicitly undesired (they destroy the hierarchy information the trash bin and conflict
+    detection need). `SoftRemovalGarbageCollector` converts them to hard removals later, per dimension,
+    *after* the publish command. So the event scan mostly never fired for a real editor deletion, and the
+    GC's later hard removal was invisible to the hook. Meanwhile the *tag* mirror was already carrying the
+    deletion — un-gated by `scope` — so the removal feature was a second, weaker mechanism for something the
+    tag mirror does correctly by construction.
+  - **A diff cannot tell "deleted" from "never there".** `TargetOrphanCollector`'s test was "present in the
+    target, absent in the source", which conflates a removed source node with a target-only one. Under
+    `Content` scope a target-only Document is the **expected** case (the scope exists precisely because
+    adopting a Document is a deliberate manual act), and all content below such a page is target-only too — so
+    a reconcile emptied editor-owned pages. An intermediate fix stopped the diff descending into a kept
+    Document, which removed the data loss but left the asymmetry; deleting the pass removed the class of bug.
+    The tag mirror has no such ambiguity: it only ever converges nodes present in **both** dimensions.
+
+  **Decision:** deletions ride the tag mirror; `onSourceRemoval`, `SourceRemovalBehavior`,
+  `TargetOrphanCollector`, `SynchronizationScope::mayRemoveNode()` and the `--remove-orphans` flag are gone.
+  What is given up: a hard removal that never passed through a publish (a script, a fixture,
+  `RemoveNodeAggregate` on `live` directly) is mirrored by nothing, and leaves a target orphan no driver will
+  clean — see [§8](#8-known-gaps--future-work). What is gained beyond the bug fix: **restore** now mirrors too,
+  which a hard-removal mirror could never undo.
+- **The tagging opt-out (`onSourceTagging`) — also deleted; tags always sync.** The mirror was introduced as an
+  opt-in enum `keep-target | sync-to-target`, on the reasoning that a reviewer might want independent
+  visibility in the target dimension. Once the target dimension was stated to be a *projection* of the source
+  (§4), that reasoning collapsed: "the source is the source of truth, except for tags, unless you ask" is not a
+  model anyone can hold. Tag mirroring is now unconditional, and sync owns the target dimension's entire tag
+  space — any `SubtreeTag`, not a fixed list. A dimension that needs independent tag state should not have a
+  rule pointing at it. Retained design decisions: **not** gated by `scope` (hiding is not a structural change);
+  **idempotent** (skip when the target's *explicit* state already matches, since the CR throws
+  `SubtreeIsAlreadyTagged` / `SubtreeIsNotTagged`); only **explicit** tags are mirrored, so the source's tag
+  *structure* is reproduced rather than its effective state. **Create-and-tag in one publish** works by
+  emitting the mirrored `TagSubtree` after the node's own `CreateNodeVariant` in the returned batch — the CR
+  dispatches sequentially, so the (untagged) variant exists by then, and `CreateNodeVariant` does **not** copy
+  explicit subtree tags onto a peer variant (verified by test).
+- **`withoutRestrictions()` is a trap.** `VisibilityConstraints::withoutRestrictions()` reads like "see
+  everything" but is defined as `excludeSubtreeTags(['removed'])` — it hides soft-removed nodes, and is
+  therefore *identical* to `NeosVisibilityConstraints::excludeRemoved()`. Every subgraph in this package used
+  it, which is why nothing could see a soft removal to mirror it and why a soft-removed target node read as
+  "absent" (inviting a `CreateNodeVariant` for a variant that exists). Current rule: **target** subgraphs and
+  **both** sides of `TargetTagReconciler` use `VisibilityConstraints::createEmpty()` (genuinely everything),
+  while the **source** subgraph for *translation* keeps `excludeRemoved()` — a deleted node is not a
+  translation source. A review finding claiming the two synchronizers diverged here was mistaken: the two
+  constraints were the same. The real defect was that both hid too much.
+- **`mode: ask` deferring more than the translation.** `ask` originally skipped the tag and removal mirrors on
+  publish too, leaving them to the deliberate sync. That broke the mode invariant in a way nothing surfaced:
+  the out-of-sync count reads stale-translation rows, and a hide or a deletion produces none, so an `ask` rule
+  could sit on pending work that no prompt ever mentioned. Mirroring is cheap (it inspects the publish's own
+  events and never walks the target tree), so it now runs inline for **both** modes and `ask` defers only the
+  DeepL-bound translation.
 - **Auto-creating the target workspace (`ReviewWorkspaceProvisioner`) — added then reverted/deleted.**
   See [§5](#5-synchronization): a cross-workspace rule fires on every publish, so auto-create was
   wrong. The class no longer exists.
@@ -601,20 +677,28 @@ behaviour.
 - Several projection handlers were specified as red TDD scenarios (Behat `todo` profile) but not all
   implemented: thinning `whenNodeAggregateTypeWasChanged`, partial publish/discard wiring,
   `whenDimensionSpacePointWasMoved`.
-- **Pending removals are not counted by the out-of-sync status.** `SynchronizationStatusProvider`
-  counts stale-translation rows; a source deletion produces no stale row, so an `ask` rule whose only
-  pending work is a removal reports "in sync" and does not raise the post-publish "sync now" prompt. The
-  removal is still reconciled on the next deliberate sync — it just doesn't itself trigger the prompt.
-  Counting it would require a target-tree diff on every status read (the expense the incremental design
-  avoids).
-- **Cross-workspace `ask` + `remove-target` is largely moot.** The publish's force-rebase already drops a
-  target variant whose source was removed ("source wins"), so the removal mirror mainly matters for
-  same-workspace rules where no rebase intervenes.
+- **Pending tag changes and deletions are not counted by the out-of-sync status.**
+  `SynchronizationStatusProvider` counts stale-translation rows, and a hide or a deletion produces none, so
+  neither raises the post-publish "sync now" prompt. This no longer strands work — tag mirroring runs inline on
+  every publish for both modes precisely because of this — but a change that reached the target dimension
+  outside a publish still waits, unannounced, for the next deliberate sync. Counting it would require a
+  target-tree diff on every status read, the expense the incremental design exists to avoid.
+- **A hard removal that never passes through a publish is mirrored by nothing.** The editor path soft-removes
+  and is mirrored by the tag mirror; a script or fixture issuing `RemoveNodeAggregate` on `live` directly, or
+  `SoftRemovalGarbageCollector`'s own promotion of a soft removal to a hard one, produces no publish for the
+  hook to react to. With `TargetOrphanCollector` gone ([§7](#7-evolution--superseded-decisions)) nothing
+  reconciles the resulting target orphan. Accepted: the diff that would find it cannot distinguish a deleted
+  source node from a target-only one, which is what made it dangerous.
+- **Untested interaction with Neos's own soft-removal machinery.**
+  `ImpendingHardRemovalConflictDetectionHook` blocks a soft→hard promotion while a workspace has pending
+  changes inside the removed subtree, and the AI-authored tag commands this package dispatches *are* pending
+  changes in the target workspace. A mirrored soft removal in a review workspace may therefore keep Neos from
+  ever garbage-collecting the source's. Not reproduced, not tested — flagged as unknown.
 - **Auto tag mirroring of create-and-tag-in-one-publish covers nodes the sync creates via a direct
   `CreateNodeVariant`** (translatable, non-tethered). The hook tags a node created in the same publish by
   ordering the mirrored `TagSubtree` after that node's `CreateNodeVariant` (the CR dispatches the batch
-  sequentially, so the variant exists by then). Two narrow residuals are left to the manual / `--sync-tags`
-  diff path (`TargetTagReconciler`, which has no such gap): a tagged node with **no translatable property**
+  sequentially, so the variant exists by then). Two narrow residuals are left to the deliberate sync's diff
+  path (`TargetTagReconciler`, which has no such gap): a tagged node with **no translatable property**
   (the sync never creates it), and a **custom** tag on a **tethered** node created in the same publish.
   Note the `disabled` (hide) and `removed` tags **cannot** be applied to a tethered node at all — Neos's
   `NeosSubtreeTaggingConstraintChecks` rejects that on both source and target — so the practical "hide a
@@ -644,12 +728,10 @@ Classes/
     ReferenceDimensionSpacePointResolver.php          target↔source dimension resolution
     CrossWorkspaceSynchronizationTarget.php           cross-ws preflight + force-rebase
     StaleRecordReconciler.php                         prune unsatisfiable (target) rows
-    TargetOrphanCollector.php                         diff-based source-removal mirror (manual / full)
-    TargetTagReconciler.php                           diff-based subtree-tag mirror (manual / full)
+    TargetTagReconciler.php                           diff-based subtree-tag mirror incl. deletions (manual / full)
     NodeTreeDepth.php                                 ancestor-before-descendant ordering
     AiCommandDispatcher.php                           AI attribution + auth bypass
     SynchronizationRule(s).php / SynchronizationScope.php / SynchronizationMode.php
-    SourceRemovalBehavior.php / SourceTaggingBehavior.php
     SynchronizationStatusProvider.php / RuleSynchronizationStatus.php
     Directive/ (DimensionValueDirectiveFactory, DeeplLanguagePair, …)
     PostProcessor/ (TranslatedPropertyPostProcessorInterface, UriPathSegmentPostProcessor)

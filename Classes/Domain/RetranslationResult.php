@@ -48,14 +48,14 @@ final readonly class RetranslationResult
          */
         public bool $requiresFullSync = false,
         /**
-         * `RemoveNodeAggregate` commands dispatched to mirror a source-language deletion into the target dimension
-         * (only the manual / full sync diff path emits these; the publish-driven hook emits its removals directly as
-         * additional commands). Each removal cascades descendant removal in the target dimension.
+         * Commands dispatched to mirror a source-language deletion (or restore) into the target dimension: a
+         * `TagSubtree` / `UntagSubtree` carrying the `removed` tag, which is how Neos 9.1 deletes. Only the manual /
+         * full sync diff path emits these; the publish-driven hook emits its mirrors directly as additional commands.
          */
         public int $removalCommandsDispatched = 0,
         /**
-         * `TagSubtree` / `UntagSubtree` commands dispatched to mirror source-language subtree-tag changes (e.g.
-         * hide/show) into the target dimension — only the manual / full sync diff path emits these.
+         * `TagSubtree` / `UntagSubtree` commands dispatched to mirror source-language subtree-tag changes other than
+         * deletion (e.g. hide/show) into the target dimension — only the manual / full sync diff path emits these.
          */
         public int $tagCommandsDispatched = 0,
     ) {
@@ -75,19 +75,12 @@ final readonly class RetranslationResult
     }
 
     /**
-     * A node whose target variant was removed to mirror a source-language deletion.
+     * A node whose target variant was converged onto the source's subtree tags: `$removals` commands carrying the
+     * `removed` tag (a mirrored deletion or restore) and `$tagChanges` other tag commands (hide/show, custom tags).
      */
-    public static function removed(): self
+    public static function mirrored(int $removals, int $tagChanges): self
     {
-        return new self(0, 0, null, false, 1);
-    }
-
-    /**
-     * A node whose target variant had `$count` subtree-tag commands dispatched to mirror source-language tag changes.
-     */
-    public static function tagged(int $count): self
-    {
-        return new self(0, 0, null, false, 0, $count);
+        return new self(0, 0, null, false, $removals, $tagChanges);
     }
 
     public function isNoOp(): bool

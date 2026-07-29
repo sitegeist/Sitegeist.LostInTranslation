@@ -9,12 +9,14 @@ use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslation;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 
@@ -73,16 +75,17 @@ class WorkspaceSynchronizer
             targetWorkspaceName: WorkspaceName::fromString($rule->targetWorkspaceName),
             targetDimensionSpacePoint: DimensionSpacePoint::fromArray([$this->languageDimensionName => $rule->targetDimension]),
             dryRun: $dryRun,
-            onSourceRemoval: $rule->onSourceRemoval,
-            removalScope: $rule->scope,
-            onSourceTagging: $rule->onSourceTagging,
+            scope: $rule->scope,
         );
     }
 
     /**
-     * @param SourceRemovalBehavior $onSourceRemoval when {@see SourceRemovalBehavior::RemoveTarget}, target-dimension
-     *        nodes whose source variant no longer exists are removed after the stale-driven pass (the deletion-side
-     *        reconcile; see {@see TargetOrphanCollector}). `$removalScope` gates which node types may be removed.
+     * @param SynchronizationScope $scope whether missing Document variants may be created. Under
+     *        {@see SynchronizationScope::Content} a stale record whose closest Document is absent from the target
+     *        dimension is skipped, exactly as the publish-driven {@see
+     *        \Sitegeist\LostInTranslation\ContentRepository\CommandHook\SynchronizationCommandHook} skips it — otherwise
+     *        clicking "sync now" would create the very Documents the scope exists to keep out. Defaults to
+     *        {@see SynchronizationScope::Document} for the rule-less CLI, which mirrors the whole structure.
      */
     public function synchronizeWorkspace(
         ContentRepositoryId $contentRepositoryId,
@@ -91,9 +94,7 @@ class WorkspaceSynchronizer
         WorkspaceName $targetWorkspaceName,
         DimensionSpacePoint $targetDimensionSpacePoint,
         bool $dryRun = false,
-        SourceRemovalBehavior $onSourceRemoval = SourceRemovalBehavior::KeepTarget,
-        SynchronizationScope $removalScope = SynchronizationScope::Document,
-        SourceTaggingBehavior $onSourceTagging = SourceTaggingBehavior::KeepTarget,
+        SynchronizationScope $scope = SynchronizationScope::Document,
     ): WorkspaceSynchronizationResult {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -134,12 +135,15 @@ class WorkspaceSynchronizer
         // Stale rows are flagged against the workspace the source content was edited in, so they drive the run from
         // the source side; existence is checked there too. In the single-workspace case source == target.
         $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
-        $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
+        // Source side EXCLUDES soft-removed nodes: Neos 9.1 deletes by tagging `removed`, so a soft-removed source node
+        // is a DELETED node and must never be a translation source. `--full` reads its source the same way; the
+        // publish-driven hook likewise. (The deletion reaches the target through the tag reconcile below.)
+        $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
         // Target subgraph for ancestor-coverage checks. `withoutRestrictions` so a present-but-disabled
         // ancestor still counts as covering the target dimension — disabled state does not affect whether
         // a descendant variant can be created (CR coverage is independent of visibility).
         $targetContentGraph = $cr->getContentGraph($targetWorkspaceName);
-        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, VisibilityConstraints::withoutRestrictions());
+        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, VisibilityConstraints::createEmpty());
 
         // Stale records arrive in primary-key order, not hierarchical order. Creating a node variant requires its
         // parent to already cover the target dimension (CR `requireNodeAggregateToCoverDimensionSpacePoint`), so
@@ -193,6 +197,24 @@ class WorkspaceSynchronizer
                 );
                 continue;
             }
+            // Content scope never creates Document variants, so skip a record whose closest self-or-ancestor Document is
+            // absent from the target dimension. `findClosestNode` walks `self -> ancestors`, so for a Document node it
+            // returns the node itself: a Document missing in the target is skipped (no auto-create), while one already
+            // present passes and is re-translated like any other node. Identical to the publish-driven hook's gate —
+            // without this, "sync now" would create exactly the Documents the scope exists to keep out.
+            if ($scope === SynchronizationScope::Content) {
+                $documentNode = $sourceSubgraph->findClosestNode(
+                    $entry->nodeAggregateId,
+                    FindClosestNodeFilter::create(nodeTypes: 'Neos.Neos:Document'),
+                );
+                if ($documentNode === null || $targetSubgraph->findNodeById($documentNode->aggregateId) === null) {
+                    $perNodeResults[] = new PerNodeSynchronizationResult(
+                        $entry->nodeAggregateId,
+                        RetranslationResult::skipped('Content scope: containing document is not present in the target dimension'),
+                    );
+                    continue;
+                }
+            }
             if ($dryRun) {
                 $perNodeResults[] = new PerNodeSynchronizationResult(
                     $entry->nodeAggregateId,
@@ -210,48 +232,24 @@ class WorkspaceSynchronizer
             $perNodeResults[] = new PerNodeSynchronizationResult($entry->nodeAggregateId, $result);
         }
 
-        // Deletion-side reconcile: mirror source-language removals by deleting target-dimension nodes whose source
-        // variant no longer exists. Decoupled from any publish, so we diff the two subgraphs rather than reading
-        // removal events (which the publish-driven hook uses). See TargetOrphanCollector for the scope gating.
-        if ($onSourceRemoval === SourceRemovalBehavior::RemoveTarget) {
-            $orphanRemovals = TargetOrphanCollector::collect(
-                $targetContentGraph,
-                $targetSubgraph,
-                $sourceSubgraph,
-                $cr->getNodeTypeManager(),
-                $removalScope,
-                $targetWorkspaceName,
-                $targetDimensionSpacePoint,
-            );
-            $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
-                $cr,
-                $this->aiCommandDispatcher,
-                $orphanRemovals,
-                $dryRun,
-                static fn (int $commandCount): RetranslationResult => RetranslationResult::removed(),
-            ));
-        }
-
-        // Tag reconcile: converge each target-dimension node's explicit subtree tags (hide/show and any other tag) onto
-        // the source. Decoupled from any publish, so we diff the two dimensions rather than reading tag events (which
-        // the publish-driven hook uses). Content graphs are re-read here so variants created earlier in this run are
-        // included. See TargetTagReconciler.
-        if ($onSourceTagging === SourceTaggingBehavior::SyncToTarget) {
-            $tagCommands = TargetTagReconciler::collect(
-                $cr->getContentGraph($targetWorkspaceName),
-                $cr->getContentGraph($sourceWorkspaceName),
-                $sourceDimensionSpacePoint,
-                $targetDimensionSpacePoint,
-                $targetWorkspaceName,
-            );
-            $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
-                $cr,
-                $this->aiCommandDispatcher,
-                $tagCommands,
-                $dryRun,
-                static fn (int $commandCount): RetranslationResult => RetranslationResult::tagged($commandCount),
-            ));
-        }
+        // Tag reconcile: converge each target-dimension node's explicit subtree tags onto the source — hide/show, the
+        // `removed` soft-removal tag (i.e. deletions and restores) and any other tag. Unconditional: the target
+        // dimension is a projection of the source, so its tag state is the source's. Decoupled from any publish, so we
+        // diff the two dimensions rather than reading tag events (which the publish-driven hook uses). Content graphs
+        // are re-read here so variants created earlier in this run are included. See TargetTagReconciler.
+        $tagCommands = TargetTagReconciler::collect(
+            $cr->getContentGraph($targetWorkspaceName),
+            $cr->getContentGraph($sourceWorkspaceName),
+            $sourceDimensionSpacePoint,
+            $targetDimensionSpacePoint,
+            $targetWorkspaceName,
+        );
+        $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
+            $cr,
+            $this->aiCommandDispatcher,
+            $tagCommands,
+            $dryRun,
+        ));
 
         return new WorkspaceSynchronizationResult($perNodeResults);
     }

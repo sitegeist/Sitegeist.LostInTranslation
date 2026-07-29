@@ -4,30 +4,27 @@ Sitegeist:
     nodeTranslation:
       synchronization:
         # Document scope: mirror documents AND content on publish to `live`. Exercised by the publish-on-live scenarios
-        # (en → es is auto-synced; de has no auto rule). `remove-target` so source-language deletions are mirrored into
-        # es on publish (the auto-path removal scenarios).
+        # (en → es is auto-synced; de has no auto rule). Subtree tags — including the `removed` soft-removal tag, i.e.
+        # deletions — and hard removals mirror unconditionally, which the auto-path removal/tagging scenarios exercise.
         - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: live
           targetDimension: es
           scope: Document
-          onSourceRemoval: remove-target
-          onSourceTagging: sync-to-target
         # `ask` mode: publishing to `live` must NOT auto-translate into `de`; the stale rows survive until a manual
         # synchronization runs (the "ask mode" scenario). `de` was already left untouched by the auto scenarios, so
         # adding this rule does not change their expectations — it only adds the manual-sync path under test.
-        # `remove-target` here is same-workspace (live → live), so it has NO force-rebase that would drop an orphaned
-        # variant — letting the "`ask` defers the removal mirror to the manual sync" scenario observe the deferral.
+        # Being same-workspace (live → live) there is no force-rebase in the way, so a scenario can observe exactly what
+        # an `ask` rule does inline on publish: it mirrors tags and removals, and defers only the translation.
         - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: live
           targetDimension: de
           scope: Document
           mode: ask
-          onSourceRemoval: remove-target
         # Content scope: only fill in content below documents that already exist in the target dimension; never create
-        # documents automatically. Fires on publish to `content-review`. Kept at the default `keep-target`; the
-        # Content-scope removal GATE is exercised via the manual diff path (synchronize ... removing orphans).
+        # documents automatically. Fires on publish to `content-review`. The scope governs creation ONLY — tags and
+        # removals mirror regardless of it.
         - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: content-review
@@ -35,15 +32,13 @@ Sitegeist:
           scope: Content
         # Cross-workspace `ask` rule: publishing to `live` force-rebases the `de-review` workspace onto `live` (so its
         # status reflects what needs translating) but defers the actual translation to a manual sync. Only fires when
-        # `de-review` exists. Exercises the rebase-on-publish-for-ask path. `remove-target` to verify an `ask` rule does
-        # NOT remove on publish — the deletion is reconciled by the deferred manual sync instead.
+        # `de-review` exists. Exercises the rebase-on-publish-for-ask path.
         - sourceWorkspaceName: live
           sourceDimension: en
           targetWorkspaceName: de-review
           targetDimension: de
           scope: Document
           mode: ask
-          onSourceRemoval: remove-target
 
 Neos:
   Flow:

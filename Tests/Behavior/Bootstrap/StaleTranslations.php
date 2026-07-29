@@ -5,10 +5,13 @@ declare(strict_types=1);
 use Behat\Gherkin\Node\TableNode;
 use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\TagSubtree;
+use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\UntagSubtree;
 use Neos\ContentRepository\Core\Feature\SubtreeTagging\Dto\SubtreeTag;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeVariantSelectionStrategy;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepository\Core\Service\ContentRepositoryMaintainerFactory;
@@ -18,10 +21,9 @@ use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\Sta
 use Neos\Neos\Domain\Repository\WorkspaceMetadataAndRoleRepository;
 use Neos\Neos\Domain\Service\WorkspacePublishingService;
 use Neos\Neos\Domain\Service\WorkspaceService;
+use Neos\Neos\Domain\SubtreeTagging\NeosSubtreeTag;
 use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
-use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
-use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
 use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
@@ -142,9 +144,7 @@ trait StaleTranslations
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
         bool $dryRun,
-        SourceRemovalBehavior $onSourceRemoval,
-        SynchronizationScope $removalScope,
-        SourceTaggingBehavior $onSourceTagging,
+        SynchronizationScope $scope,
     ): void {
         $this->lastSynchronizationResult = $this->getObject(WorkspaceSynchronizer::class)->synchronizeWorkspace(
             contentRepositoryId: $this->currentContentRepository->id,
@@ -153,9 +153,7 @@ trait StaleTranslations
             targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
             dryRun: $dryRun,
-            onSourceRemoval: $onSourceRemoval,
-            removalScope: $removalScope,
-            onSourceTagging: $onSourceTagging,
+            scope: $scope,
         );
         Assert::assertNull(
             $this->lastSynchronizationResult->skippedReason,
@@ -164,6 +162,9 @@ trait StaleTranslations
     }
 
     /**
+     * The deliberate "sync now" run. It always reconciles subtree tags as well — hide/show, the `removed` soft-removal
+     * tag (i.e. deletions and restores) and any other tag — because the target dimension is a projection of the source.
+     *
      * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
      * @throws Exception
      */
@@ -179,26 +180,24 @@ trait StaleTranslations
             $targetWorkspaceName,
             $targetDimensionSpacePoint,
             dryRun: false,
-            onSourceRemoval: SourceRemovalBehavior::KeepTarget,
-            removalScope: SynchronizationScope::Document,
-            onSourceTagging: SourceTaggingBehavior::KeepTarget,
+            scope: SynchronizationScope::Document,
         );
     }
 
     /**
-     * Like {@see self::iSynchronizeTranslations()} but also mirrors source-language deletions: target-dimension nodes
-     * whose source variant no longer exists are removed, gated by the given scope (`Content` keeps Documents, `Document`
-     * removes them too). Exercises the manual / "sync now" diff path of {@see SourceRemovalBehavior::RemoveTarget}.
+     * Like {@see self::iSynchronizeTranslations()} but under an explicit {@see SynchronizationScope}, so a scenario can
+     * pin that "sync now" honours `Content` scope and never creates a Document variant — the same gate the
+     * publish-driven hook applies.
      *
-     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) removing orphans with scope "([^"]*)"$/
+     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) with scope "([^"]*)"$/
      * @throws Exception
      */
-    public function iSynchronizeTranslationsRemovingOrphans(
+    public function iSynchronizeTranslationsWithScope(
         string $sourceWorkspaceName,
         string $sourceDimensionSpacePoint,
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
-        string $removalScope,
+        string $scope,
     ): void {
         $this->runManualSynchronization(
             $sourceWorkspaceName,
@@ -206,76 +205,21 @@ trait StaleTranslations
             $targetWorkspaceName,
             $targetDimensionSpacePoint,
             dryRun: false,
-            onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
-            removalScope: SynchronizationScope::from($removalScope),
-            onSourceTagging: SourceTaggingBehavior::KeepTarget,
+            scope: SynchronizationScope::from($scope),
         );
     }
 
     /**
-     * Like {@see self::iSynchronizeTranslations()} but also reconciles subtree tags: converges each target-dimension
-     * node's explicit tags (hide/show and any other tag) onto the source. Exercises the manual / "sync now" diff path
-     * of {@see SourceTaggingBehavior::SyncToTarget} ({@see \Sitegeist\LostInTranslation\Domain\TargetTagReconciler}).
+     * Dry-run variant: the result reports what WOULD be translated/removed/tagged, but nothing is dispatched.
      *
-     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) syncing subtree tags$/
+     * @When /^I dry-run synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
      * @throws Exception
      */
-    public function iSynchronizeTranslationsSyncingTags(
+    public function iDryRunSynchronizeTranslations(
         string $sourceWorkspaceName,
         string $sourceDimensionSpacePoint,
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
-    ): void {
-        $this->runManualSynchronization(
-            $sourceWorkspaceName,
-            $sourceDimensionSpacePoint,
-            $targetWorkspaceName,
-            $targetDimensionSpacePoint,
-            dryRun: false,
-            onSourceRemoval: SourceRemovalBehavior::KeepTarget,
-            removalScope: SynchronizationScope::Document,
-            onSourceTagging: SourceTaggingBehavior::SyncToTarget,
-        );
-    }
-
-    /**
-     * Manual sync that mirrors BOTH source-language deletions and subtree-tag changes in one run.
-     *
-     * @When /^I synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) removing orphans with scope "([^"]*)" and syncing subtree tags$/
-     * @throws Exception
-     */
-    public function iSynchronizeTranslationsRemovingOrphansAndSyncingTags(
-        string $sourceWorkspaceName,
-        string $sourceDimensionSpacePoint,
-        string $targetWorkspaceName,
-        string $targetDimensionSpacePoint,
-        string $removalScope,
-    ): void {
-        $this->runManualSynchronization(
-            $sourceWorkspaceName,
-            $sourceDimensionSpacePoint,
-            $targetWorkspaceName,
-            $targetDimensionSpacePoint,
-            dryRun: false,
-            onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
-            removalScope: SynchronizationScope::from($removalScope),
-            onSourceTagging: SourceTaggingBehavior::SyncToTarget,
-        );
-    }
-
-    /**
-     * Dry-run variant of {@see self::iSynchronizeTranslationsRemovingOrphansAndSyncingTags()}: the result reports what
-     * WOULD be removed/tagged, but nothing is dispatched (target nodes stay untouched).
-     *
-     * @When /^I dry-run synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\}) removing orphans with scope "([^"]*)" and syncing subtree tags$/
-     * @throws Exception
-     */
-    public function iDryRunSynchronizeTranslationsRemovingOrphansAndSyncingTags(
-        string $sourceWorkspaceName,
-        string $sourceDimensionSpacePoint,
-        string $targetWorkspaceName,
-        string $targetDimensionSpacePoint,
-        string $removalScope,
     ): void {
         $this->runManualSynchronization(
             $sourceWorkspaceName,
@@ -283,10 +227,53 @@ trait StaleTranslations
             $targetWorkspaceName,
             $targetDimensionSpacePoint,
             dryRun: true,
-            onSourceRemoval: SourceRemovalBehavior::RemoveTarget,
-            removalScope: SynchronizationScope::from($removalScope),
-            onSourceTagging: SourceTaggingBehavior::SyncToTarget,
+            scope: SynchronizationScope::Document,
         );
+    }
+
+    /**
+     * Delete a node the way an editor does it in Neos 9.1: a SOFT removal, i.e. `TagSubtree` with the `removed` tag.
+     * Neos considers a hard `RemoveNodeAggregate` in a non-live workspace undesirable — it destroys the hierarchy
+     * information the trash bin and conflict detection need — and turns soft removals into hard ones later, per
+     * dimension, via `SoftRemovalGarbageCollector`. Synchronization therefore sees a deletion as a tag change, which is
+     * why these scenarios assert the `removed` tag on the target rather than the node's absence.
+     *
+     * @When /^the node "([^"]*)" is deleted in workspace "([^"]*)" dimension space point (\{[^}]+\})$/
+     * @throws Exception
+     */
+    public function theNodeIsDeleted(
+        string $nodeAggregateId,
+        string $workspaceName,
+        string $dimensionSpacePoint,
+    ): void {
+        $this->currentContentRepository->handle(TagSubtree::create(
+            WorkspaceName::fromString($workspaceName),
+            NodeAggregateId::fromString($nodeAggregateId),
+            DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+            NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+            NeosSubtreeTag::removed(),
+        ));
+    }
+
+    /**
+     * Restore a soft-removed node — the trash bin's "restore" — by untagging `removed`. The inverse of
+     * {@see self::theNodeIsDeleted()}, so a scenario can pin that a restore mirrors into the target too.
+     *
+     * @When /^the node "([^"]*)" is restored in workspace "([^"]*)" dimension space point (\{[^}]+\})$/
+     * @throws Exception
+     */
+    public function theNodeIsRestored(
+        string $nodeAggregateId,
+        string $workspaceName,
+        string $dimensionSpacePoint,
+    ): void {
+        $this->currentContentRepository->handle(UntagSubtree::create(
+            WorkspaceName::fromString($workspaceName),
+            NodeAggregateId::fromString($nodeAggregateId),
+            DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+            NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+            NeosSubtreeTag::removed(),
+        ));
     }
 
     /**
@@ -466,7 +453,11 @@ trait StaleTranslations
     }
 
     /**
-     * @When /^I full-synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})( including existing variants)?$/
+     * The CLI `synchronize --full`. By default it re-translates existing target variants too — the target dimension is a
+     * projection of the source. The optional "keeping existing variants" suffix is the `--skip-existing` escape hatch,
+     * which preserves target-side property edits on nodes the source has not touched.
+     *
+     * @When /^I full-synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})( keeping existing variants)?$/
      * @throws Exception
      */
     public function iFullSynchronizeTranslations(
@@ -474,9 +465,9 @@ trait StaleTranslations
         string $sourceDimensionSpacePoint,
         string $targetWorkspaceName,
         string $targetDimensionSpacePoint,
-        string $includingExisting = '',
+        string $keepingExisting = '',
     ): void {
-        $skipExisting = $includingExisting === '';
+        $skipExisting = $keepingExisting !== '';
         $result = $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
             contentRepositoryId: $this->currentContentRepository->id,
             sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
@@ -510,7 +501,7 @@ trait StaleTranslations
         $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
         $subgraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName))->getSubgraph(
             DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
-            VisibilityConstraints::withoutRestrictions(),
+            VisibilityConstraints::createEmpty(),
         );
         $node = $subgraph->findNodeById(NodeAggregateId::fromString($nodeAggregateId));
         Assert::assertNotNull(
@@ -526,8 +517,10 @@ trait StaleTranslations
 
     /**
      * Assert a node carries (or does not carry) a given subtree tag in a (workspace, dimension) subgraph by workspace
-     * NAME. Read `withoutRestrictions` so a disabled node is still visible (the default constraints would filter it
-     * out). `$negate` is the " not" group from the regex — present means assert the tag is absent.
+     * NAME. Read with FULL visibility (`createEmpty()`): a disabled node must be visible, and so must a SOFT-REMOVED one,
+     * since asserting the mirrored `removed` tag is the whole point of the deletion scenarios. `withoutRestrictions()`
+     * would not do — despite its name it excludes `removed`. `$negate` is the " not" group from the regex — present means
+     * assert the tag is absent.
      *
      * @When /^I expect node "([^"]*)" in workspace "([^"]*)" dimension space point (\{[^}]+\}) to( not)? be tagged "([^"]*)"$/
      * @throws Exception
@@ -542,7 +535,7 @@ trait StaleTranslations
         $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
         $subgraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName))->getSubgraph(
             DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
-            VisibilityConstraints::withoutRestrictions(),
+            VisibilityConstraints::createEmpty(),
         );
         $node = $subgraph->findNodeById(NodeAggregateId::fromString($nodeAggregateId));
         Assert::assertNotNull(
@@ -577,7 +570,7 @@ trait StaleTranslations
         $cr = $this->contentRepositoryRegistry->get($this->currentContentRepository->id);
         $subgraph = $cr->getContentGraph(WorkspaceName::fromString($workspaceName))->getSubgraph(
             DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
-            VisibilityConstraints::withoutRestrictions(),
+            VisibilityConstraints::createEmpty(),
         );
         Assert::assertNull(
             $subgraph->findNodeById(NodeAggregateId::fromString($nodeAggregateId)),

@@ -22,8 +22,8 @@ class WorkspaceSynchronizationResultTest extends UnitTestCase
     {
         $result = new WorkspaceSynchronizationResult([
             $this->result('node-translated', new RetranslationResult(stalePropertyCommandsDispatched: 2, variantCommandsDispatched: 1)),
-            $this->result('node-removed', RetranslationResult::removed()),
-            $this->result('node-tagged', RetranslationResult::tagged(3)),
+            $this->result('node-removed', RetranslationResult::mirrored(1, 0)),
+            $this->result('node-tagged', RetranslationResult::mirrored(0, 3)),
             $this->result('node-dry-run', RetranslationResult::skipped('dry-run')),
             $this->result('node-needs-full', RetranslationResult::skippedRequiringFullSync('ancestor missing')),
         ]);

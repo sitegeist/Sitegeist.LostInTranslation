@@ -14,8 +14,14 @@ namespace Sitegeist\LostInTranslation\Domain;
  *    editor after a successful publish (and the backend module lists the rule), so the synchronization runs in its own
  *    request via {@see \Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer} rather than blocking the publish.
  *
- * Either way the synchronization itself is the same stale-driven run; the mode only decides whether it is triggered
- * automatically as part of the publish or deferred to a deliberate "sync now" action.
+ * **Invariant — the mode decides WHEN, never WHAT.** Both modes run the same stale-driven synchronization and must
+ * converge on the same target state for one and the same source-side change. A driver-specific outcome — which nodes are
+ * in scope, whether a tag is mirrored, whether a kept subtree is descended into — is a bug, not a mode difference.
+ *
+ * The single permitted difference is COVERAGE, not semantics: the publish-driven path only ever sees the delta of the
+ * publish it reacts to, while the deliberate runs diff the whole target dimension against the source and therefore also
+ * catch up on changes no publish ever carried (made while the rule was off, before the feature existed, or outside a
+ * publish). That is a difference in what each driver can OBSERVE, not in what it does with what it observes.
  */
 enum SynchronizationMode: string
 {

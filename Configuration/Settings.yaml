@@ -113,7 +113,12 @@ Sitegeist:
       #
       # Multiple rules are supported; do not configure cycles (e.g. en→de AND de→en).
       #
-      # Each rule requires a `scope`:
+      # WHAT SYNCHRONIZATION MEANS. The target dimension is a PROJECTION of the source dimension: the source language is
+      # the single source of truth for properties, structure and subtree tags. Changes made on the target side are
+      # overwritten when a synchronization runs — that is intended, not a limitation, and nothing tries to preserve them.
+      # A rule therefore has exactly two knobs, `scope` and `mode`.
+      #
+      # Each rule requires a `scope` — the ONE thing that limits what synchronization manages:
       #
       #   scope: Content | Document   (required)
       #     Content  = only create/translate nodes whose containing Document already exists in the target dimension +
@@ -123,42 +128,44 @@ Sitegeist:
       #     Document = mirror the whole Document and Content structure: create (and translate) the missing Document
       #                variants as well as Content variants.
       #
+      #   `scope` governs CREATION only. Subtree tags and removals are mirrored regardless of it: a node hidden or deleted
+      #   in the source language is hidden or deleted in the target under either scope.
+      #
       # Each rule may set an optional `mode` (default `auto`):
       #
       #   mode: auto | ask   (optional, default: auto)
-      #     auto = synchronize inline during the publish (the command hook emits the translation commands as part of
+      #     auto = translate inline during the publish (the command hook emits the translation commands as part of
       #            the publish). No editor action needed, but the publish blocks on DeepL and a partial cascade can be
       #            interrupted by concurrent publishes.
-      #     ask  = do NOT synchronize on publish. After a successful publish the Neos UI prompts the editor with the
+      #     ask  = do NOT translate on publish. After a successful publish the Neos UI prompts the editor with the
       #            number of out-of-sync translations and a "sync now" action; the backend module lists the rule too.
-      #            The synchronization then runs in its own request via `WorkspaceSynchronizer`, so the publish stays
+      #            The translation then runs in its own request via `WorkspaceSynchronizer`, so the publish stays
       #            fast and atomic. Regardless of mode, the backend module can always trigger a manual "sync now".
       #
-      # Each rule may set an optional `onSourceRemoval` (default `keep-target`):
+      #     `mode` decides WHEN the TRANSLATION runs, never WHAT synchronization does: for the same source-side change both
+      #     modes converge on the same target state. Everything cheap happens inline on every publish for BOTH modes —
+      #     subtree tags (including deletions, see below), mirrored hard removals, and the cross-workspace rebase. Only
+      #     translating, which costs a DeepL call per node, is what `ask` defers.
       #
-      #   onSourceRemoval: keep-target | remove-target   (optional, default: keep-target)
-      #     keep-target   = leave the translated variant in place when its source node is removed; source and target may
-      #                     diverge on deletions (this is the previous, unchanged behavior).
-      #     remove-target = mirror the deletion into the target dimension. Gated by `scope`: under `Content` only content
-      #                     nodes are removed (never Documents, symmetric with "Content never auto-creates Documents"),
-      #                     under `Document` Documents are removed too. For `auto` rules the removal happens inline on
-      #                     publish; for `ask` rules and the manual CLI it is reconciled on the deliberate "sync now" run.
-      #                     A Document kept under `Content` keeps its whole translated subtree: removing a source
-      #                     Document leaves the translated page intact rather than emptying it, so the two paths agree
-      #                     and an editor's target-only page (which `Content` scope expects) is never gutted. Content
-      #                     removed inside a Document that still exists in the source IS mirrored, as you would expect.
+      #     The one difference that remains is coverage — the publish-driven run sees just that publish's delta, while a
+      #     deliberate "sync now" / CLI run diffs the whole target dimension against the source and so also catches up on
+      #     changes no publish carried (made before the rule existed, or outside a publish).
       #
-      # Each rule may set an optional `onSourceTagging` (default `keep-target`):
+      # SUBTREE TAGS AND DELETIONS are always synchronized; there is nothing to configure.
       #
-      #   onSourceTagging: keep-target | sync-to-target   (optional, default: keep-target)
-      #     keep-target    = leave the target's subtree tags alone; the target dimension manages its own visibility (a
-      #                      reviewer can hide/show translated nodes independently). The previous, unchanged behavior.
-      #     sync-to-target = mirror source-language subtree-tag changes (e.g. the `disabled` hide/show tag) into the
-      #                      target dimension. Applies to any node type (NOT gated by `scope`) and is idempotent (a tag
-      #                      already matching the target's explicit state is skipped). Like `onSourceRemoval`, `auto`
-      #                      rules mirror inline on publish (from the publish's own tag events) while `ask` rules and
-      #                      the manual CLI reconcile on the deliberate "sync now" run (by diffing the target's
-      #                      explicit tags against the source).
+      #   Source-language subtree-tag changes — the `disabled` hide/show tag, the `removed` soft-removal tag, and any
+      #   custom `SubtreeTag` — are mirrored onto the target variant. The mirror is idempotent (a tag already matching the
+      #   target's explicit state is skipped) and only EXPLICIT tags are mirrored, since inherited ones reproduce
+      #   themselves once their tagged ancestor is reconciled.
+      #
+      #   Deleting a node IS a tag change: Neos 9.1 soft-removes by tagging `removed` rather than destroying the node, so
+      #   deletions ride this same mirror. Restoring a node from the trash bin mirrors back the other way. When a soft
+      #   removal becomes a hard one is Neos's own `SoftRemovalGarbageCollector`'s business, per dimension — not
+      #   synchronization's. A hard `RemoveNodeAggregate` that a publish happens to carry is mirrored too.
+      #
+      #   Because the source owns the target's tag state, hiding or deleting ONLY the translation does not stick: the next
+      #   synchronization converges it back onto the source. There is no per-rule opt-out — if a dimension needs its own
+      #   independent visibility, do not point a rule at it.
       #
       # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
       # hook then iterates the stale-translation records already recorded for the rule's
@@ -201,8 +208,6 @@ Sitegeist:
       #    targetDimension: de
       #    scope: Document
       #    mode: auto
-      #    onSourceRemoval: keep-target
-      #    onSourceTagging: keep-target
 
 Neos:
   Flow:

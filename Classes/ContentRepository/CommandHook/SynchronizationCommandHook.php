@@ -32,6 +32,7 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeVariantSelectionStrategy;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
+use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationFinder;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
@@ -39,8 +40,6 @@ use Sitegeist\LostInTranslation\Domain\CrossWorkspaceSynchronizationTarget;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\NodeTreeDepth;
 use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
-use Sitegeist\LostInTranslation\Domain\SourceRemovalBehavior;
-use Sitegeist\LostInTranslation\Domain\SourceTaggingBehavior;
 use Sitegeist\LostInTranslation\Domain\StaleRecordReconciler;
 use Sitegeist\LostInTranslation\Domain\SynchronizationMode;
 use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
@@ -63,6 +62,14 @@ use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
  *  - {@see SynchronizationScope::Document} mirrors the whole structure (documents AND content).
  *  - {@see SynchronizationScope::Content} only acts on records whose containing Document already exists in the target
  *    dimension, and never creates Document variants automatically.
+ *
+ * Alongside the translation, two mirrors converge the target onto the source from this publish's own events, and both
+ * run for **either** mode — {@see SynchronizationMode::Ask} defers only the (DeepL-bound) translation:
+ *  - subtree tags ({@see self::taggingCommandsForRule()}), which is also how deletions arrive, since Neos 9.1 deletes by
+ *    soft-removing (a `removed` tag);
+ *  - hard removals ({@see self::removalCommandsForRule()}), for the removals a publish carries directly.
+ * Neither is scope-gated: `scope` decides what synchronization creates, not what it converges. Mirroring is
+ * unconditional — there is no per-rule opt-out, because the target dimension is a projection of the source.
  *
  * Emitted commands are ordered ancestor-before-descendant (by source-tree depth) so a parent `CreateNodeVariant` —
  * which materialises tethered descendants such as a document's content collection — is dispatched before a deeper
@@ -201,37 +208,46 @@ final class SynchronizationCommandHook implements CommandHookInterface
             if (!$this->rebaseTargetOntoSource($rule)) {
                 continue;
             }
-            // `ask` rules defer the actual translation to a deliberate manual sync (Neos UI prompt / backend module
-            // "sync now") so the publish stays fast. The rebase above already refreshed their status; nothing more to
-            // do inline — removals and tag changes are reconciled by that same manual sync too.
-            if ($rule->mode === SynchronizationMode::Ask) {
-                continue;
-            }
 
             // Read the rule's source + target subgraphs ONCE here and pass them down, so the translation, tagging and
             // removal passes do not each re-fetch them on this (always-on) publish path.
             $contentGraph = $this->contentGraphReadModel->getContentGraph(WorkspaceName::fromString($rule->targetWorkspaceName));
+            // Source side EXCLUDES soft-removed nodes: in Neos 9.1 deleting a node tags it `removed`, so a soft-removed
+            // source node is a DELETED node — never a translation source. (The deletion itself reaches the target via
+            // the tag mirror below, which reads the publish's events rather than this subgraph.) The target side uses
+            // FULL visibility — `createEmpty()`, since `withoutRestrictions()` despite its name excludes `removed` — so a
+            // soft-removed target node stays reachable: it must not read as "absent" (which would emit a
+            // CreateNodeVariant for a variant that exists) and it must be untaggable when the source is restored.
             $sourceSubgraph = $contentGraph->getSubgraph(
                 DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->sourceDimension]),
-                VisibilityConstraints::withoutRestrictions(),
+                NeosVisibilityConstraints::excludeRemoved(),
             );
             $targetSubgraph = $contentGraph->getSubgraph(
                 DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]),
-                VisibilityConstraints::withoutRestrictions(),
+                VisibilityConstraints::createEmpty(),
             );
 
-            $translationCommands = $this->commandsForRule($rule, $sourceSubgraph, $targetSubgraph);
-            // Mirror source-language tag changes when the rule opts in. The plannedVariantCreationIds let us also tag a
-            // node created in THIS publish — its variant does not exist yet when we build the batch, but the CR
-            // dispatches the create before our tag (see the fixed assembly order below).
-            $tagCommands = $rule->onSourceTagging === SourceTaggingBehavior::SyncToTarget
-                ? $this->taggingCommandsForRule($rule, $mirrorEvents['taggings'], $this->plannedVariantCreationIds($translationCommands), $targetSubgraph)
-                : [];
-            // Mirror source-language deletions when the rule opts in. Cheap and precise: only this publish's own removal
-            // events are inspected, never walking the target tree (that is the manual sync's job).
-            $removalCommands = $rule->onSourceRemoval === SourceRemovalBehavior::RemoveTarget
-                ? $this->removalCommandsForRule($rule, $mirrorEvents['removals'], $targetSubgraph)
-                : [];
+            // Tag and removal mirroring run for BOTH modes: `mode` defers only the (expensive, DeepL-bound) translation.
+            // Mirroring is cheap — it inspects this publish's own events and never walks the target tree — and deferring
+            // it would leave an `ask` rule with pending work that nothing prompts for, since the out-of-sync status
+            // counts stale-translation rows only (a hide or a deletion produces none).
+            $translationCommands = $rule->mode === SynchronizationMode::Ask
+                ? []
+                : $this->commandsForRule($rule, $sourceSubgraph, $targetSubgraph);
+            // The plannedVariantCreationIds let us also tag a node created in THIS publish — its variant does not exist
+            // yet when we build the batch, but the CR dispatches the create before our tag (see the assembly order
+            // below). For an `ask` rule the list is empty, so a node it did not create is left to the manual sync.
+            $tagCommands = $this->taggingCommandsForRule(
+                $rule,
+                $mirrorEvents['taggings'],
+                $this->plannedVariantCreationIds($translationCommands),
+                $sourceSubgraph,
+                $targetSubgraph,
+            );
+            // Mirror source-language HARD deletions. The editor flow soft-removes (handled by the tag mirror above), so
+            // this covers hard removals a publish carries — e.g. a fixture or a script issuing RemoveNodeAggregate.
+            // Cheap and precise: only this publish's own removal events are inspected, never walking the target tree.
+            $removalCommands = $this->removalCommandsForRule($rule, $mirrorEvents['removals'], $targetSubgraph);
 
             // Assemble in a FIXED order — this is the load-bearing ordering contract, kept in one place rather than
             // relying on the append order of scattered branches. The CR dispatches the returned batch sequentially:
@@ -316,14 +332,25 @@ final class SynchronizationCommandHook implements CommandHookInterface
     }
 
     /**
-     * Mirror this publish's source-language subtree-tag changes into the rule's target dimension. Only called for rules
-     * with {@see SourceTaggingBehavior::SyncToTarget}.
+     * Converge the rule's target dimension onto the source's subtree tags, driven by this publish's own tag events.
+     * Always runs for a matching rule (there is no opt-out) and for both modes.
      *
-     * For each tag/untag that affected the rule's SOURCE dimension, emit the matching {@see TagSubtree} /
-     * {@see UntagSubtree} for the target variant. Not gated by {@see SynchronizationScope} — a hidden Document should
-     * hide in the target whether the rule mirrors structure or only content. The emit is idempotent: the CR throws when
-     * tagging an already-explicitly-tagged node (or untagging one that is not), so we skip a command whose target is
-     * already in the desired explicit state — which also makes re-publishes safe.
+     * Two kinds of event matter, and both end at the same place — the target's tag state equals the source's:
+     *
+     *  - **The event touched the SOURCE dimension** (someone hid, deleted or tagged the source node): mirror the event's
+     *    own direction onto the target variant.
+     *  - **The event touched ONLY the TARGET dimension** (someone hid, deleted or tagged the *translation* directly):
+     *    converge that one tag back onto whatever the source currently says. The source language is the single source of
+     *    truth for the target's tags, so a target-side tag change is reverted — which is exactly what the deliberate
+     *    "sync now" diff ({@see \Sitegeist\LostInTranslation\Domain\TargetTagReconciler}) does to the same node. Handling
+     *    it here keeps the two paths in step without walking the target tree: the event is already in the publish delta.
+     *    A node with no source counterpart at all is skipped — nothing to converge onto, and an editor-owned target-only
+     *    node is none of synchronization's business.
+     *
+     * Not gated by {@see SynchronizationScope}: the scope decides what synchronization *creates*, and a node hidden or
+     * deleted in the source language should be hidden or deleted in the target either way. The emit is idempotent: the CR
+     * throws when tagging an already-explicitly-tagged node (or untagging one that is not), so we skip a command whose
+     * target is already in the desired explicit state — which also makes re-publishes safe.
      *
      * `$plannedVariantCreationIds` are the nodes a `CreateNodeVariant` earlier in THIS batch will materialise. Their
      * target variant does not exist yet when we build the batch, but the CR dispatches the create before our tagging
@@ -338,6 +365,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
         SynchronizationRule $rule,
         array $taggingEvents,
         array $plannedVariantCreationIds,
+        ContentSubgraphInterface $sourceSubgraph,
         ContentSubgraphInterface $targetSubgraph,
     ): array {
         if ($taggingEvents === []) {
@@ -349,18 +377,38 @@ final class SynchronizationCommandHook implements CommandHookInterface
 
         $commands = [];
         foreach ($taggingEvents as $tagging) {
-            // Only mirror tag changes that touched the SOURCE language. A tag applied directly to the target variant
-            // leaves the source DSP out of the affected set and must not bounce back.
-            if (!$tagging->affectedDimensionSpacePoints->contains($sourceDsp)) {
+            $affectsSource = $tagging->affectedDimensionSpacePoints->contains($sourceDsp);
+            $affectsTarget = $tagging->affectedDimensionSpacePoints->contains($targetDsp);
+            if (!$affectsSource && !$affectsTarget) {
+                // A third language's tag change; this rule has no business with it.
                 continue;
             }
+
+            // Normalise both kinds of event into the one question that matters: should the target variant carry this tag
+            // explicitly, or not?
+            if ($affectsSource) {
+                // The source language changed — mirror its direction.
+                $desiredTagged = $tagging instanceof SubtreeWasTagged;
+            } else {
+                // Only the translation changed. Converge onto the source's CURRENT explicit state rather than inverting
+                // the event: reading the source is what makes this order-independent, and it is precisely what the
+                // "sync now" diff computes for the same node.
+                $sourceNode = $sourceSubgraph->findNodeById($tagging->nodeAggregateId);
+                if ($sourceNode === null) {
+                    // No source counterpart (or the source node is itself soft-removed): nothing to converge onto, and
+                    // an editor-owned target-only node is none of synchronization's business.
+                    continue;
+                }
+                $desiredTagged = $sourceNode->tags->withoutInherited()->contain($tagging->tag);
+            }
+
             $targetNode = $targetSubgraph->findNodeById($tagging->nodeAggregateId);
             if ($targetNode === null) {
                 // The target variant does not exist yet. If a CreateNodeVariant in this batch will materialise it (the
-                // CR dispatches that create before this command), mirror an ADD onto the soon-to-exist, untagged
-                // variant. An untag has nothing to act on and is skipped. A node neither present nor being created
-                // cannot be tagged here — a later tag-only publish or a manual sync reconciles it.
-                if ($tagging instanceof SubtreeWasTagged && isset($plannedVariantCreationIds[$tagging->nodeAggregateId->value])) {
+                // CR dispatches that create before this command), tag the soon-to-exist, untagged variant. An untag has
+                // nothing to act on and is skipped. A node neither present nor being created cannot be tagged here — a
+                // later tag-only publish or a manual sync reconciles it.
+                if ($desiredTagged && isset($plannedVariantCreationIds[$tagging->nodeAggregateId->value])) {
                     $commands[] = TagSubtree::create(
                         $targetWorkspace,
                         $tagging->nodeAggregateId,
@@ -371,43 +419,45 @@ final class SynchronizationCommandHook implements CommandHookInterface
                 }
                 continue;
             }
-            // Compare against the target's EXPLICIT tags (inherited ones cannot be (un)tagged): skip when already in the
-            // desired state so we never trip SubtreeIsAlreadyTagged / SubtreeIsNotTagged.
-            $explicitlyTagged = $targetNode->tags->withoutInherited()->contain($tagging->tag);
-            if ($tagging instanceof SubtreeWasTagged) {
-                if ($explicitlyTagged) {
-                    continue;
-                }
-                $commands[] = TagSubtree::create(
-                    $targetWorkspace,
-                    $tagging->nodeAggregateId,
-                    $targetDsp,
-                    NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
-                    $tagging->tag,
-                );
-            } else {
-                if (!$explicitlyTagged) {
-                    continue;
-                }
-                $commands[] = UntagSubtree::create(
-                    $targetWorkspace,
-                    $tagging->nodeAggregateId,
-                    $targetDsp,
-                    NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
-                    $tagging->tag,
-                );
+
+            // Compare against the target's EXPLICIT tags (inherited ones cannot be (un)tagged) and skip when already in
+            // the desired state, so we never trip SubtreeIsAlreadyTagged / SubtreeIsNotTagged. This is also what makes
+            // the converge branch a no-op when the target-side change happened to agree with the source.
+            if ($desiredTagged === $targetNode->tags->withoutInherited()->contain($tagging->tag)) {
+                continue;
             }
+            $commands[] = $desiredTagged
+                ? TagSubtree::create(
+                    $targetWorkspace,
+                    $tagging->nodeAggregateId,
+                    $targetDsp,
+                    NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+                    $tagging->tag,
+                )
+                : UntagSubtree::create(
+                    $targetWorkspace,
+                    $tagging->nodeAggregateId,
+                    $targetDsp,
+                    NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
+                    $tagging->tag,
+                );
         }
         return $commands;
     }
 
     /**
-     * Mirror this publish's source-language removals into the rule's target dimension — the deletion-side counterpart of
-     * {@see self::commandsForRule()}. Only called for rules with {@see SourceRemovalBehavior::RemoveTarget}.
+     * Mirror this publish's source-language HARD removals into the rule's target dimension. Always runs for a matching
+     * rule, for both modes.
+     *
+     * Note this is not the editor's delete path: in Neos 9.1 deleting a node in a workspace SOFT-removes it (a `removed`
+     * subtree tag), which reaches the target via {@see self::taggingCommandsForRule()} and is later turned into a hard
+     * removal, per dimension, by Neos's own `SoftRemovalGarbageCollector`. What lands here is a hard removal a publish
+     * carries — a fixture or a script issuing `RemoveNodeAggregate` directly.
      *
      * For each removal that actually touched the rule's SOURCE dimension we emit one `RemoveNodeAggregate` for the
      * target variant. Removing the (subtree-root) target node is enough — the Content Repository cascades descendant
-     * removal in the target dimension, mirroring how the CR emits only the one removal event on the source side.
+     * removal in the target dimension, mirroring how the CR emits only the one removal event on the source side. Not
+     * gated by {@see SynchronizationScope}, which governs what synchronization *creates*.
      *
      * @param list<NodeAggregateWasRemoved> $removalEvents
      * @return list<RemoveNodeAggregate>
@@ -424,9 +474,8 @@ final class SynchronizationCommandHook implements CommandHookInterface
         $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimension->id->value => $rule->targetDimension]);
         $targetWorkspace = WorkspaceName::fromString($rule->targetWorkspaceName);
 
-        // First pass: collect every removal that should mirror into the target — source language affected, target
-        // variant still present, scope permits removing this node type. Keep the ids so the second pass can drop
-        // descendants.
+        // First pass: collect every removal that should mirror into the target — source language affected and target
+        // variant still present. Keep the ids so the second pass can drop descendants.
         /** @var list<NodeAggregateId> $candidates */
         $candidates = [];
         /** @var array<string,true> $candidateIds */
@@ -440,13 +489,7 @@ final class SynchronizationCommandHook implements CommandHookInterface
             }
             // The target variant may already be gone — e.g. the source removal used `allVariants`, which the
             // rebase-onto-source above already replayed onto the target dimension. Nothing left to mirror.
-            $targetNode = $targetSubgraph->findNodeById($removed->nodeAggregateId);
-            if ($targetNode === null) {
-                continue;
-            }
-            $nodeType = $this->nodeTypeManager->getNodeType($targetNode->nodeTypeName);
-            $isDocument = $nodeType !== null && $nodeType->isOfType('Neos.Neos:Document');
-            if (!$rule->scope->mayRemoveNode($isDocument)) {
+            if ($targetSubgraph->findNodeById($removed->nodeAggregateId) === null) {
                 continue;
             }
             $candidates[] = $removed->nodeAggregateId;

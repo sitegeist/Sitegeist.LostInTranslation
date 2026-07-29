@@ -48,13 +48,17 @@ final class TargetTagReconciler
         DimensionSpacePoint $targetDimensionSpacePoint,
         WorkspaceName $targetWorkspaceName,
     ): array {
+        // FULL visibility on both sides — `createEmpty()`, not `withoutRestrictions()`, which despite its name excludes
+        // the `removed` tag. Soft-removed nodes are exactly what this reconcile has to see: a deleted source node must
+        // still be readable for its `removed` tag to be mirrored, and a soft-removed TARGET node must still be reachable
+        // so it can be untagged when the source is restored from the trash bin.
         $targetSubgraph = $targetContentGraph->getSubgraph(
             $targetDimensionSpacePoint,
-            VisibilityConstraints::withoutRestrictions(),
+            VisibilityConstraints::createEmpty(),
         );
         $sourceSubgraph = $sourceContentGraph->getSubgraph(
             $sourceDimensionSpacePoint,
-            VisibilityConstraints::withoutRestrictions(),
+            VisibilityConstraints::createEmpty(),
         );
 
         $commands = [];

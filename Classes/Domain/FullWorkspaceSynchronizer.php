@@ -15,6 +15,7 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindRootNodeAggregatesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
+use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
@@ -38,11 +39,17 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFac
  *     full-properties `SetNodeProperties` automatically.
  *   - target variant absent + tethered → skip; the tethered variant is created (and translated) by its non-tethered
  *     ancestor's `CreateNodeVariant` cascade.
- *   - target variant present + `$skipExisting` + no stale row → skip (keep manual edits).
- *   - target variant present otherwise (i.e. `!$skipExisting`, OR a stale record exists) → translated
+ *   - target variant present + `$skipExisting` + no stale row → skip.
+ *   - target variant present otherwise (i.e. the default `!$skipExisting`, OR a stale record exists) → translated
  *     `SetNodeProperties` for *every* translatable property. This applies to tethered children too: once their variant
  *     exists, a property change on the source is refreshed directly. The stale-record case is the load-bearing
  *     override: a stale node is always refreshed even under `$skipExisting`.
+ *
+ * `$skipExisting` defaults to **false**, i.e. `--full` re-translates every existing target variant. It is the deliberate
+ * exception to "the target dimension is a projection of the source": switching it on preserves target-side property edits
+ * on nodes the source has not touched, at the cost of no longer converging them. It exists because re-asserting a
+ * property costs a DeepL call per node, unlike re-asserting a tag — so on a large workspace the cheap-but-divergent run
+ * is sometimes what you want. Opt in with the CLI's `--skip-existing`.
  *
  * Sole entry point {@see self::synchronizeWorkspaceFull} (CLI `synchronize --full`) dispatches inline, delegating
  * per-node decisions to {@see self::decideCommandForNode} and traversal to {@see self::traverseSourceSubtrees}.
@@ -83,11 +90,8 @@ class FullWorkspaceSynchronizer
         DimensionSpacePoint $sourceDimensionSpacePoint,
         WorkspaceName $targetWorkspaceName,
         DimensionSpacePoint $targetDimensionSpacePoint,
-        bool $skipExisting = true,
+        bool $skipExisting = false,
         bool $dryRun = false,
-        bool $removeOrphans = false,
-        SynchronizationScope $removalScope = SynchronizationScope::Document,
-        bool $syncTags = false,
     ): WorkspaceSynchronizationResult {
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
@@ -155,7 +159,7 @@ class FullWorkspaceSynchronizer
         $nodeTypeManager = $cr->getNodeTypeManager();
 
         $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
-        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, VisibilityConstraints::createEmpty());
 
         $perNodeResults = [];
         foreach ($this->traverseSourceSubtrees($sourceContentGraph, $sourceSubgraph) as $node) {
@@ -201,46 +205,23 @@ class FullWorkspaceSynchronizer
             }
         }
 
-        // Deletion-side reconcile (opt-in): remove target-dimension nodes whose source variant no longer exists. The
-        // full run already holds both subgraphs, so it diffs them directly. See TargetOrphanCollector for scope gating.
-        if ($removeOrphans) {
-            $orphanRemovals = TargetOrphanCollector::collect(
-                $targetContentGraph,
-                $targetSubgraph,
-                $sourceSubgraph,
-                $nodeTypeManager,
-                $removalScope,
-                $targetWorkspaceName,
-                $targetDimensionSpacePoint,
-            );
-            $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
-                $cr,
-                $this->aiCommandDispatcher,
-                $orphanRemovals,
-                $dryRun,
-                static fn (int $commandCount): RetranslationResult => RetranslationResult::removed(),
-            ));
-        }
-
-        // Tag reconcile (opt-in): converge each target node's explicit subtree tags onto the source by diffing the two
-        // dimensions. Content graphs are re-read so variants created earlier in this run are included. See
-        // TargetTagReconciler.
-        if ($syncTags) {
-            $tagCommands = TargetTagReconciler::collect(
-                $cr->getContentGraph($targetWorkspaceName),
-                $cr->getContentGraph($sourceWorkspaceName),
-                $sourceDimensionSpacePoint,
-                $targetDimensionSpacePoint,
-                $targetWorkspaceName,
-            );
-            $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
-                $cr,
-                $this->aiCommandDispatcher,
-                $tagCommands,
-                $dryRun,
-                static fn (int $commandCount): RetranslationResult => RetranslationResult::tagged($commandCount),
-            ));
-        }
+        // Tag reconcile: converge each target node's explicit subtree tags onto the source by diffing the two dimensions
+        // — hide/show, the `removed` soft-removal tag (i.e. deletions and restores) and any other tag. Unconditional,
+        // like everywhere else: the target dimension is a projection of the source. Content graphs are re-read so
+        // variants created earlier in this run are included. See TargetTagReconciler.
+        $tagCommands = TargetTagReconciler::collect(
+            $cr->getContentGraph($targetWorkspaceName),
+            $cr->getContentGraph($sourceWorkspaceName),
+            $sourceDimensionSpacePoint,
+            $targetDimensionSpacePoint,
+            $targetWorkspaceName,
+        );
+        $perNodeResults = array_merge($perNodeResults, MirroredCommandDispatcher::dispatch(
+            $cr,
+            $this->aiCommandDispatcher,
+            $tagCommands,
+            $dryRun,
+        ));
 
         return new WorkspaceSynchronizationResult($perNodeResults);
     }

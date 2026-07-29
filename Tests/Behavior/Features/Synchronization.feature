@@ -550,9 +550,10 @@ Feature: Automatic retranslation on workspace publish
       | originDimensionSpacePoint                           | {"language": "de"}           |
       | propertyValues.autoTranslatableStringProperty.value | "Parent Doc Text translated" |
 
-  Scenario: Full sync with default skip-existing leaves already-translated subtrees untouched
-    # One subtree is pre-translated (variant exists, de stale already cleared); another is fresh. Default
-    # skip-existing=true skips the already-translated one and only builds the missing variant.
+  Scenario: Full sync with --skip-existing leaves already-translated subtrees untouched
+    # One subtree is pre-translated (variant exists, de stale already cleared); another is fresh. `--skip-existing` is
+    # the opt-in escape hatch: it skips the already-translated one and only builds the missing variant, preserving any
+    # target-side edit on it. Without the flag (the default, next scenario) both subtrees are re-translated.
     When I am in workspace "live"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
@@ -578,7 +579,7 @@ Feature: Automatic retranslation on workspace publish
       | live          | {"language":"es"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
-    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} keeping existing variants
 
     # nody-mc-nodeface subtree's de rows cleared; sir-david subtree untouched (was already done); all es rows
     # remain.
@@ -609,8 +610,10 @@ Feature: Automatic retranslation on workspace publish
       | propertyValues.inlineEditableStringProperty.value   | "Face Text translated"  |
       | propertyValues.autoTranslatableStringProperty.value | "Face Other translated" |
 
-  Scenario: Full sync with skipExisting=false re-translates existing variants too
-    # A manually-overridden de variant gets clobbered by re-translation of the current en source.
+  Scenario: Full sync re-translates existing variants by default
+    # A manually-overridden de variant gets clobbered by re-translation of the current en source. That is the intended
+    # model — the target dimension is a projection of the source, so target-side edits are overwritten — and it is why
+    # this is the default rather than something you opt into.
     When I am in workspace "live"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                                                                          | tetheredDescendantNodeAggregateIds |
@@ -636,7 +639,7 @@ Feature: Automatic retranslation on workspace publish
       | originDimensionSpacePoint | {"language": "de"}                                                                                  |
       | propertyValues            | {"inlineEditableStringProperty": "Hand Crafted DE", "autoTranslatableStringProperty": "Hand Other"} |
 
-    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} including existing variants
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
 
     # cs-identifier event timeline:
     #   0   ContentStreamWasCreated (Background)
@@ -1674,10 +1677,11 @@ Feature: Automatic retranslation on workspace publish
     Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
     And the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0
 
-  Scenario: Removing a content node in the source language removes its target-language variant on publish (auto, remove-target)
-    # The `live → live/es` Document rule is `onSourceRemoval: remove-target`. Publishing auto-creates the es variant;
-    # removing the EN (source) variant and re-publishing makes the auto-sync hook mirror the deletion into es from this
-    # publish's own NodeAggregateWasRemoved event.
+  Scenario: Hard-removing a content node in the source language removes its target-language variant on publish
+    # A HARD removal (`RemoveNodeAggregate`) is not the editor's delete path — Neos 9.1 soft-removes, see the
+    # soft-removal scenarios below — but a fixture or a script can issue one, and a publish carries it. Publishing
+    # auto-creates the es variant; hard-removing the EN (source) variant and re-publishing makes the hook mirror the
+    # deletion into es from this publish's own NodeAggregateWasRemoved event. Mirroring is unconditional (no rule flag).
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
@@ -1702,7 +1706,9 @@ Feature: Automatic retranslation on workspace publish
     Then I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"en"}
     And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"es"}
 
-  Scenario: Removing a Document in the source language removes the target-language Document on publish (auto, Document scope)
+  Scenario: Hard-removing a Document in the source language removes the target-language Document on publish
+    # Not gated by `scope`: the scope governs what synchronization CREATES, so a Document removed in the source is
+    # removed in the target under either scope.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                      |
@@ -1726,47 +1732,11 @@ Feature: Automatic retranslation on workspace publish
     # Document scope mirrors the Document deletion into es.
     Then I expect node "home" to be absent in workspace "live" dimension space point {"language":"es"}
 
-  Scenario: Manual orphan removal respects scope — Content keeps Documents, Document removes them; keep-target leaves them
-    # Build orphans by creating es variants and then removing their EN source. The deliberate "sync now" diff path
-    # (WorkspaceSynchronizer) reconciles deletions; the scope gates which node types it removes. A plain sync (no
-    # removal) is the keep-target control.
-    When I am in workspace "user-workspace"
-    And the following CreateNodeAggregateWithNode commands are executed:
-      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
-      | home            | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Home"}  |
-      | intro           | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Intro"} |
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    Then I expect node "home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
-    And I expect node "intro" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
-    # Remove BOTH EN source variants, orphaning the es variants.
-    When the command RemoveNodeAggregate is executed with payload:
-      | Key                          | Value                |
-      | workspaceName                | "user-workspace"     |
-      | nodeAggregateId              | "home"               |
-      | coveredDimensionSpacePoint   | {"language":"en"}    |
-      | nodeVariantSelectionStrategy | "allSpecializations" |
-    And the command RemoveNodeAggregate is executed with payload:
-      | Key                          | Value                |
-      | workspaceName                | "user-workspace"     |
-      | nodeAggregateId              | "intro"              |
-      | coveredDimensionSpacePoint   | {"language":"en"}    |
-      | nodeVariantSelectionStrategy | "allSpecializations" |
-    # keep-target control: a plain sync leaves both es orphans intact.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    Then I expect node "home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
-    And I expect node "intro" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
-    # Content scope: the content orphan is removed, the Document orphan is kept.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
-    Then I expect node "intro" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
-    And I expect node "home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Home translated"
-    # Document scope: the Document orphan is removed too.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document"
-    Then I expect node "home" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
-
-  Scenario: An `ask` remove-target rule defers deletion to the manual sync, not the publish
-    # The `live → live/de` rule is `ask` + `remove-target`. Same-workspace, so (unlike a cross-workspace rule) no
-    # force-rebase drops the orphaned de peer on publish — the deletion mirror is the ONLY thing that would remove it,
-    # and `ask` defers that mirror to the deliberate manual sync.
+  Scenario: Deleting a node in the source language mirrors the soft removal into the target on publish
+    # THE editor delete path. Deleting a node in a workspace soft-removes it (a `removed` subtree tag) rather than
+    # issuing a hard RemoveNodeAggregate, which Neos considers undesirable outside `live`. Publishing carries the
+    # SubtreeWasTagged event, so the deletion reaches the target dimension through the TAG mirror — no separate removal
+    # feature involved. Neos's own SoftRemovalGarbageCollector later turns each dimension's soft removal into a hard one.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
@@ -1775,29 +1745,123 @@ Feature: Automatic retranslation on workspace publish
       | Key                | Value            |
       | workspaceName      | "user-workspace" |
       | newContentStreamId | "user-cs-id-2"   |
-    # Translate the de variant via a manual sync (the `ask` rule does not auto-translate on publish).
-    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
-    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
-    # Remove the source (en) variant and publish. The `ask` rule must NOT remove the de variant on publish.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to not be tagged "removed"
+    # Delete the EN (source) variant the way an editor does, then publish.
     When I am in workspace "user-workspace"
-    And the command RemoveNodeAggregate is executed with payload:
-      | Key                          | Value                    |
-      | workspaceName                | "user-workspace"         |
-      | nodeAggregateId              | "sir-david-nodenborough" |
-      | coveredDimensionSpacePoint   | {"language":"en"}        |
-      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    And the node "sir-david-nodenborough" is deleted in workspace "user-workspace" dimension space point {"language":"en"}
     When the command PublishWorkspace is executed with payload:
       | Key                | Value            |
       | workspaceName      | "user-workspace" |
       | newContentStreamId | "user-cs-id-3"   |
-    # Deferred: the de variant is still present after the publish (the es auto rule did mirror its own removal).
-    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
-    And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"es"}
-    # The deliberate manual sync (the deferred "sync now") reconciles the deletion.
-    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"} removing orphans with scope "Document"
-    Then I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
+    # The es variant is soft-removed too.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to be tagged "removed"
+    # Restoring the source from the trash bin mirrors back the other way.
+    When I am in workspace "user-workspace"
+    And the node "sir-david-nodenborough" is restored in workspace "user-workspace" dimension space point {"language":"en"}
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-4"   |
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to not be tagged "removed"
 
-  Scenario: Removing a Document and a node inside it in the same publish mirrors as a single subtree removal (auto, remove-target)
+  Scenario: An `ask` rule mirrors a deletion on publish and defers only the translation
+    # `mode` decides WHEN the translation runs, never what synchronization does. The `live → live/de` rule is `ask`:
+    # publishing does not translate into de, but tag mirroring — and therefore deletion — is cheap and happens inline for
+    # both modes. Deferring it would leave an `ask` rule with pending work nothing prompts for, since the out-of-sync
+    # status counts stale-translation rows and a deletion produces none.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # The `ask` rule did NOT translate into de on publish — that is the one thing the mode defers.
+    Then I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
+    # Translate the de variant via the deliberate "sync now".
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    # Now delete the source and publish. Same-workspace, so no force-rebase can drop the de peer behind the scenes: the
+    # tag mirror is the only thing that can act, and it does — inline, despite `mode: ask`.
+    When I am in workspace "user-workspace"
+    And the node "sir-david-nodenborough" is deleted in workspace "user-workspace" dimension space point {"language":"en"}
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to be tagged "removed"
+    And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to be tagged "removed"
+
+  Scenario: A deleted source node stops counting as out of sync
+    # The projection deliberately ignores tag events, so deleting a node leaves its stale rows behind — and no driver will
+    # ever satisfy them, because a deleted node is not a translation source. If the status still counted them the backend
+    # module would read "out of sync" forever and the post-publish prompt would keep asking for work that cannot complete.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                        |
+      | doomed          | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doomed"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # The `ask` rule into de left a stale row behind, so de is out of sync by one node.
+    Then the out-of-sync count from workspace "live" dimension "en" to workspace "live" dimension "de" is 1
+    # Delete the source node and publish. The row survives (the projection does not react to tag events) but is no longer
+    # counted, so nothing keeps prompting for it.
+    When I am in workspace "user-workspace"
+    And the node "doomed" is deleted in workspace "user-workspace" dimension space point {"language":"en"}
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    Then the out-of-sync count from workspace "live" dimension "en" to workspace "live" dimension "de" is 0
+    # Restoring it from the trash bin brings the pending translation back — which is why the row is filtered at read time
+    # rather than pruned from the projection.
+    When I am in workspace "user-workspace"
+    And the node "doomed" is restored in workspace "user-workspace" dimension space point {"language":"en"}
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-4"   |
+    Then the out-of-sync count from workspace "live" dimension "en" to workspace "live" dimension "de" is 1
+
+  Scenario: A soft-removed source node is not translated — on any driver
+    # A soft-removed source node is a DELETED node, so it must never be a translation source. All three drivers read the
+    # source subgraph with `excludeRemoved()` for exactly this reason; if one of them did not, an editor's deletion would
+    # keep producing translations.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
+      | doomed          | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Doomed"} |
+    # Delete it before anything ever translated it.
+    And the node "doomed" is deleted in workspace "user-workspace" dimension space point {"language":"en"}
+    # Neither the stale-driven "sync now" nor the full walk creates an es variant for it.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "doomed" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    When I full-synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "doomed" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+
+  Scenario: "Sync now" honours Content scope and never creates a Document variant
+    # `scope` has exactly one job — whether synchronization may CREATE Document variants — and every driver has to apply
+    # it. The publish hook always did; the deliberate "sync now" run did not, so clicking it created the very Documents
+    # `Content` scope exists to keep out.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                           | {"main": "page-home-main"}         |
+      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Intro"} |                                    |
+    # Content scope: the Document is absent from the target dimension, so neither it nor the content inside it is created.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} with scope "Content"
+    Then I expect node "page-home" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "intro-text" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    # Document scope creates the whole structure, which is what makes the contrast deliberate.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} with scope "Document"
+    Then I expect node "page-home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Home translated"
+    And I expect node "intro-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
+
+  Scenario: Hard-removing a Document and a node inside it in the same publish mirrors as a single subtree removal
     # Guards the auto-path removal dedup. The CR emits a standalone NodeAggregateWasRemoved for EACH explicitly removed
     # aggregate (never for cascade-removed children), so a parent + descendant removed in one publish would otherwise
     # emit two RemoveNodeAggregate commands — and the descendant's command would target a node the parent's cascade
@@ -1906,7 +1970,7 @@ Feature: Automatic retranslation on workspace publish
       | nodeVariantSelectionStrategy | "allSpecializations"     |
       | tag                          | "needs-review"           |
     # Manual sync creates the es variant AND reconciles BOTH tags onto it.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "needs-review"
     # Remove only the `disabled` tag on the source, then re-sync: the diff drops `disabled` on the target but keeps the
@@ -1918,7 +1982,7 @@ Feature: Automatic retranslation on workspace publish
       | coveredDimensionSpacePoint   | {"language":"en"}        |
       | nodeVariantSelectionStrategy | "allSpecializations"     |
       | tag                          | "disabled"               |
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "needs-review"
 
@@ -1944,31 +2008,28 @@ Feature: Automatic retranslation on workspace publish
     Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
     And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to be tagged "disabled"
 
-  Scenario: A manual sync reports how many removals and tag changes it dispatched
-    # Guards the counts the "sync now" UI / backend module surface (WorkspaceSynchronizationResult totals).
+  Scenario: A manual sync counts a mirrored deletion as a removal, not as a tag change
+    # Guards the counts the "sync now" UI / backend module surface (WorkspaceSynchronizationResult totals). Both are tag
+    # commands underneath, but the `removed` tag IS the deletion, so reporting it as "1 tag change" would tell an editor
+    # who deleted a page something they would not recognise.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
       | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Gone"}  |
       | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Stays"} |
     When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    # Orphan one node (remove its source) and tag the other in the source.
-    When the command RemoveNodeAggregate is executed with payload:
-      | Key                          | Value                    |
-      | workspaceName                | "user-workspace"         |
-      | nodeAggregateId              | "sir-david-nodenborough" |
-      | coveredDimensionSpacePoint   | {"language":"en"}        |
-      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    # Delete one source node and hide the other.
+    When the node "sir-david-nodenborough" is deleted in workspace "user-workspace" dimension space point {"language":"en"}
     And the command TagSubtree is executed with payload:
-      | Key                          | Value              |
-      | workspaceName                | "user-workspace"   |
-      | nodeAggregateId              | "nody-mc-nodeface" |
-      | coveredDimensionSpacePoint   | {"language":"en"}  |
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "nody-mc-nodeface"   |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
       | nodeVariantSelectionStrategy | "allSpecializations" |
-      | tag                          | "disabled"         |
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document" and syncing subtree tags
+      | tag                          | "disabled"           |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then the last synchronization reported 1 removal(s) and 1 tag change(s)
-    And I expect node "sir-david-nodenborough" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "removed"
     And I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
 
   Scenario: A dry-run manual sync previews removals and tag changes without dispatching them
@@ -1978,24 +2039,19 @@ Feature: Automatic retranslation on workspace publish
       | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Gone"}  |
       | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Stays"} |
     When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    When the command RemoveNodeAggregate is executed with payload:
-      | Key                          | Value                    |
-      | workspaceName                | "user-workspace"         |
-      | nodeAggregateId              | "sir-david-nodenborough" |
-      | coveredDimensionSpacePoint   | {"language":"en"}        |
-      | nodeVariantSelectionStrategy | "allSpecializations"     |
+    When the node "sir-david-nodenborough" is deleted in workspace "user-workspace" dimension space point {"language":"en"}
     And the command TagSubtree is executed with payload:
-      | Key                          | Value              |
-      | workspaceName                | "user-workspace"   |
-      | nodeAggregateId              | "nody-mc-nodeface" |
-      | coveredDimensionSpacePoint   | {"language":"en"}  |
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "nody-mc-nodeface"   |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
       | nodeVariantSelectionStrategy | "allSpecializations" |
-      | tag                          | "disabled"         |
-    When I dry-run synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document" and syncing subtree tags
+      | tag                          | "disabled"           |
+    When I dry-run synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     # The preview reports what WOULD happen ...
     Then the last synchronization reported 1 removal(s) and 1 tag change(s)
-    # ... but nothing was dispatched: the orphan is still present and the other node is still untagged.
-    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Gone translated"
+    # ... but nothing was dispatched: neither the deletion nor the hide reached the target.
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "removed"
     And I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
 
   Scenario: Re-running a tag sync is an idempotent no-op
@@ -2011,52 +2067,22 @@ Feature: Automatic retranslation on workspace publish
       | coveredDimensionSpacePoint   | {"language":"en"}        |
       | nodeVariantSelectionStrategy | "allSpecializations"     |
       | tag                          | "disabled"               |
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then the last synchronization reported 0 removal(s) and 1 tag change(s)
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
     # Second run: the target already matches the source, so the diff yields nothing — no error, no commands.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} syncing subtree tags
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then the last synchronization reported 0 removal(s) and 0 tag change(s)
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
 
-  Scenario: Content-scope orphan removal keeps a removed Document AND its whole translated subtree
-    # A Document kept under Content scope is out of scope entirely — the diff path does NOT descend into it. This is what
-    # makes the deliberate "sync now" diff path agree with the publish-driven auto path: the CR emits
-    # NodeAggregateWasRemoved only for the explicitly removed Document, so the hook never sees the cascade-removed
-    # content and leaves the translated page whole. Descending here would leave an `ask`/CLI sync with a gutted page
-    # where an `auto` publish leaves a full one.
+  Scenario: The tag reconcile never touches a node that exists only in the target dimension
+    # The tag reconcile only converges nodes present in BOTH dimensions, which is what keeps an editor-owned target-only
+    # page safe. This is structural, not a scope rule: a target-only node has no source tag state to converge onto, so
+    # there is nothing to mirror. It is also why replacing the old orphan-diff with the tag mirror removed a whole class
+    # of accidental deletion — a diff of "present in target, absent in source" cannot tell "deleted in the source" from
+    # "never in the source", and under Content scope the latter is the expected case.
     When I am in workspace "user-workspace"
-    And the following CreateNodeAggregateWithNode commands are executed:
-      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       | tetheredDescendantNodeAggregateIds |
-      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                           | {"main": "page-home-main"}         |
-      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Intro"} |                                    |
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    Then I expect node "page-home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Home translated"
-    And I expect node "intro-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
-    # Remove the source Document subtree (cascades the content's source away), orphaning both es variants.
-    When the command RemoveNodeAggregate is executed with payload:
-      | Key                          | Value                |
-      | workspaceName                | "user-workspace"     |
-      | nodeAggregateId              | "page-home"          |
-      | coveredDimensionSpacePoint   | {"language":"en"}    |
-      | nodeVariantSelectionStrategy | "allSpecializations" |
-    # Content scope keeps the orphan Document and everything below it — no removals are even dispatched.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
-    Then the last synchronization reported 0 removal(s) and 0 tag change(s)
-    And I expect node "page-home" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Home translated"
-    And I expect node "intro-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Intro translated"
-    # Document scope, by contrast, removes the Document — and the CR cascades the content below it away.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document"
-    Then I expect node "page-home" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
-    And I expect node "intro-text" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
-
-  Scenario: Content-scope orphan removal never touches an editor-created target-only Document or its content
-    # The diff (`findNodeById(...) === null`) cannot distinguish "removed in the source" from "never in the source".
-    # Under Content scope a target-only Document is an EXPECTED case — the scope exists precisely because adopting a
-    # Document into the target dimension is a deliberate manual editor action — and all content below such a page is
-    # target-only too. Descending into a kept Document would therefore empty every editor-owned page on a reconcile.
-    When I am in workspace "user-workspace"
-    # An es-only page with es-only content: no en source anywhere, so both are "orphans" by the diff's definition.
+    # An es-only page with es-only content: no en source anywhere.
     And the command CreateNodeAggregateWithNode is executed with payload:
       | Key                                | Value                                       |
       | workspaceName                      | "user-workspace"                            |
@@ -2074,32 +2100,56 @@ Feature: Automatic retranslation on workspace publish
       | parentNodeAggregateId     | "es-only-page-main"                                                    |
       | nodeTypeName              | "Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation" |
       | initialPropertyValues     | {"autoTranslatableStringProperty": "Contenido propio"}                 |
-    # Content scope leaves the whole editor-owned page alone.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Content"
+    # Even hiding the page in the target survives: without a source counterpart there is nothing to converge onto.
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "es-only-page"       |
+      | coveredDimensionSpacePoint   | {"language":"es"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+      | tag                          | "disabled"           |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then the last synchronization reported 0 removal(s) and 0 tag change(s)
     And I expect node "es-only-page" in workspace "user-workspace" dimension space point {"language":"es"} to have property "title" with value "Sólo en español"
     And I expect node "es-only-text" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Contenido propio"
-    # Document scope DOES remove it: that scope declares the target dimension a mirror of the source structure, so a
-    # target-only page is by definition out of sync. Pinned here so the difference between the scopes stays deliberate.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"} removing orphans with scope "Document"
-    Then I expect node "es-only-page" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect node "es-only-page" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
 
-  Scenario: keep-target (the default) leaves the target's subtree tags untouched
+  Scenario: A tag applied directly to the translation is reverted — the source owns the target's tags
+    # The source language is the single source of truth for the target's tag state, so hiding (or deleting) only the
+    # translation is a target-side change and gets overwritten. Both drivers do it: the publish hook converges a tag event
+    # that touched only the TARGET dimension — the event is already in the publish delta, so no tree walk is needed — and
+    # the deliberate "sync now" diff reaches the same state. That agreement is the point: `ask` and `auto` must not differ
+    # in the result. Independent target-side visibility is not supported; there is no per-rule opt-out any more.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
       | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    And the command TagSubtree is executed with payload:
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+    # To edit the auto-synced es variant an editor needs a workspace branched off `live` AFTER the sync wrote it —
+    # `user-workspace` forked before, so the es variant does not exist there at all.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value              |
+      | workspaceName      | "es-editor"        |
+      | baseWorkspaceName  | "live"             |
+      | newContentStreamId | "es-editor-cs-id"  |
+    # Hide ONLY the es translation, then publish. The publish carries a tag event whose affected dimension is es, not en.
+    When the command TagSubtree is executed with payload:
       | Key                          | Value                    |
-      | workspaceName                | "user-workspace"         |
+      | workspaceName                | "es-editor"              |
       | nodeAggregateId              | "sir-david-nodenborough" |
-      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | coveredDimensionSpacePoint   | {"language":"es"}        |
       | nodeVariantSelectionStrategy | "allSpecializations"     |
       | tag                          | "disabled"               |
-    # A plain sync (no tag syncing) must NOT mirror the source tag — the target manages its own visibility.
-    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
-    Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "es-editor"       |
+      | newContentStreamId | "es-editor-cs-id-2" |
+    # The source has no `disabled` tag, so the target is converged back onto it.
+    Then I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"es"} to not be tagged "disabled"
 
   Scenario: Cross-workspace manual sync mirrors a subtree tag into the review workspace
     When the command CreateWorkspace is executed with payload:
@@ -2122,5 +2172,5 @@ Feature: Automatic retranslation on workspace publish
       | coveredDimensionSpacePoint   | {"language":"en"}        |
       | nodeVariantSelectionStrategy | "allSpecializations"     |
       | tag                          | "disabled"               |
-    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"} syncing subtree tags
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
     Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to be tagged "disabled"
