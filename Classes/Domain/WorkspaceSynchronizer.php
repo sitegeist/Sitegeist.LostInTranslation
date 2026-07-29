@@ -154,8 +154,13 @@ class WorkspaceSynchronizer
         // is stable (>= 8.0), so records at equal depth keep their original (id) order.
         /** @var list<array{depth:int,entry:StaleTranslation}> $plannedEntries */
         $plannedEntries = [];
-        // Stale rows are flagged against the source workspace, so the slice we drive the run from keys off it.
-        foreach ($finder->findByWorkspaceAndOrigin($sourceWorkspaceName, $targetOrigin) as $entry) {
+        // Drive the run from the TARGET workspace's slice — the same slice this run clears (translating dispatches into
+        // the target, so it is the target's rows that the resulting events close) and the same one
+        // {@see SynchronizationStatusProvider} counts. Cross-workspace the source's slice would do just as well in
+        // practice, because the force-rebase above copies it wholesale onto the target
+        // ({@see StaleTranslationFinder::findByWorkspaceAndOrigin} explains the keying) — but only the target's slice
+        // converges to empty, so it is the one to read.
+        foreach ($finder->findByWorkspaceAndOrigin($targetWorkspaceName, $targetOrigin) as $entry) {
             // Skip orphaned stale rows whose aggregate no longer exists in the ContentGraph (the projection
             // does not cascade descendant cleanup on node removal — see `lostintranslation:reconcile`).
             if ($sourceContentGraph->findNodeAggregateById($entry->nodeAggregateId) === null) {

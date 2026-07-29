@@ -11,6 +11,7 @@ use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindRootNodeAggregatesFilter;
@@ -152,9 +153,10 @@ class FullWorkspaceSynchronizer
         // "does the variant already exist" answer. They are the same graph in the common single-workspace case.
         $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
         $targetContentGraph = $cr->getContentGraph($targetWorkspaceName);
-        // Stale records live alongside the source content (the projection records them in the workspace where the
-        // source was edited), so the skip-existing lookup keys off the source workspace.
-        $staleByNodeId = $this->collectStaleByNodeId($cr, $sourceContentGraph, $sourceWorkspaceName, $targetOrigin);
+        // The skip-existing lookup keys off the TARGET workspace — the slice this run clears, and the one every other
+        // reader uses. {@see StaleTranslationFinder::findByWorkspaceAndOrigin} explains why that is indistinguishable
+        // from the source's slice once the cross-workspace rebase above has run.
+        $staleByNodeId = $this->collectStaleByNodeId($cr, $sourceContentGraph, $targetWorkspaceName, $targetOrigin);
         $staleTranslationMaintenance = $cr->projectionState(StaleTranslationReadModel::class)->staleTranslationMaintenance;
         $nodeTypeManager = $cr->getNodeTypeManager();
 
@@ -299,7 +301,7 @@ class FullWorkspaceSynchronizer
      * @return \Generator<Node>
      */
     private function traverseSourceSubtrees(
-        \Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface $contentGraph,
+        ContentGraphInterface $contentGraph,
         ContentSubgraphInterface $sourceSubgraph,
     ): \Generator {
         foreach ($contentGraph->findRootNodeAggregates(FindRootNodeAggregatesFilter::create()) as $rootAggregate) {
@@ -331,7 +333,7 @@ class FullWorkspaceSynchronizer
      */
     private function collectStaleByNodeId(
         ContentRepository $cr,
-        \Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface $contentGraph,
+        ContentGraphInterface $contentGraph,
         WorkspaceName $targetWorkspaceName,
         OriginDimensionSpacePoint $targetOrigin,
     ): array {

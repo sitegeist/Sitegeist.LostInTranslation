@@ -1431,6 +1431,49 @@ Feature: Automatic retranslation on workspace publish
       | live          | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live          | {"language":"es"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
+  Scenario: A cross-workspace dry run does not rebase the target
+    # The rebase is a destructive, non-reversible mutation (new content stream, conflicting target edits dropped), so a
+    # `--dry-run` — which promises to report only — must skip it. The other dry-run scenario is same-workspace, where
+    # there is no rebase to skip, so this is the one that pins it.
+    #
+    # It also pins the mechanism the whole cross-workspace stale slice rests on. Every driver reads
+    # `findByWorkspaceAndOrigin($target, …)`, and creating a workspace copies NO stale rows — de-review is forked before
+    # the node exists in live, so it owns none. What fills them is the rebase: `WorkspaceWasRebased` makes the
+    # projection replace the rebased workspace's rows with a copy of its base's. Hence the shape below — nothing while
+    # un-rebased, the full translation once the real run rebases. Break the rebase or that projection handler and
+    # cross-workspace sync silently stops seeing work.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+
+    # Only `live` has rows — creating a workspace copies none.
+    And I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                       |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"]  |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"]  |
+
+    When I dry-run synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+    # No rebase happened: de-review still owns no rows, and live's are untouched. (The reported translation count is 0
+    # because a dry run short-circuits before deciding a command at all — it previews removals and tag changes only.)
+    Then the last synchronization reported 0 variant(s) and 0 property update(s)
+    And I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                       |
+      | live          | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"]  |
+      | live          | {"language":"es"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"]  |
+    And I expect node "sir-david-nodenborough" to be absent in workspace "de-review" dimension space point {"language":"de"}
+
+    # The contrast: the real run DOES rebase, which both materialises the node in de-review and copies live's rows
+    # across — so the same slice, read the same way, now yields the variant.
+    When I synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
+    Then the last synchronization reported 1 variant(s) and 0 property update(s)
+    And I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+
   Scenario: Cross-workspace stale-driven sync must not prune the SOURCE workspace's stale rows
     # Cross-workspace sync (live/en → de-review/de) of a Document.Page with a tethered `main` collection. The
     # collection has no translatable properties, so its stale row is structural (empty property list). The document's

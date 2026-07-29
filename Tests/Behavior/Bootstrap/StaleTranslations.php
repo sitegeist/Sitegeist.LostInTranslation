@@ -277,6 +277,30 @@ trait StaleTranslations
     }
 
     /**
+     * The translation-side counterpart of {@see self::theLastSynchronizationReportedCounts()}. Needed to assert what a
+     * DRY run would translate, where there is no dispatched command to observe on the target — only the reported count.
+     *
+     * @Then /^the last synchronization reported (\d+) variant\(s\) and (\d+) property update\(s\)$/
+     * @throws Exception
+     */
+    public function theLastSynchronizationReportedTranslationCounts(
+        string $expectedVariants,
+        string $expectedPropertyUpdates,
+    ): void {
+        Assert::assertNotNull($this->lastSynchronizationResult, 'No synchronization has run yet');
+        Assert::assertSame(
+            (int)$expectedVariants,
+            $this->lastSynchronizationResult->totalVariantCommandsDispatched(),
+            'reported variant-creation count',
+        );
+        Assert::assertSame(
+            (int)$expectedPropertyUpdates,
+            $this->lastSynchronizationResult->totalStalePropertyCommandsDispatched(),
+            'reported property-update count',
+        );
+    }
+
+    /**
      * @Then /^the last synchronization reported (\d+) removal\(s\) and (\d+) tag change\(s\)$/
      * @throws Exception
      */
