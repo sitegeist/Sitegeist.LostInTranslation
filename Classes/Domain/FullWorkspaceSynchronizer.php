@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain;
 
-use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
 use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
@@ -165,45 +164,65 @@ class FullWorkspaceSynchronizer
 
         $perNodeResults = [];
         foreach ($this->traverseSourceSubtrees($sourceContentGraph, $sourceSubgraph) as $node) {
-            $command = $this->decideCommandForNode(
+            $action = $this->decideActionForNode(
                 $nodeTypeManager,
                 $node,
                 $targetWorkspaceName,
                 $targetSubgraph,
                 $targetOrigin,
                 $staleByNodeId,
-                $sourceDeepl,
-                $targetDeepl,
                 $skipExisting,
             );
-            if ($command === null) {
-                // No command for this node — prune the stale row if no future event will ever clear it (a dry run only
-                // reports, so it must not write). See StaleRecordReconciler for the two no-op cases.
-                $stale = $staleByNodeId[$node->aggregateId->value] ?? null;
-                if (!$dryRun && $stale !== null) {
-                    StaleRecordReconciler::pruneIfUnsatisfiable(
-                        $staleTranslationMaintenance,
-                        $targetWorkspaceName,
-                        $stale,
-                        $node,
-                        $sourceSubgraph,
-                        $targetSubgraph,
-                    );
+            if ($action instanceof CreateNodeVariant) {
+                $perNodeResults[] = new PerNodeSynchronizationResult(
+                    $node->aggregateId,
+                    new RetranslationResult(stalePropertyCommandsDispatched: 0, variantCommandsDispatched: 1),
+                );
+                if (!$dryRun) {
+                    $this->aiCommandDispatcher->dispatch($cr, $action);
                 }
                 continue;
             }
-            $isVariant = $command instanceof CreateNodeVariant;
-            $perNodeResults[] = new PerNodeSynchronizationResult(
-                $node->aggregateId,
-                $dryRun
-                    ? RetranslationResult::skipped('dry-run')
-                    : new RetranslationResult(
-                        stalePropertyCommandsDispatched: $isVariant ? 0 : 1,
-                        variantCommandsDispatched: $isVariant ? 1 : 0,
-                    ),
-            );
-            if (!$dryRun) {
-                $this->aiCommandDispatcher->dispatch($cr, $command);
+            if ($action !== null) {
+                // Property update. Building the `SetNodeProperties` IS the DeepL round-trip, so a preview asks whether
+                // the source values would produce a command rather than producing one and discarding it — otherwise
+                // `--dry-run` would spend the very translation budget it exists to estimate. Both answers come from the
+                // same collect step, so the preview counts exactly the nodes the real run writes.
+                $command = $dryRun ? null : $this->stalePropertyCommandBuilder->buildSetNodeProperties(
+                    nodeTypeManager: $nodeTypeManager,
+                    sourceNode: $node,
+                    stalePropertyNames: $action,
+                    targetOrigin: $targetOrigin,
+                    sourceDeeplLanguage: $sourceDeepl,
+                    targetDeeplLanguage: $targetDeepl,
+                    targetWorkspaceName: $targetWorkspaceName,
+                );
+                $writesProperties = $dryRun
+                    ? $this->stalePropertyCommandBuilder->wouldBuildSetNodeProperties($nodeTypeManager, $node, $action)
+                    : $command !== null;
+                if ($writesProperties) {
+                    $perNodeResults[] = new PerNodeSynchronizationResult(
+                        $node->aggregateId,
+                        new RetranslationResult(stalePropertyCommandsDispatched: 1, variantCommandsDispatched: 0),
+                    );
+                    if ($command !== null) {
+                        $this->aiCommandDispatcher->dispatch($cr, $command);
+                    }
+                    continue;
+                }
+            }
+            // Nothing to do for this node — prune the stale row if no future event will ever clear it (a dry run only
+            // reports, so it must not write). See StaleRecordReconciler for the two no-op cases.
+            $stale = $staleByNodeId[$node->aggregateId->value] ?? null;
+            if (!$dryRun && $stale !== null) {
+                StaleRecordReconciler::pruneIfUnsatisfiable(
+                    $staleTranslationMaintenance,
+                    $targetWorkspaceName,
+                    $stale,
+                    $node,
+                    $sourceSubgraph,
+                    $targetSubgraph,
+                );
             }
         }
 
@@ -229,22 +248,24 @@ class FullWorkspaceSynchronizer
     }
 
     /**
-     * Decide the single command for a visited node, or null when it should be skipped (not translatable, a tethered
-     * child with no target variant yet, already in sync under `$skipExisting`, or no translatable values).
+     * Decide what a visited node needs: a ready-to-dispatch `CreateNodeVariant`, the property names to translate into
+     * an existing target variant, or null when it should be skipped (not translatable, a tethered child with no target
+     * variant yet, or already in sync under `$skipExisting`).
+     *
+     * Returning the property *names* rather than the built `SetNodeProperties` keeps the decision free of DeepL, so a
+     * dry run can reach it too — see the caller.
      *
      * @param array<string, StaleTranslation> $staleByNodeId
      */
-    private function decideCommandForNode(
+    private function decideActionForNode(
         NodeTypeManager $nodeTypeManager,
         Node $node,
         WorkspaceName $targetWorkspaceName,
         ContentSubgraphInterface $targetSubgraph,
         OriginDimensionSpacePoint $targetOrigin,
         array $staleByNodeId,
-        string $sourceDeepl,
-        string $targetDeepl,
         bool $skipExisting,
-    ): ?CommandInterface {
+    ): CreateNodeVariant|PropertyNames|null {
         $nodeType = $nodeTypeManager->getNodeType($node->nodeTypeName);
         if ($nodeType === null) {
             return null;
@@ -279,19 +300,10 @@ class FullWorkspaceSynchronizer
         }
 
         // Re-translate every translatable property (not just the stale slice).
-        $allTranslatableNames = PropertyNames::fromArray(array_map(
+        return PropertyNames::fromArray(array_map(
             static fn ($t): PropertyName => $t->propertyName,
             iterator_to_array($directive->translatablePropertyNames),
         ));
-        return $this->stalePropertyCommandBuilder->buildSetNodeProperties(
-            nodeTypeManager: $nodeTypeManager,
-            sourceNode: $node,
-            stalePropertyNames: $allTranslatableNames,
-            targetOrigin: $targetOrigin,
-            sourceDeeplLanguage: $sourceDeepl,
-            targetDeeplLanguage: $targetDeepl,
-            targetWorkspaceName: $targetWorkspaceName,
-        );
     }
 
     /**

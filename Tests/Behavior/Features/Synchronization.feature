@@ -525,8 +525,10 @@ Feature: Automatic retranslation on workspace publish
     #   2-5   NodeAggregateWithNodeWasCreated (sir-david + tethered nodewyn-tetherton, nody-mc-nodeface, parent-doc)
     #   6-7   NodePeerVariantWasCreated (sir-david + nodewyn-tetherton en→de)
     #   8-9   NodePropertiesWereSet     (sir-david de + nodewyn-tetherton de translated, CreateNodeVariant cascade)
-    #   10    NodePropertiesWereSet     (nodewyn-tetherton de re-translated — the walk's pre-fetched stale set
-    #                                    still lists it, so it is refreshed once more after the cascade)
+    #   10    NodePropertiesWereSet     (nodewyn-tetherton de re-translated — the cascade above materialised its de
+    #                                    variant mid-walk, so when the walk reaches it, it is an existing variant
+    #                                    and `--full` refreshes every existing variant. A second DeepL call for the
+    #                                    same source value.)
     #   11    NodePeerVariantWasCreated (nody-mc-nodeface en→de — the deep grandchild reached by the walk)
     #   12    NodePropertiesWereSet     (nody-mc-nodeface de translated)
     #   13    NodePeerVariantWasCreated (parent-doc en→de — the sibling document)
@@ -599,8 +601,8 @@ Feature: Automatic retranslation on workspace publish
     #   10-11 NodePeerVariantWasCreated (nody-mc-nodeface + nodenberg en→de — only the untranslated subtree is
     #                                    built)
     #   12-13 NodePropertiesWereSet     (nody-mc-nodeface de + nodenberg de translated)
-    #   14    NodePropertiesWereSet     (nodenberg de re-translated — the walk's pre-fetched stale set still
-    #                                    lists it, so it is refreshed once more after the cascade)
+    #   14    NodePropertiesWereSet     (nodenberg de re-translated — same as event 10 above: the cascade created
+    #                                    its de variant mid-walk, and `--full` refreshes every existing variant)
     # The already-translated sir-david subtree is skipped: no further events for it.
     Then I expect exactly 15 events to be published on stream "ContentStream:cs-identifier"
     And event at index 12 is of type "NodePropertiesWereSet" with payload:
@@ -1459,8 +1461,9 @@ Feature: Automatic retranslation on workspace publish
       | live          | {"language":"es"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"]  |
 
     When I dry-run synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "de-review" dimension space point {"language":"de"}
-    # No rebase happened: de-review still owns no rows, and live's are untouched. (The reported translation count is 0
-    # because a dry run short-circuits before deciding a command at all — it previews removals and tag changes only.)
+    # No rebase happened: de-review still owns no rows, and live's are untouched. The reported translation count is 0
+    # for exactly that reason — a preview reads the target's slice, and un-rebased the target has nothing in it. This
+    # is the documented cost of not rebasing: a cross-workspace preview under-reports against the real run below.
     Then the last synchronization reported 0 variant(s) and 0 property update(s)
     And I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId        | propertyNames                       |
@@ -2096,6 +2099,105 @@ Feature: Automatic retranslation on workspace publish
     # ... but nothing was dispatched: neither the deletion nor the hide reached the target.
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "removed"
     And I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
+
+  Scenario: A dry run previews the variants it would create
+    # `--dry-run` exists to answer "how much work — and how many DeepL calls — is pending" before committing to it.
+    # It used to answer 0 to everything translation-related, because both synchronizers replaced the per-node result
+    # with a "dry-run" skip before deciding anything, while still reporting removals and tag changes correctly.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                         | tetheredDescendantNodeAggregateIds |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} | {"tethered": "nodewyn-tetherton"}  |
+
+    When I reset the translation counter
+    And I dry-run synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    # One variant: the tethered child has a stale row of its own but is never counted, because it materialises with
+    # its ancestor's CreateNodeVariant rather than through a command of its own.
+    Then the last synchronization reported 1 variant(s) and 0 property update(s)
+    # Nothing was dispatched, nothing was pruned, and — the point of the flag — nothing was sent to DeepL.
+    And the translation service translated 0 text(s)
+    And I expect node "sir-david-nodenborough" to be absent in workspace "user-workspace" dimension space point {"language":"es"}
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"es"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    # The contrast that makes the preview worth trusting: the real run reports the same counts.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then the last synchronization reported 1 variant(s) and 0 property update(s)
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+
+  Scenario: A dry run counts each pending node once, not once per stale record above it
+    # The stale-driven run walks a subtree per stale record, and a record nested inside an already-translated subtree
+    # comes back a no-op because dispatching cleared its row. A preview dispatches nothing, so it clears nothing —
+    # without deduplicating, the tethered child below would be counted twice: once inside its parent's walk and once
+    # for its own record.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                         | tetheredDescendantNodeAggregateIds |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} | {"tethered": "nodewyn-tetherton"}  |
+    And I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+
+    # Both es variants now exist. Make both nodes stale again by editing the source.
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                              |
+      | nodeAggregateId           | "sir-david-nodenborough"                           |
+      | originDimensionSpacePoint | {"language": "en"}                                 |
+      | propertyValues            | {"autoTranslatableStringProperty": "Updated Text"} |
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                |
+      | nodeAggregateId           | "nodewyn-tetherton"                                  |
+      | originDimensionSpacePoint | {"language": "en"}                                   |
+      | propertyValues            | {"autoTranslatableStringProperty": "Updated Nested"} |
+
+    When I reset the translation counter
+    And I dry-run synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    # Two nodes are pending, so two property updates — not three.
+    Then the last synchronization reported 0 variant(s) and 2 property update(s)
+    And the translation service translated 0 text(s)
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+
+    # And the real run agrees, node for node.
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then the last synchronization reported 0 variant(s) and 2 property update(s)
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Updated Text translated"
+    And I expect node "nodewyn-tetherton" in workspace "user-workspace" dimension space point {"language":"es"} to have property "autoTranslatableStringProperty" with value "Updated Nested translated"
+
+  Scenario: A full-sync dry run previews every node it would touch without translating any of them
+    # `--full --dry-run` is the expensive one to get wrong: it decides a command per node in the whole source
+    # dimension, and building a translated SetNodeProperties IS the DeepL call. Deciding and then discarding would
+    # cost exactly as much as the run it is supposed to estimate.
+    When I am in workspace "live"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                | tetheredDescendantNodeAggregateIds |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation     | {"autoTranslatableStringProperty": "My Text"}        | {"tethered": "nodewyn-tetherton"}  |
+      | nody-mc-nodeface       | nodewyn-tetherton      | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Nested Text"}    |                                    |
+
+    When I reset the translation counter
+    And I dry-run full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    # Two non-tethered nodes get a variant; the tethered child rides along with its ancestor's cascade.
+    Then the last synchronization reported 2 variant(s) and 0 property update(s)
+    And the translation service translated 0 text(s)
+    And I expect node "sir-david-nodenborough" to be absent in workspace "live" dimension space point {"language":"de"}
+
+    # The real run agrees on the variants but reports one property update the preview cannot foresee: dispatching
+    # sir-david's CreateNodeVariant cascades the tethered `nodewyn-tetherton` into de mid-walk, and the walk then
+    # reaches it as an existing variant and re-translates it. A preview dispatches nothing, so that node is still
+    # absent (and tethered) when it comes past. The gap is inherent to previewing a run that reacts to its own
+    # writes, and it is bounded by the cascade — which the variant count already stands for, since cascaded
+    # translations are never counted individually either.
+    When I full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then the last synchronization reported 2 variant(s) and 1 property update(s)
+    And I expect node "sir-david-nodenborough" in workspace "live" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
+
+    # Now every de variant exists, so a second full sync re-translates them all instead of creating anything. The
+    # preview must say so — and still not translate.
+    When I reset the translation counter
+    And I dry-run full-synchronize translations from workspace "live" dimension space point {"language":"en"} to workspace "live" dimension space point {"language":"de"}
+    Then the last synchronization reported 0 variant(s) and 3 property update(s)
+    And the translation service translated 0 text(s)
 
   Scenario: Re-running a tag sync is an idempotent no-op
     When I am in workspace "user-workspace"

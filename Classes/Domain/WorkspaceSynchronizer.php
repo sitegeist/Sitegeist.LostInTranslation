@@ -182,6 +182,9 @@ class WorkspaceSynchronizer
         }
 
         $perNodeResults = [];
+        // Dry run only: ids already attributed to an earlier record's subtree — see the preview branch below.
+        /** @var array<string,true> $coveredByPreview */
+        $coveredByPreview = [];
         foreach ($plannedEntries as $plannedEntry) {
             $entry = $plannedEntry['entry'];
             // A node whose ancestor document is missing in the target and has no stale record of its
@@ -221,9 +224,32 @@ class WorkspaceSynchronizer
                 }
             }
             if ($dryRun) {
+                // Preview the very same walk without translating, dispatching or pruning, so `--dry-run` can answer
+                // "how much work (and how many DeepL calls) is pending" — the flag's main use.
+                $plan = $this->retranslator->planSubtree(
+                    contentRepositoryId: $contentRepositoryId,
+                    workspaceName: $targetWorkspaceName,
+                    nodeAggregateId: $entry->nodeAggregateId,
+                    targetDimensionSpacePoint: $targetDimensionSpacePoint,
+                    sourceWorkspaceName: $sourceWorkspaceName,
+                );
+                if ($plan->skippedReason !== null) {
+                    $perNodeResults[] = new PerNodeSynchronizationResult(
+                        $entry->nodeAggregateId,
+                        RetranslationResult::skipped($plan->skippedReason),
+                    );
+                    continue;
+                }
+                // Attribute each node to the FIRST record whose subtree covers it. The real run gets that
+                // deduplication from the projection — dispatching clears the stale row, so a record nested inside an
+                // already-translated subtree comes back a no-op — but a preview clears nothing, and would otherwise
+                // count a nested node once for its own record and again for every record above it.
                 $perNodeResults[] = new PerNodeSynchronizationResult(
                     $entry->nodeAggregateId,
-                    RetranslationResult::skipped('dry-run'),
+                    new RetranslationResult(
+                        stalePropertyCommandsDispatched: $this->countUncovered($plan->propertyUpdates, $coveredByPreview),
+                        variantCommandsDispatched: $this->countUncovered($plan->variantCreations, $coveredByPreview),
+                    ),
                 );
                 continue;
             }
@@ -257,6 +283,26 @@ class WorkspaceSynchronizer
         ));
 
         return new WorkspaceSynchronizationResult($perNodeResults);
+    }
+
+    /**
+     * How many of `$ids` were not yet seen, marking them seen. Used only by the dry-run preview to keep one node's
+     * work from being counted under several stale records.
+     *
+     * @param list<NodeAggregateId> $ids
+     * @param array<string,true> $covered
+     */
+    private function countUncovered(array $ids, array &$covered): int
+    {
+        $count = 0;
+        foreach ($ids as $id) {
+            if (isset($covered[$id->value])) {
+                continue;
+            }
+            $covered[$id->value] = true;
+            $count++;
+        }
+        return $count;
     }
 
     /**

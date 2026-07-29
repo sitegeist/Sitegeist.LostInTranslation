@@ -161,7 +161,10 @@ class LostInTranslationCommandController extends CommandController
      * @param string $targetWorkspace Target workspace the translation commands are dispatched into.
      * @param string $targetDimension Target language dimension value (e.g. "de").
      * @param string $contentRepository Content repository id (defaults to "default").
-     * @param bool $dryRun If set, report which records/nodes would be processed without dispatching any commands.
+     * @param bool $dryRun If set, report what the run would do — per node and as totals — without dispatching any
+     *                     command, translating anything (no DeepL calls are made or paid for) or, cross-workspace,
+     *                     rebasing the target. Because it does not rebase, a cross-workspace preview reports against
+     *                     the un-rebased target: source nodes the target has not seen yet are still missing.
      * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
      * @param bool $skipExisting Only with --full: keep target variants that already exist and have no stale row, instead
      *                           of re-translating them. Preserves target-side property edits on nodes the source has not
@@ -218,7 +221,7 @@ class LostInTranslationCommandController extends CommandController
             $this->outputLine($this->formatPerNodeLine($perNode, $dryRun));
         }
         $this->outputLine(
-            '%s: %d node(s) processed, %d stale property update(s), %d variant creation(s), %d removal(s) and %d tag change(s) dispatched, %d skipped.',
+            '%s: %d node(s) processed, %d stale property update(s), %d variant creation(s), %d removal(s) and %d tag change(s) %s, %d skipped.',
             [
                 $dryRun ? 'Dry run' : 'Synchronization finished',
                 count($result->perNodeResults),
@@ -226,6 +229,7 @@ class LostInTranslationCommandController extends CommandController
                 $result->totalVariantCommandsDispatched(),
                 $result->totalRemovalCommandsDispatched(),
                 $result->totalTagCommandsDispatched(),
+                $dryRun ? 'pending' : 'dispatched',
                 $result->totalSkippedNodes(),
             ],
         );

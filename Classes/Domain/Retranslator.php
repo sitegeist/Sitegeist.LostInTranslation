@@ -83,13 +83,69 @@ class Retranslator
         DimensionSpacePoint $targetDimensionSpacePoint,
         ?WorkspaceName $sourceWorkspaceName = null,
     ): RetranslationResult {
+        $plan = $this->runSubtree(
+            $contentRepositoryId,
+            $workspaceName,
+            $nodeAggregateId,
+            $targetDimensionSpacePoint,
+            $sourceWorkspaceName,
+            false,
+        );
+        if ($plan->skippedReason !== null) {
+            return RetranslationResult::skipped($plan->skippedReason);
+        }
+        return new RetranslationResult(
+            stalePropertyCommandsDispatched: count($plan->propertyUpdates),
+            variantCommandsDispatched: count($plan->variantCreations),
+        );
+    }
+
+    /**
+     * Preview counterpart of {@see self::retranslateSubtree()}: the same walk reaching the same per-node decisions,
+     * but nothing is translated, dispatched or pruned — so a `--dry-run` leaves no trace and, crucially, costs no
+     * DeepL calls. (Building a `SetNodeProperties` *is* the translation, so a preview that built commands and threw
+     * them away would cost exactly as much as the run it is meant to estimate.)
+     *
+     * Returns the affected node ids rather than counts; {@see RetranslationPlan} explains why the caller needs them.
+     */
+    public function planSubtree(
+        ContentRepositoryId $contentRepositoryId,
+        WorkspaceName $workspaceName,
+        NodeAggregateId $nodeAggregateId,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+        ?WorkspaceName $sourceWorkspaceName = null,
+    ): RetranslationPlan {
+        return $this->runSubtree(
+            $contentRepositoryId,
+            $workspaceName,
+            $nodeAggregateId,
+            $targetDimensionSpacePoint,
+            $sourceWorkspaceName,
+            true,
+        );
+    }
+
+    /**
+     * Shared implementation of {@see self::retranslateSubtree()} and {@see self::planSubtree()}. `$dryRun` decides
+     * three things and nothing else: whether stale properties are translated or merely tested for translatability,
+     * whether the collected commands are dispatched, and whether unsatisfiable stale rows are pruned. The decision of
+     * *what* each node needs is identical either way, which is what makes the preview trustworthy.
+     */
+    private function runSubtree(
+        ContentRepositoryId $contentRepositoryId,
+        WorkspaceName $workspaceName,
+        NodeAggregateId $nodeAggregateId,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+        ?WorkspaceName $sourceWorkspaceName,
+        bool $dryRun,
+    ): RetranslationPlan {
         $sourceWorkspaceName ??= $workspaceName;
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
 
         $languageDimension = $cr->getContentDimensionSource()->getDimension($languageDimensionId);
         if ($languageDimension === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'language dimension "%s" not configured in CR "%s"',
                 $this->languageDimensionName,
                 $contentRepositoryId->value,
@@ -103,7 +159,7 @@ class Retranslator
         );
         $sourceDimensionSpacePoint = $resolver->tryResolveSourceDimensionSpacePoint($targetDimensionSpacePoint);
         if ($sourceDimensionSpacePoint === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'no referenceLanguage configured for target DSP %s',
                 $targetDimensionSpacePoint->toJson(),
             ));
@@ -115,7 +171,7 @@ class Retranslator
             $targetDimensionSpacePoint,
         );
         if ($languagePair === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'DeepL language not resolvable for source %s or target %s',
                 $sourceDimensionSpacePoint->toJson(),
                 $targetDimensionSpacePoint->toJson(),
@@ -142,7 +198,7 @@ class Retranslator
             ),
         );
         if ($sourceSubtree === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'source node %s not found in DSP %s',
                 $nodeAggregateId->value,
                 $sourceDimensionSpacePoint->toJson(),
@@ -174,6 +230,10 @@ class Retranslator
         $staleTranslationMaintenance = $staleTranslationReadModel->staleTranslationMaintenance;
         $stalePropertyCommands = [];
         $variantCommands = [];
+        /** @var list<NodeAggregateId> $propertyUpdates */
+        $propertyUpdates = [];
+        /** @var list<NodeAggregateId> $variantCreations */
+        $variantCreations = [];
         $stack = [$sourceSubtree];
         while ($stack !== []) {
             $currentSubtree = array_pop($stack);
@@ -181,26 +241,41 @@ class Retranslator
             $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
             $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
-            $command = null;
+            $writesProperties = false;
             if ($stale !== null && $existsInTarget) {
-                $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
-                    nodeTypeManager: $nodeTypeManager,
-                    sourceNode: $sourceNode,
-                    stalePropertyNames: $stale->propertyNames,
-                    // Use the OriginDimensionSpacePoint from the stale record, not a freshly built
-                    // one — it reflects where the variant actually lives (matters for spec/gen
-                    // variants).
-                    targetOrigin: $stale->originDimensionSpacePoint,
-                    sourceDeeplLanguage: $sourceDeeplLanguage,
-                    targetDeeplLanguage: $targetDeeplLanguage,
-                    targetWorkspaceName: $workspaceName,
-                );
-                if ($command !== null) {
-                    $stalePropertyCommands[] = $command;
+                if ($dryRun) {
+                    // Ask whether the source values would produce a command instead of producing one: building it
+                    // performs the DeepL translation, which a preview must not spend.
+                    $writesProperties = $this->stalePropertyCommandBuilder->wouldBuildSetNodeProperties(
+                        $nodeTypeManager,
+                        $sourceNode,
+                        $stale->propertyNames,
+                    );
+                } else {
+                    $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
+                        nodeTypeManager: $nodeTypeManager,
+                        sourceNode: $sourceNode,
+                        stalePropertyNames: $stale->propertyNames,
+                        // Use the OriginDimensionSpacePoint from the stale record, not a freshly built
+                        // one — it reflects where the variant actually lives (matters for spec/gen
+                        // variants).
+                        targetOrigin: $stale->originDimensionSpacePoint,
+                        sourceDeeplLanguage: $sourceDeeplLanguage,
+                        targetDeeplLanguage: $targetDeeplLanguage,
+                        targetWorkspaceName: $workspaceName,
+                    );
+                    if ($command !== null) {
+                        $stalePropertyCommands[] = $command;
+                        $writesProperties = true;
+                    }
                 }
+            }
+            if ($writesProperties) {
+                $propertyUpdates[] = $sourceNode->aggregateId;
             }
 
             if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
+                $variantCreations[] = $sourceNode->aggregateId;
                 $variantCommands[] = CreateNodeVariant::create(
                     $workspaceName,
                     $sourceNode->aggregateId,
@@ -212,7 +287,8 @@ class Retranslator
             // No SetNodeProperties was produced for this stale node — prune the row if no event will ever clear it
             // (target variant exists with nothing translatable to set, or a tethered no-op). The reconciler leaves a
             // target-absent non-tethered node alone, since its CreateNodeVariant cascade above will translate it.
-            if ($stale !== null && $command === null) {
+            // A dry run reports only, so it never prunes.
+            if (!$dryRun && $stale !== null && !$writesProperties) {
                 StaleRecordReconciler::pruneIfUnsatisfiable(
                     $staleTranslationMaintenance,
                     $workspaceName,
@@ -238,18 +314,17 @@ class Retranslator
         // SynchronizationCommandHook. The two groups act on disjoint nodes (SetNodeProperties for variants that already
         // exist in the target, CreateNodeVariant for those that do not), so their relative order is immaterial; only
         // the within-`$variantCommands` pre-order (ancestor before descendant) matters and is preserved by the walk.
-        $this->securityContext->withoutAuthorizationChecks(function () use ($cr, $stalePropertyCommands, $variantCommands): void {
-            foreach ($stalePropertyCommands as $command) {
-                $this->aiCommandDispatcher->dispatch($cr, $command);
-            }
-            foreach ($variantCommands as $command) {
-                $this->aiCommandDispatcher->dispatch($cr, $command);
-            }
-        });
+        if (!$dryRun) {
+            $this->securityContext->withoutAuthorizationChecks(function () use ($cr, $stalePropertyCommands, $variantCommands): void {
+                foreach ($stalePropertyCommands as $command) {
+                    $this->aiCommandDispatcher->dispatch($cr, $command);
+                }
+                foreach ($variantCommands as $command) {
+                    $this->aiCommandDispatcher->dispatch($cr, $command);
+                }
+            });
+        }
 
-        return new RetranslationResult(
-            stalePropertyCommandsDispatched: count($stalePropertyCommands),
-            variantCommandsDispatched: count($variantCommands),
-        );
+        return new RetranslationPlan($propertyUpdates, $variantCreations);
     }
 }

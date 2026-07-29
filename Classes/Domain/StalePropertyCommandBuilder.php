@@ -7,11 +7,13 @@ namespace Sitegeist\LostInTranslation\Domain;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
 use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
+use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\Flow\Annotations as Flow;
+use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirective;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
@@ -66,37 +68,12 @@ class StalePropertyCommandBuilder
         }
         $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
 
-        /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
-        $propertiesToTranslate = [];
-        // String properties whose source is blank ("" / whitespace) are propagated verbatim to the target so the
-        // clearing is mirrored — without round-tripping through DeepL (which would otherwise turn "" into
-        // " translated" via the dummy service, and is a wasted call against the real DeepL API).
-        /** @var array<non-empty-string, string> $propertiesToClear */
-        $propertiesToClear = [];
-        foreach ($stalePropertyNames as $propertyName) {
-            if (!$nodeType->hasProperty($propertyName->value)) {
-                continue;
-            }
-            $sourceValue = $sourceNode->getProperty($propertyName);
-            if ($sourceValue === null) {
-                continue;
-            }
-
-            $name = $propertyName->value;
-            assert($name !== '');
-
-            if (is_string($sourceValue) && trim($sourceValue) === '') {
-                $propertiesToClear[$name] = $sourceValue;
-                continue;
-            }
-
-            $translatable = $directive->translatablePropertyNames->findByName($propertyName);
-            if (is_object($sourceValue) && $translatable?->translationConnector !== null) {
-                $propertiesToTranslate[$name] = $translatable->translationConnector->extractTranslations($sourceValue);
-            } elseif (is_string($sourceValue)) {
-                $propertiesToTranslate[$name] = $sourceValue;
-            }
-        }
+        [$propertiesToTranslate, $propertiesToClear] = $this->collectPropertiesToWrite(
+            $nodeType,
+            $directive,
+            $sourceNode,
+            $stalePropertyNames,
+        );
 
         if ($propertiesToTranslate === [] && $propertiesToClear === []) {
             return null;
@@ -165,5 +142,82 @@ class StalePropertyCommandBuilder
             originDimensionSpacePoint: $targetOrigin,
             propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
         );
+    }
+
+    /**
+     * Whether {@see self::buildSetNodeProperties()} would emit a command for this node — answered from the source
+     * values alone, i.e. WITHOUT the DeepL round-trip that building performs. Exists so `--dry-run` can preview the
+     * property updates a run would dispatch without paying for them: building the command *is* the translation, so a
+     * preview that called `buildSetNodeProperties()` and discarded the result would cost exactly as much as the run it
+     * is supposed to estimate.
+     *
+     * Both answers come out of the same {@see self::collectPropertiesToWrite()} step, so preview and real run agree on
+     * which nodes carry work. The single case the preview cannot foresee: a translated object property whose connector
+     * yields nothing to write back, where the real build returns null after translating. That is rare, and erring
+     * towards "would write" costs nothing but an over-count of one in a report.
+     */
+    public function wouldBuildSetNodeProperties(
+        NodeTypeManager $nodeTypeManager,
+        Node $sourceNode,
+        PropertyNames $stalePropertyNames,
+    ): bool {
+        $nodeType = $nodeTypeManager->getNodeType($sourceNode->nodeTypeName);
+        if ($nodeType === null) {
+            return false;
+        }
+        [$propertiesToTranslate, $propertiesToClear] = $this->collectPropertiesToWrite(
+            $nodeType,
+            $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType),
+            $sourceNode,
+            $stalePropertyNames,
+        );
+        return $propertiesToTranslate !== [] || $propertiesToClear !== [];
+    }
+
+    /**
+     * Source-side half of the build: which of `$stalePropertyNames` actually carry a value to write, split into the
+     * ones that need translating and the blank ones propagated verbatim.
+     *
+     * @return array{array<non-empty-string, string|array<non-empty-string, string>>, array<non-empty-string, string>}
+     */
+    private function collectPropertiesToWrite(
+        NodeType $nodeType,
+        NodeTypeTranslationDirective $directive,
+        Node $sourceNode,
+        PropertyNames $stalePropertyNames,
+    ): array {
+        /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
+        $propertiesToTranslate = [];
+        // String properties whose source is blank ("" / whitespace) are propagated verbatim to the target so the
+        // clearing is mirrored — without round-tripping through DeepL (which would otherwise turn "" into
+        // " translated" via the dummy service, and is a wasted call against the real DeepL API).
+        /** @var array<non-empty-string, string> $propertiesToClear */
+        $propertiesToClear = [];
+        foreach ($stalePropertyNames as $propertyName) {
+            if (!$nodeType->hasProperty($propertyName->value)) {
+                continue;
+            }
+            $sourceValue = $sourceNode->getProperty($propertyName);
+            if ($sourceValue === null) {
+                continue;
+            }
+
+            $name = $propertyName->value;
+            assert($name !== '');
+
+            if (is_string($sourceValue) && trim($sourceValue) === '') {
+                $propertiesToClear[$name] = $sourceValue;
+                continue;
+            }
+
+            $translatable = $directive->translatablePropertyNames->findByName($propertyName);
+            if (is_object($sourceValue) && $translatable?->translationConnector !== null) {
+                $propertiesToTranslate[$name] = $translatable->translationConnector->extractTranslations($sourceValue);
+            } elseif (is_string($sourceValue)) {
+                $propertiesToTranslate[$name] = $sourceValue;
+            }
+        }
+
+        return [$propertiesToTranslate, $propertiesToClear];
     }
 }

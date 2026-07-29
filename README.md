@@ -224,7 +224,9 @@ required.
 it is stale-driven (only nodes the projection flagged as out of date); with `--full` it walks the entire source
 subtree and considers every translatable node, re-translating existing target variants as well. Source and target
 workspace may differ for cross-workspace flows — the target is force-rebased onto its base (which must be the
-source workspace) before translating. `--dry-run` reports what would happen without dispatching any commands.
+source workspace) before translating. `--dry-run` reports what would happen — variants, property updates,
+removals and tag changes, per node and as totals — without dispatching any command, without translating anything
+(so it costs no DeepL calls) and without rebasing the target.
 Either mode also converges the target dimension's subtree tags onto the source.
 
 ```
@@ -235,7 +237,7 @@ Either mode also converges the target dimension's subtree tags onto the source.
 #   --target-workspace   workspace the translated variant/property commands are dispatched into
 #   --target-dimension   target language value, e.g. "de"
 #   --full               walk the whole subtree instead of only stale records
-#   --dry-run            report the affected records/nodes without writing anything
+#   --dry-run            report the affected records/nodes without writing anything or calling DeepL
 #   --skip-existing      only with --full: keep target variants that already exist and have no stale row, instead
 #                        of re-translating them. Preserves target-side edits the source has not touched — the one
 #                        deliberate exception to "the target is a projection of the source", since re-asserting a

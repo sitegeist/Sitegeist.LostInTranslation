@@ -30,6 +30,7 @@ use Sitegeist\LostInTranslation\Domain\SynchronizationScope;
 use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
+use Sitegeist\LostInTranslation\Infrastructure\Dummy\DummyTranslationService;
 
 trait StaleTranslations
 {
@@ -491,18 +492,89 @@ trait StaleTranslations
         string $targetDimensionSpacePoint,
         string $keepingExisting = '',
     ): void {
-        $skipExisting = $keepingExisting !== '';
-        $result = $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
+        $this->runFullSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            skipExisting: $keepingExisting !== '',
+            dryRun: false,
+        );
+    }
+
+    /**
+     * Dry-run variant of {@see self::iFullSynchronizeTranslations()}: the result reports what WOULD be created and
+     * translated, but nothing is dispatched and nothing is sent to the translation service.
+     *
+     * @When /^I dry-run full-synchronize translations from workspace "([^"]*)" dimension space point (\{[^}]+\}) to workspace "([^"]*)" dimension space point (\{[^}]+\})$/
+     * @throws Exception
+     */
+    public function iDryRunFullSynchronizeTranslations(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+    ): void {
+        $this->runFullSynchronization(
+            $sourceWorkspaceName,
+            $sourceDimensionSpacePoint,
+            $targetWorkspaceName,
+            $targetDimensionSpacePoint,
+            skipExisting: false,
+            dryRun: true,
+        );
+    }
+
+    /**
+     * Shared runner for the `synchronize --full` steps. Stores the result in {@see self::$lastSynchronizationResult}
+     * like the manual runner does, so the same `Then` steps can assert either driver's reported counts.
+     */
+    private function runFullSynchronization(
+        string $sourceWorkspaceName,
+        string $sourceDimensionSpacePoint,
+        string $targetWorkspaceName,
+        string $targetDimensionSpacePoint,
+        bool $skipExisting,
+        bool $dryRun,
+    ): void {
+        $this->lastSynchronizationResult = $this->getObject(FullWorkspaceSynchronizer::class)->synchronizeWorkspaceFull(
             contentRepositoryId: $this->currentContentRepository->id,
             sourceWorkspaceName: WorkspaceName::fromString($sourceWorkspaceName),
             sourceDimensionSpacePoint: DimensionSpacePoint::fromJsonString($sourceDimensionSpacePoint),
             targetWorkspaceName: WorkspaceName::fromString($targetWorkspaceName),
             targetDimensionSpacePoint: DimensionSpacePoint::fromJsonString($targetDimensionSpacePoint),
             skipExisting: $skipExisting,
+            dryRun: $dryRun,
         );
         Assert::assertNull(
-            $result->skippedReason,
-            sprintf('FullWorkspaceSynchronizer skipped synchronization: %s', $result->skippedReason ?? ''),
+            $this->lastSynchronizationResult->skippedReason,
+            sprintf('FullWorkspaceSynchronizer skipped synchronization: %s', $this->lastSynchronizationResult->skippedReason ?? ''),
+        );
+    }
+
+    /**
+     * Start counting what reaches the translation service. Paired with
+     * {@see self::theTranslationServiceTranslatedTexts()} to pin that a dry run costs nothing — see
+     * {@see DummyTranslationService::$translatedTextCount}.
+     *
+     * @When /^I reset the translation counter$/
+     * @throws Exception
+     */
+    public function iResetTheTranslationCounter(): void
+    {
+        $this->getObject(DummyTranslationService::class)->resetTranslatedTextCount();
+    }
+
+    /**
+     * @Then /^the translation service translated (\d+) text\(s\)$/
+     * @throws Exception
+     */
+    public function theTranslationServiceTranslatedTexts(int $expectedCount): void
+    {
+        Assert::assertSame(
+            $expectedCount,
+            $this->getObject(DummyTranslationService::class)->translatedTextCount,
+            'Unexpected number of texts sent to the translation service',
         );
     }
 

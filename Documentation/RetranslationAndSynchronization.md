@@ -425,6 +425,18 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
   **scope gate** (identical to the hook's — under `Content`, skip a record whose closest Document is absent
   from the target dimension, so clicking "sync now" cannot create the Documents the scope keeps out); then
   dispatches one `Retranslator::retranslateSubtree()` per stale record, depth-ordered.
+- **`--dry-run` previews; it does not translate.** Both synchronizers report what the run *would* do — per node
+  and as totals — while dispatching nothing, pruning no stale row and, cross-workspace, not rebasing. The
+  constraint that shapes the implementation: building a translated `SetNodeProperties` **is** the DeepL call, so
+  a preview that built commands and threw them away would cost exactly what the run it is estimating costs.
+  Decision and build are therefore split — `Retranslator::planSubtree()` and
+  `StalePropertyCommandBuilder::wouldBuildSetNodeProperties()` answer "would this node be written?" from the
+  source values alone, and the Behat suite counts what reaches the translation service to keep it that way.
+  `planSubtree()` returns node **ids**, not counts, because the stale-driven run walks a subtree per record and
+  relies on the projection clearing rows to avoid doing a node twice; a preview clears nothing, so it
+  deduplicates by id instead. Two gaps are inherent and accepted: a cross-workspace preview reads the
+  **un-rebased** target and therefore under-reports, and `--full` cannot foresee that dispatching a
+  `CreateNodeVariant` materialises tethered children mid-walk which the same walk then re-translates.
 - **Tag mirror (diff path).** After the stale-driven pass it converges each target node's EXPLICIT subtree
   tags onto the source by diffing the two dimensions (`TargetTagReconciler`): a `TagSubtree` per tag the
   target lacks, an `UntagSubtree` per tag it has extra — for any tag, including `removed`, which is how this
@@ -459,8 +471,9 @@ Match the **literal** action string, not an imported constant (a wrong import pa
   the projection model says the source wins; it exists because re-asserting a *property* costs a DeepL call
   per node, unlike re-asserting a tag, so on a large workspace the cheap-but-divergent run is sometimes what
   you want. A stale row always forces a refresh regardless.
-- Same `--dry-run` semantics; for cross-workspace it force-rebases the target first (skipped on
-  dry-run).
+- Same `--dry-run` semantics as [B](#b-manual-sync-now--post-publish-prompt--workspacesynchronizer--controllermodule)
+  — including that a preview translates nothing; for cross-workspace it force-rebases the target first (skipped
+  on dry-run).
 - The CLI has no rule, hence no scope: `--full` always behaves as `Document` scope.
 - **Tag mirror.** The diff-based `TargetTagReconciler` pass runs after the translation walk, converging each
   target node's explicit subtree tags onto the source — including `removed`, so deletions and restores are
