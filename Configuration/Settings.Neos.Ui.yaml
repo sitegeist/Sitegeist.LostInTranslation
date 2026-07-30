@@ -5,6 +5,7 @@ Neos:
         autoInclude:
           'Sitegeist.LostInTranslation':
             - Main
+            - Modules
             - 'NodeTypes/*'
     Ui:
       resources:

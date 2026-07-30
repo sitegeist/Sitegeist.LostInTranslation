@@ -13,12 +13,6 @@ Neos:
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
             privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
 
-    userInterface:
-      translation:
-        autoInclude:
-          'Sitegeist.LostInTranslation':
-            - Modules
-
   ContentRepositoryRegistry:
     presets:
       'default':
