@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Behat\Gherkin\Node\TableNode;
 use Doctrine\ORM\EntityManagerInterface;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\TagSubtree;
 use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\UntagSubtree;
 use Neos\ContentRepository\Core\Feature\SubtreeTagging\Dto\SubtreeTag;
@@ -119,6 +120,68 @@ trait StaleTranslations
         );
 
         Assert::assertEquals($expectedStaleTranslations, $actualStaleTranslations);
+    }
+
+    /**
+     * Assert how one stale-translation row STORES its `propertyNames`, reading the column directly instead of through
+     * the read model.
+     *
+     * The step above cannot see this. `StaleTranslation::fromDatabaseRow` rebuilds the value through
+     * `PropertyNames::fromArray`, which appends with `$values[] =` and therefore re-indexes — so a row stored as the
+     * JSON OBJECT `{"1":"text"}` (what `json_encode` emits for a PHP array whose keys have gaps, which is what
+     * `array_diff`/`array_intersect` leave behind on a partial clear) reads back as the list `["text"]` and every
+     * read-model assertion passes regardless. The column contract is still real: `clearStructuralStaleRecord` matches
+     * the empty value by exact string compare, `whenWorkspaceWasRebased` copies the column verbatim between rows, and
+     * any JSON-path query added later would find an object where it expects an array.
+     *
+     * Asserts the DECODED shape rather than the raw bytes: MariaDB (`JSON` = `LONGTEXT`) hands the string back exactly
+     * as written, but MySQL normalises its JSON output with a space after each comma, and this contract is about
+     * list-vs-object, not whitespace.
+     *
+     * @Then /^I expect the stale translation row for node "([^"]*)" in workspace "([^"]*)" and dimension space point (\{[^}]+\}) to store propertyNames as the JSON list (.*)$/
+     * @throws \Exception
+     */
+    public function iExpectTheStaleTranslationRowToStorePropertyNamesAsTheJsonList(
+        string $nodeAggregateId,
+        string $workspaceName,
+        string $dimensionSpacePoint,
+        string $expectedJsonList,
+    ): void {
+        $connection = $this->getObject(EntityManagerInterface::class)->getConnection();
+        $tableName = sprintf('cr_%s_p_staletranslation', $this->currentContentRepository->id->value);
+        $storedPropertyNames = $connection->fetchOne(
+            'SELECT propertyNames FROM ' . $tableName
+                . ' WHERE workspaceName = :workspaceName
+                    AND nodeAggregateId = :nodeAggregateId
+                    AND originDimensionSpacePointHash = :originDimensionSpacePointHash',
+            [
+                'workspaceName' => $workspaceName,
+                'nodeAggregateId' => $nodeAggregateId,
+                'originDimensionSpacePointHash' => OriginDimensionSpacePoint::fromDimensionSpacePoint(
+                    DimensionSpacePoint::fromJsonString($dimensionSpacePoint),
+                )->hash,
+            ],
+        );
+        Assert::assertNotFalse(
+            $storedPropertyNames,
+            sprintf('No stale translation row for node "%s" in %s@%s', $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
+        );
+        $decoded = \json_decode((string)$storedPropertyNames, true, 512, JSON_THROW_ON_ERROR);
+        Assert::assertTrue(
+            is_array($decoded) && array_is_list($decoded),
+            sprintf(
+                'propertyNames of node "%s" in %s@%s is stored as a JSON object, not a list: %s',
+                $nodeAggregateId,
+                $dimensionSpacePoint,
+                $workspaceName,
+                (string)$storedPropertyNames,
+            ),
+        );
+        Assert::assertSame(
+            \json_decode($expectedJsonList, true, 512, JSON_THROW_ON_ERROR),
+            $decoded,
+            sprintf('Unexpected propertyNames for node "%s" in %s@%s', $nodeAggregateId, $dimensionSpacePoint, $workspaceName),
+        );
     }
 
     /**

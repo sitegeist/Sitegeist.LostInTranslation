@@ -57,6 +57,16 @@ class SynchronizationCommandHookFactory implements CommandHookFactoryInterface
             new ContentDimensionId($this->languageDimensionName)
         );
         if (!($languageDimension instanceof ContentDimension)) {
+            // Switched off (globally, or by having no rules — the same pair the hook itself early-outs on): the hook
+            // could not do anything even with a dimension, so do not make a CR that lacks one unbuildable. See
+            // {@see DisabledCommandHook}. Switched on, a missing dimension stays a hard failure.
+            //
+            // Checked here as well as in TranslationCommandHookFactory although the shipped preset registers that hook
+            // first, so in practice it decides this case: a factory should not depend on a sibling's registration order
+            // for its own correctness, and either hook can be disabled individually via `commandHooks.<name>: ~`.
+            if (!$this->enabled || $this->synchronization === []) {
+                return new DisabledCommandHook();
+            }
             throw new \RuntimeException(sprintf(
                 'Language dimension "%s" not found in content repository "%s"',
                 $this->languageDimensionName,

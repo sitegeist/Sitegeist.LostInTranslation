@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection;
 
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\DBAL\Schema\Column;
@@ -478,7 +479,9 @@ class StaleTranslationProjection implements ProjectionInterface
                 'nodeAggregateId' => $event->nodeAggregateId->value,
                 'affectedDimensionSpacePointHashes' => array_keys($affectedHashes),
             ],
-            ['affectedDimensionSpacePointHashes' => Connection::PARAM_STR_ARRAY],
+            // Required for `IN (:placeholder)` expansion, as in StaleTranslationFinder. Not the deprecated
+            // Connection::PARAM_STR_ARRAY, which DBAL 4 removes.
+            ['affectedDimensionSpacePointHashes' => ArrayParameterType::STRING],
         );
     }
 
@@ -507,11 +510,22 @@ class StaleTranslationProjection implements ProjectionInterface
         $propertiesWithDefaultValue = [];
         foreach ($nodeType->getDefaultValuesForProperties() as $propertyName => $defaultValue) {
             // A default value makes its property a translation candidate when it actually carries content: a non-empty
-            // string, or a non-empty array/object — the latter being an object-typed property whose translatable
-            // leaves a TranslationConnector extracts. We do not gate on translatability here; the array_intersect with
-            // $translatablePropertyNames below discards any non-translatable property (so scalar non-string defaults
-            // such as int/bool, which never have a connector, are filtered out there).
-            $carriesContent = is_string($defaultValue) ? $defaultValue !== '' : !empty($defaultValue);
+            // string, or a non-empty array — the latter an object-typed property's default, whose translatable leaves a
+            // TranslationConnector extracts. `getDefaultValuesForProperties()` hands back the RAW configuration without
+            // any type conversion, so those two are the only shapes that can carry text; an int/float/bool default
+            // never can, whatever type the property declares.
+            //
+            // Enumerated rather than `!empty()`, which also accepts `true` / `1` / `1.0`. No observable behaviour
+            // rides on the difference, and neither shall any: a bool/int default reaches the stale set anyway — not
+            // from here, but because `NodeTypeChange` emits a `NodePropertiesWereSet` right behind the type change
+            // that materialises the new type's missing defaults through the property converter, so a `string`-typed
+            // property whose default was mistyped in YAML really does end up holding "1". This test is about the
+            // SHAPE of a configured value, and now says only that.
+            $carriesContent = match (true) {
+                is_string($defaultValue) => $defaultValue !== '',
+                is_array($defaultValue) => $defaultValue !== [],
+                default => false,
+            };
             if ($carriesContent) {
                 $propertiesWithDefaultValue[] = $propertyName;
             }

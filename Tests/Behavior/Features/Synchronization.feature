@@ -1736,6 +1736,49 @@ Feature: Automatic retranslation on workspace publish
     Then I expect node "sir-david-nodenborough" in workspace "de-review" dimension space point {"language":"de"} to have property "autoTranslatableStringProperty" with value "My Text translated"
     And the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 0
 
+  Scenario: Two rules sharing one target workspace force-rebase it once per publish, not once per rule
+    # `de-review` is the target of TWO rules (de and it). A force rebase is a workspace-level operation — it closes the
+    # target's content stream, forks a new one from the source and replays the target's own commands, synchronously
+    # inside the publish — so doing it per rule would repeat that whole cost for a workspace that is already current
+    # after the first pass. What the counts below pin is that it happens once per publish per target workspace.
+    When the command CreateWorkspace is executed with payload:
+      | Key                | Value             |
+      | workspaceName      | "de-review"       |
+      | baseWorkspaceName  | "live"            |
+      | newContentStreamId | "de-review-cs-id" |
+    # Only the creation so far.
+    Then I expect exactly 1 event to be published on stream "Workspace:de-review"
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"} |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-2"   |
+    # One publish, two matching rules, ONE rebase: creation + rebase.
+    Then I expect exactly 2 events to be published on stream "Workspace:de-review"
+    And event at index 1 is of type "WorkspaceWasRebased" with payload:
+      | Key           | Expected    |
+      | workspaceName | "de-review" |
+    # A second publish rebases again — the memo is per publish, not permanent; the target is genuinely outdated once
+    # `live` has moved on.
+    When I am in workspace "user-workspace"
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                          |
+      | nodeAggregateId           | "sir-david-nodenborough"                       |
+      | originDimensionSpacePoint | {"language": "en"}                             |
+      | propertyValues            | {"autoTranslatableStringProperty": "Changed"}  |
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "user-cs-id-3"   |
+    Then I expect exactly 3 events to be published on stream "Workspace:de-review"
+    # The rule that does have work still has it: sharing a rebase does not cost the first rule anything. (The `it` rule
+    # contributes no rows of its own — this CR has no `it` dimension value, which is exactly why it can co-tenant the
+    # target workspace without changing what any other scenario sees.)
+    And the out-of-sync count from workspace "live" dimension "en" to workspace "de-review" dimension "de" is 1
+
   Scenario: Hard-removing a content node in the source language removes its target-language variant on publish
     # A HARD removal (`RemoveNodeAggregate`) is not the editor's delete path — Neos 9.1 soft-removes, see the
     # soft-removal scenarios below — but a fixture or a script can issue one, and a publish carries it. Publishing
@@ -2044,6 +2087,39 @@ Feature: Automatic retranslation on workspace publish
     When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
     Then I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
     And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "needs-review"
+
+  Scenario: The tag reconcile reaches nodes below the first level, not just the root's children
+    # Every other tag scenario tags a direct child of the root, so all of them would still pass if the reconcile only
+    # ever looked one level down. Here the ONLY tagged node is a grandchild, and both nodes above it are deliberately
+    # left untagged, so nothing can reach the assertion by inheritance from an ancestor.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                            | tetheredDescendantNodeAggregateIds |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation     | {"autoTranslatableStringProperty": "My Text"}    | {"tethered": "nodewyn-tetherton"}  |
+      | nody-mc-nodeface       | nodewyn-tetherton      | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Nested Text"} |                                    |
+    # The grandchild, not the tethered node in between: the CR refuses to disable a tethered node aggregate outright.
+    And the command TagSubtree is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "nody-mc-nodeface"   |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+      | tag                          | "disabled"           |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to be tagged "disabled"
+    # The ancestors are untouched — the reconcile mirrors the source's tag STRUCTURE, so a tag two levels down stays
+    # there instead of being hoisted onto the node the walk started from.
+    And I expect node "sir-david-nodenborough" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
+    # And back the other way, so the depth is pinned for `UntagSubtree` too, not only for `TagSubtree`.
+    When the command UntagSubtree is executed with payload:
+      | Key                          | Value                |
+      | workspaceName                | "user-workspace"     |
+      | nodeAggregateId              | "nody-mc-nodeface"   |
+      | coveredDimensionSpacePoint   | {"language":"en"}    |
+      | nodeVariantSelectionStrategy | "allSpecializations" |
+      | tag                          | "disabled"           |
+    When I synchronize translations from workspace "user-workspace" dimension space point {"language":"en"} to workspace "user-workspace" dimension space point {"language":"es"}
+    Then I expect node "nody-mc-nodeface" in workspace "user-workspace" dimension space point {"language":"es"} to not be tagged "disabled"
 
   Scenario: A node created AND hidden in the same publish is hidden in the target (auto, sync-to-target)
     # Create + tag the EN source, then publish both in ONE go. The es variant does not exist when the hook builds its

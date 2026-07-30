@@ -41,6 +41,13 @@ class TranslationCommandHookFactory implements CommandHookFactoryInterface
             new ContentDimensionId($this->languageDimensionName)
         );
 
+        if (!($languageDimension instanceof ContentDimension) && !$this->enabled) {
+            // Explicitly switched off: the hook would be inert anyway, so a CR without the language dimension must
+            // stay buildable rather than be bricked by a package the operator has disabled. See
+            // {@see DisabledCommandHook}. With the feature on, the throw below stands.
+            return new DisabledCommandHook();
+        }
+
         if ($languageDimension instanceof ContentDimension) {
             return new TranslationCommandHook(
                 $this->enabled,

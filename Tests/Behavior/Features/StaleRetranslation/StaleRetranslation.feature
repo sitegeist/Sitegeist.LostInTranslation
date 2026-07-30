@@ -953,3 +953,48 @@ Feature: Track the staleness state of translations and run retranslation on stal
     When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"}
     Then I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+  Scenario: A partially cleared stale row stays a JSON list, not a JSON object
+    # `array_diff` and `array_intersect` PRESERVE keys, so clearing the FIRST of two stale properties leaves
+    # `[1 => "autoTranslatableStringProperty"]` — and `json_encode` writes a PHP array with a gap in its keys as the
+    # object `{"1":"..."}`, not the list `["..."]`. Every writer of the column re-indexes to prevent that; this pins it.
+    #
+    # It has to read the raw column to do so. `PropertyNames::fromArray` re-indexes on the way back in, so the
+    # read-model assertions used everywhere else in this file launder the corruption and pass either way — which is
+    # also why nothing caught it before.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Translate once so the de variant exists and the row is cleared, then make BOTH properties stale again.
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value                    |
+      | nodeAggregateId | "sir-david-nodenborough" |
+      | sourceOrigin    | {"language":"en"}        |
+      | targetOrigin    | {"language":"de"}        |
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                                                                            |
+      | nodeAggregateId           | "sir-david-nodenborough"                                                                                         |
+      | originDimensionSpacePoint | {"language": "en"}                                                                                               |
+      | propertyValues            | {"inlineEditableStringProperty": "My adjusted Text", "autoTranslatableStringProperty": "My adjusted Other Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # An editor fixes ONE of the two translations by hand, directly in de: that property is no longer stale, the other
+    # still is. Clearing the FIRST entry is what leaves the gap — clearing the second would re-index harmlessly and
+    # prove nothing.
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                  |
+      | nodeAggregateId           | "sir-david-nodenborough"                               |
+      | originDimensionSpacePoint | {"language": "de"}                                     |
+      | propertyValues            | {"inlineEditableStringProperty": "Von Hand uebersetzt"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+    # The assertion the one above cannot make.
+    And I expect the stale translation row for node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"} to store propertyNames as the JSON list ["autoTranslatableStringProperty"]

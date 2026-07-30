@@ -39,6 +39,17 @@ Sitegeist:
           targetDimension: de
           scope: Document
           mode: ask
+        # A SECOND rule into the SAME target workspace — the common "one review workspace, one rule per language" shape.
+        # Its point is the force-rebase: the two rules share `de-review`, which must be rebased once per publish, not
+        # once per rule. Deliberately targeting `it`, a dimension value the Behat CR does not declare: the rule can then
+        # never own a stale row or a target variant, so it co-tenants the workspace without changing what any other
+        # de-review scenario sees. Do not "fix" it to `es` — that would give it real work and perturb them all.
+        - sourceWorkspaceName: live
+          sourceDimension: en
+          targetWorkspaceName: de-review
+          targetDimension: it
+          scope: Document
+          mode: ask
 
 Neos:
   Flow:

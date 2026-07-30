@@ -373,6 +373,9 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
    backend module reflects what still needs syncing instead of the target lagging. Skip the rule on
    failure (target missing / not based on source), logging the reason as a warning — a publish has
    nowhere to return it to, and this is the one path where a blocked rule would otherwise be silent.
+   Per rule, but **at most once per target workspace** — rules that share one review workspace (one
+   per language, the common shape) rebase it together, not once each; see the cost note in
+   *Consequences & gotchas* below.
    This rebase is also the hook's **only** direct dispatch: it cannot be a returned command, because
    the returned batch runs after `onAfterHandle` finishes while steps 5-8 already need the rebased
    target.
@@ -451,7 +454,11 @@ Flow (`onAfterHandle`, reacting to `PublishWorkspace` / `PublishIndividualNodesF
   visibility (`VisibilityConstraints::createEmpty()`) because soft-removed nodes on either side are exactly
   what it must see. (The full reconcile is acceptable here because "sync now" is already a deliberate,
   heavier operation — unlike the publish hook, which must stay incremental. It is also what self-heals
-  changes no publish carried.)
+  changes no publish carried.) Its cost is a full **scan** of the target tree, not a storm of queries:
+  the subgraph offers no "give me the nodes carrying an explicit tag" filter, so every node has to be
+  looked at, but the target side is one recursive-CTE `findDescendantNodes` per root aggregate and the
+  source side is `findNodesByIds` in batches of 1000 — a handful of queries, where a `findChildNodes`
+  walk with a `findNodeById` per node cost two per node of the tree.
 - There is no separate removal pass. `TargetOrphanCollector` — a diff of "present in target, absent in
   source" — was **deleted**: it could not tell "deleted in the source" from "never in the source", which under
   `Content` scope is the expected case, so it emptied editor-owned target-only pages. See
@@ -550,6 +557,17 @@ Match the **literal** action string, not an imported constant (a wrong import pa
 - **`ask` semantic tension (accepted):** because the rebase happens at publish time for `ask` rules,
   a reviewer's conflicting edit can be dropped by *someone else's* publish, before the reviewer acts.
   Translation is still deferred; the rebase is not. Explicitly accepted.
+- **The rebase is the expensive part of an `ask` rule, and it is not deferred.** `mode: ask` buys back
+  the DeepL calls, not the publish latency: a force rebase closes the target's content stream, forks a
+  new one from the source and replays the target's own commands, synchronously inside the publish
+  (`WorkspaceCommandHandler::handleRebaseWorkspace`). That is O(target workspace), not O(this
+  publish's delta). Two things bound it and neither removes it: the hook rebases each **distinct
+  target workspace** once per publish rather than once per rule, and a same-workspace rule
+  (`source == target`) needs no rebase at all and does none. What remains — one whole-workspace rebase
+  per cross-workspace target per publish — is inherent to reading the source *through* the target
+  workspace, and is accepted. Passing `STRATEGY_FORCE` deliberately gives up the CR's own
+  "skip when the workspace is already up to date" short-circuit; after a publish to the base the
+  target is outdated anyway, so that short-circuit would almost never fire here.
 - **Partial vs full publish.** `PublishIndividualNodesFromWorkspace` emits `WorkspaceWasPublished`
   with `partial: true`, so the hook fires on partial publishes too — but `replaceWorkspaceEntries`
   always copies the *entire* source stale set into the target (the projection doesn't distinguish

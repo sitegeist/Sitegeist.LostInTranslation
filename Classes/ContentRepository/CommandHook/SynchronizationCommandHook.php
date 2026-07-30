@@ -210,13 +210,26 @@ final class SynchronizationCommandHook implements CommandHookInterface
         $mirrorEvents = $this->collectMirrorEvents($events);
 
         $additionalCommands = [];
+        // Target workspaces already brought current during THIS publish. A force rebase is a workspace-level operation
+        // — it closes the target's content stream, forks a new one from the source and replays — but it sits in a
+        // per-rule loop, and several rules routinely share one target workspace (one review workspace, one rule per
+        // language). Rebasing it once per rule would repeat that whole fork-and-replay for no gain: after the first
+        // pass the target is already current, and the stale-row refresh the projection does on `WorkspaceWasRebased`
+        // is idempotent. Keyed by target workspace name alone, which is sufficient because `forPublicationTarget()`
+        // has already narrowed the rules to a single source workspace.
+        /** @var array<string,true> $rebasedTargetWorkspaces */
+        $rebasedTargetWorkspaces = [];
         foreach ($matchingRules as $rule) {
             // Bring the rule's target workspace current with the just-published source on EVERY publish — including for
             // `ask` rules. This refreshes the stale-translation projection for the (cross-workspace) target so the
             // backend module reports what still needs syncing, instead of the target lagging until someone rebases it.
-            // Returns false when the rule cannot run at all (target workspace missing, or not based on the source).
-            if (!$this->rebaseTargetOntoSource($rule)) {
-                continue;
+            // Returns false when the rule cannot run at all (target workspace missing, or not based on the source);
+            // that outcome is deliberately NOT memoized, so each blocked rule still gets its own warning.
+            if (!isset($rebasedTargetWorkspaces[$rule->targetWorkspaceName])) {
+                if (!$this->rebaseTargetOntoSource($rule)) {
+                    continue;
+                }
+                $rebasedTargetWorkspaces[$rule->targetWorkspaceName] = true;
             }
 
             // Read the rule's source + target subgraphs ONCE here and pass them down, so the translation, tagging and
@@ -554,6 +567,9 @@ final class SynchronizationCommandHook implements CommandHookInterface
      * projection that the backend status reads) reflect the just-published source content — see
      * {@see CrossWorkspaceSynchronizationTarget}. Returns false when the rule cannot run at all and the caller must
      * skip it (target workspace missing, or — cross-workspace — not based on the source).
+     *
+     * Called at most once per target workspace per publish; the caller memoizes. Nothing here is idempotent-by-cost:
+     * a successful call forks a content stream and replays the whole target.
      *
      * A publish has nowhere to return a skip reason to — unlike the CLI and the backend module, which show it — so a
      * blocked rule would otherwise be invisible at exactly the moment it fails to do its job. We log it as a warning,

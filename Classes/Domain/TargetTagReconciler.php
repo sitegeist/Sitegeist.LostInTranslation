@@ -10,10 +10,12 @@ use Neos\ContentRepository\Core\Feature\SubtreeTagging\Command\UntagSubtree;
 use Neos\ContentRepository\Core\Feature\SubtreeTagging\Dto\SubtreeTag;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
-use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindDescendantNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindRootNodeAggregatesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Nodes;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
+use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateIds;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeVariantSelectionStrategy;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 
@@ -35,9 +37,21 @@ use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
  *
  * The subgraphs are read fresh from the content graphs (with restrictions lifted, so disabled nodes are still visible)
  * so a target variant created earlier in the same run — and therefore initially untagged — is picked up here.
+ *
+ * There is no way to ask the subgraph for "the nodes carrying an explicit tag", so the diff has to visit the whole
+ * target tree — which on an established site is the whole site, on every "sync now", however little changed. That scan
+ * is inherent to a diff-based reconcile; what is not inherent is paying database round trips for it, so it costs a
+ * handful of queries rather than two per node: one recursive CTE per root aggregate for the target side
+ * ({@see ContentSubgraphInterface::findDescendantNodes()}), and batched id lookups for the source side.
  */
 final class TargetTagReconciler
 {
+    /**
+     * How many source counterparts to fetch per query. Doctrine expands `IN (:ids)` into one placeholder per id and
+     * MySQL caps a prepared statement at 65535 of them, so a site-sized tree cannot go in a single call.
+     */
+    private const SOURCE_LOOKUP_BATCH_SIZE = 1000;
+
     /**
      * @return list<TagSubtree|UntagSubtree>
      */
@@ -63,39 +77,29 @@ final class TargetTagReconciler
 
         $commands = [];
         foreach ($targetContentGraph->findRootNodeAggregates(FindRootNodeAggregatesFilter::create()) as $rootAggregate) {
-            $rootNode = $targetSubgraph->findNodeById($rootAggregate->nodeAggregateId);
-            if ($rootNode === null) {
-                continue;
-            }
-            // Root aggregates are dimension-agnostic structure with no source/target counterpart to diff — only walk
-            // their descendants.
-            self::reconcileBelow($rootNode, $targetSubgraph, $sourceSubgraph, $targetWorkspaceName, $targetDimensionSpacePoint, $commands);
-        }
-        return $commands;
-    }
-
-    /**
-     * @param list<TagSubtree|UntagSubtree> $commands
-     */
-    private static function reconcileBelow(
-        Node $node,
-        ContentSubgraphInterface $targetSubgraph,
-        ContentSubgraphInterface $sourceSubgraph,
-        WorkspaceName $targetWorkspaceName,
-        DimensionSpacePoint $targetDimensionSpacePoint,
-        array &$commands,
-    ): void {
-        foreach ($targetSubgraph->findChildNodes($node->aggregateId, FindChildNodesFilter::create()) as $child) {
-            $sourceNode = $sourceSubgraph->findNodeById($child->aggregateId);
-            // Only reconcile nodes present in both dimensions. A target-only orphan has no source tags to mirror (and
-            // is the removal reconcile's concern); a source-only node has no target variant to tag.
-            if ($sourceNode !== null) {
+            // Root aggregates are dimension-agnostic structure with no source/target counterpart to diff — only their
+            // descendants are reconciled, and one `findDescendantNodes` returns all of them. No separate check that the
+            // root itself is visible here: an entry node this subgraph cannot see simply yields no descendants.
+            $targetNodes = $targetSubgraph->findDescendantNodes(
+                $rootAggregate->nodeAggregateId,
+                FindDescendantNodesFilter::create(),
+            );
+            $sourceNodesById = self::sourceCounterpartsById($sourceSubgraph, $targetNodes);
+            foreach ($targetNodes as $targetNode) {
+                // Only reconcile nodes present in both dimensions. A target-only orphan has no source tags to mirror
+                // (and is the removal reconcile's concern); a source-only node has no target variant to tag. Its
+                // descendants are still reconciled — a flat list reaches them regardless, exactly as the tree walk this
+                // replaced did by recursing past a missing counterpart rather than pruning there.
+                $sourceNode = $sourceNodesById[$targetNode->aggregateId->value] ?? null;
+                if ($sourceNode === null) {
+                    continue;
+                }
                 $sourceTags = $sourceNode->tags->withoutInherited()->toStringArray();
-                $targetTags = $child->tags->withoutInherited()->toStringArray();
+                $targetTags = $targetNode->tags->withoutInherited()->toStringArray();
                 foreach (array_diff($sourceTags, $targetTags) as $tagToAdd) {
                     $commands[] = TagSubtree::create(
                         $targetWorkspaceName,
-                        $child->aggregateId,
+                        $targetNode->aggregateId,
                         $targetDimensionSpacePoint,
                         NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
                         SubtreeTag::fromString($tagToAdd),
@@ -104,14 +108,36 @@ final class TargetTagReconciler
                 foreach (array_diff($targetTags, $sourceTags) as $tagToRemove) {
                     $commands[] = UntagSubtree::create(
                         $targetWorkspaceName,
-                        $child->aggregateId,
+                        $targetNode->aggregateId,
                         $targetDimensionSpacePoint,
                         NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
                         SubtreeTag::fromString($tagToRemove),
                     );
                 }
             }
-            self::reconcileBelow($child, $targetSubgraph, $sourceSubgraph, $targetWorkspaceName, $targetDimensionSpacePoint, $commands);
         }
+        return $commands;
+    }
+
+    /**
+     * The source-dimension counterparts of `$targetNodes`, indexed by aggregate id — the batched form of one
+     * `findNodeById` per target node, and identical to it in what it finds: `findNodesByIds` applies the same subgraph
+     * constraints and simply returns whichever of the ids exist here.
+     *
+     * @return array<string,Node>
+     */
+    private static function sourceCounterpartsById(ContentSubgraphInterface $sourceSubgraph, Nodes $targetNodes): array
+    {
+        $targetNodeIds = [];
+        foreach ($targetNodes as $targetNode) {
+            $targetNodeIds[] = $targetNode->aggregateId->value;
+        }
+        $sourceNodesById = [];
+        foreach (array_chunk($targetNodeIds, self::SOURCE_LOOKUP_BATCH_SIZE) as $idBatch) {
+            foreach ($sourceSubgraph->findNodesByIds(NodeAggregateIds::fromArray($idBatch)) as $sourceNode) {
+                $sourceNodesById[$sourceNode->aggregateId->value] = $sourceNode;
+            }
+        }
+        return $sourceNodesById;
     }
 }

@@ -60,6 +60,11 @@ Sitegeist:
       #
       # Enable the automatic translations of nodes while they are adopted to another dimension
       #
+      # Setting this to `false` switches the package off completely: its command hooks are registered on the `default`
+      # content repository preset and therefore built for every CR using it, so `false` also means a CR WITHOUT the
+      # `languageDimensionName` dimension below stays buildable. With it left at `true`, a missing language dimension is
+      # a hard error — that is a misconfiguration of a package which is switched on, and failing silently would hide it.
+      #
       enabled: true
 
       #
