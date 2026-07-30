@@ -51,8 +51,15 @@ bootstrap_distribution() {
     fi
 
     echo "› Creating Neos ${NEOS_VERSION} base distribution ..."
+    rm -r "$DIST_DIR" || true
     composer create-project --no-scripts --no-install \
         neos/neos-base-distribution "$DIST_DIR" "^${NEOS_VERSION}"
+
+    # The 9.1.x line of some Neos packages (e.g. neos/buildessentials) is only
+    # published as dev, so a plain "stable" root would fail to resolve. Allow dev
+    # while still preferring stable releases where they exist.
+    composer config minimum-stability dev
+    composer config prefer-stable true
 
     cd "$DIST_DIR"
     composer config --no-plugins allow-plugins.neos/composer-plugin true
