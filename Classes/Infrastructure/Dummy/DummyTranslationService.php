@@ -22,7 +22,7 @@ class DummyTranslationService implements TranslationServiceInterface
      */
     public int $translatedTextCount = 0;
 
-    public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null, bool $useCache = true): array
+    public function translate(array $texts, string $targetLanguage, ?string $sourceLanguage = null): array
     {
         $this->translatedTextCount += count($texts);
         return array_map(

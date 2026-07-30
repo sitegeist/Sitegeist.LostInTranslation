@@ -56,7 +56,6 @@ class StalePropertyCommandBuilder
         OriginDimensionSpacePoint $targetOrigin,
         string $sourceDeeplLanguage,
         string $targetDeeplLanguage,
-        bool $useCache = true,
         ?WorkspaceName $targetWorkspaceName = null,
     ): ?SetNodeProperties {
         $targetWorkspaceName ??= $sourceNode->workspaceName;
@@ -97,7 +96,6 @@ class StalePropertyCommandBuilder
             $deflated,
             $targetDeeplLanguage,
             $sourceDeeplLanguage,
-            $useCache,
         );
         if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
             $translatedDeflated = array_map(
