@@ -26,6 +26,10 @@ use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
  *    workspace publish),
  *  - {@see FullWorkspaceSynchronizer} (full-workspace sync CLI).
  *
+ * {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook} (translate-on-variant-
+ * creation) shares only the second half, via {@see self::buildFromCollectedProperties()} — it has no stale list to
+ * work from and collects properties itself.
+ *
  * Trusts the stale-translation projection's invariant: records only exist for translation-enabled node types and
  * translatable properties — so guards on `directive->enabled` and `findByName` are dropped. The `hasProperty` +
  * empty-source guards remain because editors may blank a source property between the projection write and our
@@ -74,36 +78,62 @@ class StalePropertyCommandBuilder
             $stalePropertyNames,
         );
 
-        if ($propertiesToTranslate === [] && $propertiesToClear === []) {
-            return null;
-        }
-
-        $propertiesToSet = $propertiesToClear;
-
-        if ($propertiesToTranslate === []) {
-            return SetNodeProperties::create(
-                workspaceName: $targetWorkspaceName,
-                nodeAggregateId: $sourceNode->aggregateId,
-                originDimensionSpacePoint: $targetOrigin,
-                propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
-            );
-        }
-
-        // deflate → translate → enflate so DeepL sees one string per leaf, connectors get reassembled.
-        $deflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
-        /** @var array<non-empty-string, string> $translatedDeflated */
-        $translatedDeflated = $this->translationService->translate(
-            $deflated,
-            $targetDeeplLanguage,
-            $sourceDeeplLanguage,
+        return $this->buildFromCollectedProperties(
+            directive: $directive,
+            sourceNode: $sourceNode,
+            propertiesToTranslate: $propertiesToTranslate,
+            propertiesToSet: $propertiesToClear,
+            sourceDeeplLanguage: $sourceDeeplLanguage,
+            targetDeeplLanguage: $targetDeeplLanguage,
+            targetWorkspaceName: $targetWorkspaceName,
+            targetOrigin: $targetOrigin,
         );
-        if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
-            $translatedDeflated = array_map(
-                static fn (string $value): string => html_entity_decode($value),
-                $translatedDeflated,
+    }
+
+    /**
+     * Translate-and-write-back half of the build: turns already-collected source values into a `SetNodeProperties`.
+     *
+     * Exposed because the *collection* halves of the two translating drivers genuinely differ, while everything
+     * downstream of "here are the values to translate" is identical. This class collects an explicit stale property
+     * list; {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook} collects every
+     * translatable property of a node whose variant is being created, and keeps the `directive->enabled` guard this
+     * class drops (it is driven by a command, not by the projection whose invariant that guard would duplicate).
+     * Both then need one batched DeepL call, connectors reassembled, and per-property post-processors applied.
+     *
+     * @param array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate
+     * @param array<non-empty-string, string> $propertiesToSet Values already decided without translating — blank
+     *        sources propagated verbatim to mirror a clearing. Translated values are merged on top. Callers creating
+     *        a target variant pass `[]`: there is no pre-existing translation to clear.
+     */
+    public function buildFromCollectedProperties(
+        NodeTypeTranslationDirective $directive,
+        Node $sourceNode,
+        array $propertiesToTranslate,
+        array $propertiesToSet,
+        string $sourceDeeplLanguage,
+        string $targetDeeplLanguage,
+        WorkspaceName $targetWorkspaceName,
+        OriginDimensionSpacePoint $targetOrigin,
+    ): ?SetNodeProperties {
+        $translatedProperties = [];
+
+        if ($propertiesToTranslate !== []) {
+            // deflate → translate → enflate so DeepL sees one string per leaf, connectors get reassembled.
+            $deflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
+            /** @var array<non-empty-string, string> $translatedDeflated */
+            $translatedDeflated = $this->translationService->translate(
+                $deflated,
+                $targetDeeplLanguage,
+                $sourceDeeplLanguage,
             );
+            if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
+                $translatedDeflated = array_map(
+                    static fn (string $value): string => html_entity_decode($value),
+                    $translatedDeflated,
+                );
+            }
+            $translatedProperties = ArrayFlatteningUtility::enflate($translatedDeflated);
         }
-        $translatedProperties = ArrayFlatteningUtility::enflate($translatedDeflated);
 
         foreach ($translatedProperties as $name => $translatedValue) {
             $targetValue = null;

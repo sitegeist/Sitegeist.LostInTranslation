@@ -413,7 +413,7 @@ ${Sitegeist.LostInTranslation.translate(['Hello world!', 'My name is...'], 'de',
 
 ## The Retranslator service
 
-To build your own (re)translation workflow, the Retranslator allows for translating subtrees (e.g. documents and all their content) or whole workspace (e.g. when publishing to live).
+To build your own (re)translation workflow, the Retranslator allows for translating subtrees (e.g. documents and all their content). For a whole workspace (e.g. when publishing to live), use `WorkspaceSynchronizer::synchronizeWorkspace()`, which dispatches one subtree retranslation per stale record.
 
 
 ## Translation Cache

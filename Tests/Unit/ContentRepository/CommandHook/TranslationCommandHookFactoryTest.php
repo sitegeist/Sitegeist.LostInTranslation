@@ -17,6 +17,7 @@ use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslati
 use Sitegeist\LostInTranslation\ContentRepository\CommandHook\DisabledCommandHook;
 use Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
+use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 
 /**
@@ -32,10 +33,10 @@ class TranslationCommandHookFactoryTest extends UnitTestCase
             new NodeTypeTranslationDirectiveFactory(),
             $this->createMock(TranslationServiceInterface::class),
             new AISystemTranslationRuntimeState(),
+            new StalePropertyCommandBuilder(),
         );
         $factory->enabled = $enabled;
         $factory->languageDimensionName = 'language';
-        $factory->experimentalApplyHtmlEntityDecodeAfterTranslation = false;
         return $factory;
     }
 

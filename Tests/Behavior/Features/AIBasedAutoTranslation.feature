@@ -130,6 +130,27 @@ Feature: Create node variant and let the AI translate the properties
       | Key                       | Expected                     |
       | metadata.initiatingUserId | "initiating-user-identifier" |
 
+  Scenario: A source property holding the string "0" is translated, not skipped as blank
+    # Guards a falsy-value bug: the collection step rejected blank sources with `empty($sourceValue)`, which is also
+    # true for the string "0" — so a property legitimately holding "0" was left untranslated on variant creation,
+    # while the stale-driven path in StalePropertyCommandBuilder translated it. Both now skip only null and
+    # whitespace-only strings, so the two drivers agree on the same node.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                 |
+      | zero-nodeface   | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"inlineEditableStringProperty": "0"} |
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value             |
+      | nodeAggregateId | "zero-nodeface"   |
+      | sourceOrigin    | {"language":"en"} |
+      | targetOrigin    | {"language":"de"} |
+
+    When I am in dimension space point {"language": "de"}
+    Then I expect node aggregate identifier "zero-nodeface" to lead to node user-cs-id;zero-nodeface;{"language":"de"}
+    And I expect this node to have the following properties:
+      | Key                          | Value          |
+      | inlineEditableStringProperty | "0 translated" |
+
   Scenario: The uriPathSegment of a Document Node is translated and kept a valid slug
     # uriPathSegment is auto-translatable but has a strict charset ([a-z0-9-]). The dummy translation service appends
     # " translated", yielding "my-test-uri-path translated" — which violates the charset (it contains a space). The

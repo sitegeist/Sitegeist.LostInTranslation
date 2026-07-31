@@ -10,7 +10,6 @@ use Neos\ContentRepository\Core\CommandHandler\Commands;
 use Neos\ContentRepository\Core\Dimension\ContentDimension;
 use Neos\ContentRepository\Core\EventStore\PublishedEvents;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
-use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
 use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
@@ -23,9 +22,8 @@ use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
-use Sitegeist\LostInTranslation\Domain\Directive\TranslatablePropertyName;
+use Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
-use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
 final class TranslationCommandHook implements CommandHookInterface
 {
@@ -38,7 +36,7 @@ final class TranslationCommandHook implements CommandHookInterface
         private readonly TranslationServiceInterface $translationService,
         private readonly ContentDimension $languageDimension,
         private readonly AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState,
-        private readonly bool $experimentalApplyHtmlEntityDecodeAfterTranslation,
+        private readonly StalePropertyCommandBuilder $stalePropertyCommandBuilder,
     ) {
     }
 
@@ -183,85 +181,38 @@ final class TranslationCommandHook implements CommandHookInterface
         /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
         $propertiesToTranslate = [];
         foreach ($translationDirective->translatablePropertyNames as $translatablePropertyName) {
-            if ($sourceNode->hasProperty($translatablePropertyName->propertyName)) {
-                $propertyName = $translatablePropertyName->propertyName->value;
-                $sourceValue = $sourceNode->getProperty($translatablePropertyName->propertyName);
-                if (empty($sourceValue) || (is_string($sourceValue) && trim($sourceValue) === '')) {
-                    continue;
-                }
-                assert($propertyName !== '');
-                if (is_object($sourceValue) && ($connector = $translatablePropertyName->translationConnector)) {
-                    $propertiesToTranslate[$propertyName] = $connector->extractTranslations($sourceValue);
-                } elseif (is_string($sourceValue)) {
-                    $propertiesToTranslate[$propertyName] = $sourceValue;
-                }
+            if (!$sourceNode->hasProperty($translatablePropertyName->propertyName)) {
+                continue;
+            }
+            $propertyName = $translatablePropertyName->propertyName->value;
+            $sourceValue = $sourceNode->getProperty($translatablePropertyName->propertyName);
+            // A blank source is skipped rather than propagated: the target variant is being created by the very
+            // command we are reacting to, so it holds no stale translation to clear. The stale-driven path in
+            // {@see StalePropertyCommandBuilder} does mirror the blank, because there the target already exists.
+            if ($sourceValue === null || (is_string($sourceValue) && trim($sourceValue) === '')) {
+                continue;
+            }
+            assert($propertyName !== '');
+            if (is_object($sourceValue) && ($connector = $translatablePropertyName->translationConnector)) {
+                $propertiesToTranslate[$propertyName] = $connector->extractTranslations($sourceValue);
+            } elseif (is_string($sourceValue)) {
+                $propertiesToTranslate[$propertyName] = $sourceValue;
             }
         }
 
-        if (empty($propertiesToTranslate)) {
+        if ($propertiesToTranslate === []) {
             return null;
         }
 
-        if (count($propertiesToTranslate) > 0) {
-            $propertiesToTranslateDeflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
-            /** @var array<non-empty-string, string> $translatedPropertiesDeflated */
-            $translatedPropertiesDeflated = $this->translationService->translate(
-                $propertiesToTranslateDeflated,
-                $targetDeeplLanguage,
-                $sourceDeeplLanguage,
-            );
-            if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
-                $translatedPropertiesDeflated = array_map(
-                    fn(string $value): string => html_entity_decode($value),
-                    $translatedPropertiesDeflated
-                );
-            }
-            $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
-        } else {
-            $translatedProperties = [];
-        }
-
-        if (empty($translatedProperties)) {
-            return null;
-        }
-
-        $propertiesToSet = [];
-        foreach ($translatedProperties as $propertyName => $translatedValue) {
-            $targetValue = null;
-            if (is_array($translatedValue)) {
-                $translatablePropertyName = $translationDirective->translatablePropertyNames->findByName($propertyName);
-                if (
-                    $translatablePropertyName instanceof TranslatablePropertyName
-                    && $connector = $translatablePropertyName->translationConnector
-                ) {
-                    $sourceValue = $sourceNode->getProperty($propertyName);
-                    if (is_object($sourceValue)) {
-                        $targetValue = $connector->applyTranslations($sourceValue, $translatedValue);
-                    }
-                }
-            } else {
-                // Apply the optional per-property post-processor (e.g. coerce a translated uriPathSegment back into a
-                // valid slug) to the scalar translated value.
-                $postProcessor = $translationDirective->translatablePropertyNames->findByName($propertyName)?->postProcessor;
-                if (is_string($translatedValue) && $postProcessor !== null) {
-                    $translatedValue = $postProcessor->process($translatedValue);
-                }
-                $targetValue = $translatedValue;
-            }
-            if ($targetValue !== null) {
-                $propertiesToSet[$propertyName] = $targetValue;
-            }
-        }
-
-        if (empty($propertiesToSet)) {
-            return null;
-        }
-
-        return SetNodeProperties::create(
-            workspaceName: $command->workspaceName,
-            nodeAggregateId: $sourceNode->aggregateId,
-            originDimensionSpacePoint: $command->targetOrigin,
-            propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
+        return $this->stalePropertyCommandBuilder->buildFromCollectedProperties(
+            directive: $translationDirective,
+            sourceNode: $sourceNode,
+            propertiesToTranslate: $propertiesToTranslate,
+            propertiesToSet: [],
+            sourceDeeplLanguage: $sourceDeeplLanguage,
+            targetDeeplLanguage: $targetDeeplLanguage,
+            targetWorkspaceName: $command->workspaceName,
+            targetOrigin: $command->targetOrigin,
         );
     }
 }

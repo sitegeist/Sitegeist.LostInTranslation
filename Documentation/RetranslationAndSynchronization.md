@@ -98,7 +98,10 @@ Companion tables:
   property list, and source/target DeepL languages, it extracts values (via connectors for value
   objects, flatten/deflate for strings), translates in **one batched DeepL call per node**, applies
   per-property post-processors, and returns a `SetNodeProperties`. Shared by `Retranslator`, the
-  publish hook, and `FullWorkspaceSynchronizer`.
+  publish hook, and `FullWorkspaceSynchronizer`. `TranslationCommandHook` (translate-on-variant-
+  creation) enters one step later, through `buildFromCollectedProperties()`: it is driven by a
+  `CreateNodeVariant` rather than by the projection, so it has no stale list and collects every
+  translatable property itself, then hands the values over for the same translate→write-back tail.
 - **`ReferenceDimensionSpacePointResolver`** — maps target→source (1:1, via the target preset's
   `referenceLanguage`) and source→all-targets (`findAllTargetDimensionSpacePoints`, 1:many).
 - **`DimensionValueDirectiveFactory` / `DeeplLanguagePair`** — resolve a DSP to a DeepL language id

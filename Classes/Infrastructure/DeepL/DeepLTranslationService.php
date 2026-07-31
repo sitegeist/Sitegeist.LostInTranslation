@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Infrastructure\DeepL;
 
-use DeepL\GlossaryEntries;
+use DeepL\DeepLException;
+use DeepL\LanguageCode;
+use DeepL\TextResult;
 use DeepL\TranslateTextOptions;
 use Neos\ContentRepository\Core\Feature\Security\Dto\UserId;
 use Neos\Flow\Annotations as Flow;
-use DeepL\DeepLException;
-use DeepL\TextResult;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\ApiStatus;
-use Sitegeist\LostInTranslation\Domain\Model\Glossary;
-use Sitegeist\LostInTranslation\Domain\Model\GlossaryLanguageKeys;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Utility\IgnoredTermsUtility;
 
@@ -24,7 +22,7 @@ class DeepLTranslationService implements TranslationServiceInterface
 {
     /**
      * @var array{defaultOptions?: array<string,mixed>, ignoredTerms?:array<string,string>}
- */
+     */
     protected array $settings = [];
 
     protected ?LoggerInterface $logger = null;
@@ -71,12 +69,11 @@ class DeepLTranslationService implements TranslationServiceInterface
     {
         // deepl api does throw critical errors when 'en' or 'pt' is used
         // this prevents that by defaulting to the most likely option
-        if (strtolower($targetLanguage) === 'en') {
-            $targetLanguage = 'en-GB';
-        }
-        if (strtolower($targetLanguage) === 'pt') {
-            $targetLanguage = 'pt-PT';
-        }
+        $targetLanguage = match (strtolower($targetLanguage)) {
+            LanguageCode::ENGLISH => LanguageCode::ENGLISH_BRITISH,
+            LanguageCode::PORTUGUESE => LanguageCode::PORTUGUESE_EUROPEAN,
+            default => $targetLanguage,
+        };
 
         if (
             array_key_exists('defaultOptions', $this->settings)

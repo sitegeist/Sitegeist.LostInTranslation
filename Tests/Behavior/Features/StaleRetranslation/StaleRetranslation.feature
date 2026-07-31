@@ -533,7 +533,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
   Scenario: Changing a node's type to one excluded from automatic translation clears the stale translations
         # Retyping into a type with `automaticTranslation: false` leaves no translatable properties, so the
         # aggregate's stale records must be deleted rather than linger for a type that is never translated.
-        # Retranslator::tryBuildSetNodeProperties relies on exactly this invariant ("stale records only exist for
+        # StalePropertyCommandBuilder relies on exactly this invariant ("stale records only exist for
         # translation-enabled node types") and therefore drops its own `directive->enabled` guard.
         #
         # `plain-node` covers the empty-record variant: a translation-enabled node whose translatable properties

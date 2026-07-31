@@ -544,7 +544,7 @@ class StaleTranslationProjection implements ProjectionInterface
             // An already-empty record does not CHANGE when the node is retyped, but it must still be dropped when
             // the new type is excluded from automatic translation: an empty record is only legitimate for an
             // enabled type (e.g. a tethered ContentCollection without translatable properties), and
-            // {@see \Sitegeist\LostInTranslation\Domain\Retranslator::tryBuildSetNodeProperties} relies on stale
+            // {@see \Sitegeist\LostInTranslation\Domain\StalePropertyCommandBuilder} relies on stale
             // records existing only for translation-enabled types.
             if ($newStaleProperties == $currentStaleProperties && $directive->enabled) {
                 continue;

@@ -10,7 +10,6 @@ use DeepL\GlossaryInfo;
 use DeepL\GlossaryLanguagePair;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\Model\Glossary;
-use Sitegeist\LostInTranslation\Domain\Model\GlossaryLanguageKeys;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
 use Neos\Flow\Annotations as Flow;
 
