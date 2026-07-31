@@ -18,6 +18,7 @@ final readonly class StaleTranslationReadModel implements ProjectionStateInterfa
     public function __construct(
         public StaleTranslationFinder $staleTranslationFinder,
         public NodeTypeResolver $nodeTypeResolver,
+        public StaleTranslationMaintenance $staleTranslationMaintenance,
     ) {
     }
 }

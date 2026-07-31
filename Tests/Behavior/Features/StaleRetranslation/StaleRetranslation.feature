@@ -1,8 +1,9 @@
 @contentrepository
 Feature: Track the staleness state of translations and run retranslation on stale translations
-    # Note: We deliberately ignore hierarchy due to complexity reasons until depending projections are implemented.
-    # If this becomes a performance issue due to lots of orphaned stale translation records, we might need an additional
-    # cleanup mechanism like comparing the projection with the graph projection.
+    # Note: Hierarchy is NOT cascaded by the projection on node removal — the CR emits only one
+    # NodeAggregateWasRemoved event for the directly removed aggregate. Descendant rows are pruned via
+    # `flow lostintranslation:reconcile` (compares the projection with the graph projection), and the
+    # workspace synchronizers skip orphans at read time so they cannot cause spurious retranslate calls.
 
   Background:
     Given using the following content dimensions yaml configuration:
@@ -11,9 +12,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
           values:
             en: {}
             de:
-              options:
-                referenceLanguage: en
-            fr:
               options:
                 referenceLanguage: en
         """
@@ -25,8 +23,24 @@ Feature: Track the staleness state of translations and run retranslation on stal
           abstract: true
         'Neos.Neos:ContentCollection':
           abstract: true
+          options:
+            automaticTranslation: true
         'Neos.Neos:Document':
           abstract: true
+          options:
+            automaticTranslation: true
+          properties:
+            title:
+              type: string
+              options:
+                automaticTranslation: true
+            # TODO: add uriPathSegment to test correct handling of auto-translatable properties with special processing
+        'Sitegeist.LostInTranslation.Document.Page':
+          superTypes:
+            'Neos.Neos:Document': true
+          childNodes:
+            main:
+              type: 'Neos.Neos:ContentCollection'
         'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation':
           superTypes:
             'Neos.Neos:Content': true
@@ -102,6 +116,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
               type: string
           options:
             automaticTranslation: true
+        # Opted OUT at type level while still declaring translatable properties — the exclusion must win over
+        # every per-property opt-in (including the `title` inherited from Neos.Neos:Document).
         'Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation':
           superTypes:
             'Neos.Neos:Document': true
@@ -140,35 +156,17 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | baseWorkspaceName  | "live"                 |
       | newContentStreamId | "other-user-cs-id"     |
 
-  Scenario: Non-translatable properties don't lead to empty stale translations
-    When I am in workspace "user-workspace"
-    And the following CreateNodeAggregateWithNode commands are executed:
-      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues         | tetheredDescendantNodeAggregateIds |
-      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"stringProperty": "My Text"} | {"tethered": "nodewyn-tetherton"}  |
-    And I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                      |
-            # ordered by node aggregate id by default
-            # only the tethered nodes appear due to the property with default value
-      | user-workspace | {"language":"de"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
-
-    When the command SetNodeProperties is executed with payload:
-      | Key                       | Value                         |
-      | nodeAggregateId           | "sir-david-nodenborough"      |
-      | originDimensionSpacePoint | {"language": "en"}            |
-      | propertyValues            | {"stringProperty": "My Text"} |
-    And I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                      |
-            # no new entries
-      | user-workspace | {"language":"de"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
-
   Scenario: Nodes of a type excluded from automatic translation don't get stale translation entries
+        # Type-level `automaticTranslation: false` short-circuits BOTH projection write paths: the creation
+        # handler and the property-set handler. The empty expectation table is meaningful rather than vacuous —
+        # a translation-enabled type is recorded even when nothing translatable carries a value (see "Changing a
+        # non-translatable property must not remove an existing (empty) stale record"), so a row would appear
+        # here the moment either guard regressed.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                                 | initialPropertyValues                                                                           |
       | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation | {"autoTranslatableStringProperty": "My Text", "inlineEditableStringProperty": "My Inline Text"} |
-    And I expect exactly the following stale translations:
+    Then I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
     When the command SetNodeProperties is executed with payload:
@@ -176,7 +174,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | nodeAggregateId           | "sir-david-nodenborough"                                    |
       | originDimensionSpacePoint | {"language": "en"}                                          |
       | propertyValues            | {"inlineEditableStringProperty": "My Modified Inline Text"} |
-    And I expect exactly the following stale translations:
+        # The property-set handler resolves the node type through the memorized-type table rather than from the
+        # event, so it needs its own exclusion guard — an edit on an excluded type must still record nothing.
+    Then I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
   Scenario: Retranslate a node
@@ -188,9 +188,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             # ordered by node aggregate id by default
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command CreateNodeVariant is executed with payload:
       | Key             | Value                    |
@@ -201,9 +199,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # 1x ContentStreamWasForked, 2x NodeAggregateWithNodeWasCreated, 2x NodeVariantWasCreated, 2x NodePropertiesWereSet via autotranslation
     Then I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
     And I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
         # change the original
     When the command SetNodeProperties is executed with payload:
@@ -232,18 +228,12 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"}
     Then I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
     And I expect exactly 14 events to be published on stream "ContentStream:user-cs-id"
         # 2 NodePropertiesWereSet for translations of "sir-david-nodenborough" and its tethered child "nodewyn-tetherton".
         # The Retranslator emits these in based on the node hierarchy (parent -> children -> grandchildren etc)
@@ -255,6 +245,12 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | originDimensionSpacePoint                           | {"language": "de"}                  |
       | propertyValues.inlineEditableStringProperty.value   | "My adjusted Text translated"       |
       | propertyValues.autoTranslatableStringProperty.value | "My adjusted Other Text translated" |
+        # The whole retranslation is a system/AI operation: every emitted event is attributed to the AI service, NOT
+        # the editor who triggered the run — including the structural NodePeerVariantWasCreated (index 12), consistent
+        # with the publish-driven SynchronizationCommandHook.
+    And event data at index 10 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
     And event at index 11 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                               |
       | workspaceName                                       | "user-workspace"                       |
@@ -271,6 +267,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | sourceOrigin           | {"language": "en"}                                                 |
       | peerOrigin             | {"language": "de"}                                                 |
       | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
+    And event data at index 12 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
     And event at index 13 is of type "NodePropertiesWereSet" with payload:
       | Key                                                 | Expected                              |
       | workspaceName                                       | "user-workspace"                      |
@@ -279,6 +278,33 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | originDimensionSpacePoint                           | {"language": "de"}                    |
       | propertyValues.inlineEditableStringProperty.value   | "My Grandchild Text translated"       |
       | propertyValues.autoTranslatableStringProperty.value | "My Other Grandchild Text translated" |
+    And event data at index 13 is:
+      | Key                       | Expected            |
+      | metadata.initiatingUserId | "AI:dummy:my-dummy" |
+
+  Scenario: A translatable property left at its NodeType default value is translated
+    # `autoTranslatableStringProperty` is not set explicitly here, so it takes its NodeType default ("autoTranslateMe").
+    # Defaults are part of the node's initial property values, so the projection records the property stale and the
+    # CreateNodeVariant cascade translates the default just like an explicitly-set value.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                       |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value                    |
+      | nodeAggregateId | "sir-david-nodenborough" |
+      | sourceOrigin    | {"language":"en"}        |
+      | targetOrigin    | {"language":"de"}        |
+    When I am in dimension space point {"language": "de"}
+    Then I expect node aggregate identifier "sir-david-nodenborough" to lead to node user-cs-id;sir-david-nodenborough;{"language":"de"}
+    And I expect this node to have the following properties:
+      | Key                            | Value                        |
+      | inlineEditableStringProperty   | "My Text translated"         |
+      | autoTranslatableStringProperty | "autoTranslateMe translated" |
 
   Scenario: Retranslate skips nested Document subtrees
     When I am in workspace "user-workspace"
@@ -286,12 +312,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                             |
       | parent-doc      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Parent Text"} |
       | child-doc       | parent-doc             | Sitegeist.LostInTranslation.Testing:DocumentWithAutomaticTranslation | {"autoTranslatableStringProperty": "Child Text"}  |
-    Then I expect exactly the following stale translations:
+    And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
       | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | child-doc       | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | parent-doc      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | parent-doc      | ["autoTranslatableStringProperty"] |
 
     When I retranslate node "parent-doc" in workspace "user-workspace" and dimension space point {"language":"de"}
 
@@ -299,8 +323,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                      |
       | user-workspace | {"language":"de"}         | child-doc       | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | child-doc       | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | parent-doc      | ["autoTranslatableStringProperty"] |
 
   Scenario: Retranslating into the source language is a no-op
     When I am in workspace "user-workspace"
@@ -311,9 +333,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # 1x ContentStreamWasForked (CreateWorkspace user-workspace) + 2x NodeAggregateWithNodeWasCreated
     And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
@@ -324,110 +344,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         # Event count untouched.
     And I expect exactly 3 events to be published on stream "ContentStream:user-cs-id"
-
-  Scenario: Retranslating a workspace varies in hierarchical order and skips nodes with ancestors that have to be translated manually
-    When I am in workspace "live"
-    And the following CreateNodeAggregateWithNode commands are executed:
-      | nodeAggregateId            | parentNodeAggregateId  | nodeTypeName                                                                 | initialPropertyValues                                         | tetheredDescendantNodeAggregateIds    |
-      | z-translate-me-first       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation             | {"autoTranslatableStringProperty": "Ancestor Text"}           | {"tethered": "translate-me-tethered"} |
-      | a-translate-me-second      | translate-me-tethered  | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation         | {"autoTranslatableStringProperty": "Descendant Text"}         | {}                                    |
-      | b-translate-me-later       | translate-me-tethered  | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation         | {"autoTranslatableStringProperty": "Another Descendant Text"} | {}                                    |
-      | do-not-translate-me        | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation | {}                                                            | {}                                    |
-      | skip-me-during-translation | do-not-translate-me    | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation         | {"autoTranslatableStringProperty": "Descendant Text"}         | {}                                    |
-    Then I expect exactly the following stale translations:
-      | workspaceName | originDimensionSpacePoint | nodeAggregateId            | propertyNames                      |
-      | live          | {"language":"de"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"de"}         | b-translate-me-later       | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | b-translate-me-later       | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"de"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"de"}         | translate-me-tethered      | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | translate-me-tethered      | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"de"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
-
-    When I retranslate workspace "live" in dimension space point {"language":"de"}
-    Then I expect exactly the following stale translations:
-      | workspaceName | originDimensionSpacePoint | nodeAggregateId            | propertyNames                      |
-      | live          | {"language":"fr"}         | a-translate-me-second      | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | b-translate-me-later       | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"de"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | skip-me-during-translation | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | translate-me-tethered      | ["autoTranslatableStringProperty"] |
-      | live          | {"language":"fr"}         | z-translate-me-first       | ["autoTranslatableStringProperty"] |
-
-    And I expect exactly 16 events to be published on stream "ContentStream:cs-identifier"
-        # 1x ContentStreamWasCreated
-        # 1x RootNodeAggregateWithNodeWasCreated
-        # 6x NodeAggregateWithNodeWasCreated (5 commands and 1 tethered)
-        # 4x NodeVariantWasCreated
-        # 4x NodePropertiesWereSet for automatic translation
-    And event at index 8 is of type "NodePeerVariantWasCreated" with payload:
-      | Key                    | Expected                                                           |
-      | workspaceName          | "live"                                                             |
-      | contentStreamId        | "cs-identifier"                                                    |
-      | nodeAggregateId        | "z-translate-me-first"                                             |
-      | sourceOrigin           | {"language": "en"}                                                 |
-      | peerOrigin             | {"language": "de"}                                                 |
-      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
-    And event at index 9 is of type "NodePeerVariantWasCreated" with payload:
-      | Key                    | Expected                                                           |
-      | workspaceName          | "live"                                                             |
-      | contentStreamId        | "cs-identifier"                                                    |
-      | nodeAggregateId        | "translate-me-tethered"                                            |
-      | sourceOrigin           | {"language": "en"}                                                 |
-      | peerOrigin             | {"language": "de"}                                                 |
-      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
-    And event at index 10 is of type "NodePropertiesWereSet" with payload:
-      | Key                                                 | Expected                   |
-      | workspaceName                                       | "live"                     |
-      | contentStreamId                                     | "cs-identifier"            |
-      | nodeAggregateId                                     | "z-translate-me-first"     |
-      | originDimensionSpacePoint                           | {"language": "de"}         |
-      | propertyValues.autoTranslatableStringProperty.value | "Ancestor Text translated" |
-    And event at index 11 is of type "NodePropertiesWereSet" with payload:
-      | Key                                                 | Expected                     |
-      | workspaceName                                       | "live"                       |
-      | contentStreamId                                     | "cs-identifier"              |
-      | nodeAggregateId                                     | "translate-me-tethered"      |
-      | originDimensionSpacePoint                           | {"language": "de"}           |
-      | propertyValues.autoTranslatableStringProperty.value | "autoTranslateMe translated" |
-    And event at index 12 is of type "NodePeerVariantWasCreated" with payload:
-      | Key                    | Expected                                                           |
-      | workspaceName          | "live"                                                             |
-      | contentStreamId        | "cs-identifier"                                                    |
-      | nodeAggregateId        | "a-translate-me-second"                                            |
-      | sourceOrigin           | {"language": "en"}                                                 |
-      | peerOrigin             | {"language": "de"}                                                 |
-      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
-    And event at index 13 is of type "NodePropertiesWereSet" with payload:
-      | Key                                                 | Expected                     |
-      | workspaceName                                       | "live"                       |
-      | contentStreamId                                     | "cs-identifier"              |
-      | nodeAggregateId                                     | "a-translate-me-second"      |
-      | originDimensionSpacePoint                           | {"language": "de"}           |
-      | propertyValues.autoTranslatableStringProperty.value | "Descendant Text translated" |
-    And event at index 14 is of type "NodePeerVariantWasCreated" with payload:
-      | Key                    | Expected                                                           |
-      | workspaceName          | "live"                                                             |
-      | contentStreamId        | "cs-identifier"                                                    |
-      | nodeAggregateId        | "b-translate-me-later"                                             |
-      | sourceOrigin           | {"language": "en"}                                                 |
-      | peerOrigin             | {"language": "de"}                                                 |
-      | peerSucceedingSiblings | [{"dimensionSpacePoint":{"language":"de"},"nodeAggregateId":null}] |
-    And event at index 15 is of type "NodePropertiesWereSet" with payload:
-      | Key                                                 | Expected                             |
-      | workspaceName                                       | "live"                               |
-      | contentStreamId                                     | "cs-identifier"                      |
-      | nodeAggregateId                                     | "b-translate-me-later"               |
-      | originDimensionSpacePoint                           | {"language": "de"}                   |
-      | propertyValues.autoTranslatableStringProperty.value | "Another Descendant Text translated" |
 
   Scenario: Complete retranslation cycle: Create a node, translate it, change the original, publish, rebase on another workspace, retranslate there and publish/rebase it back to its origin
     When I am in workspace "user-workspace"
@@ -438,9 +357,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
             # ordered by node aggregate id by default
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command CreateNodeVariant is executed with payload:
       | Key             | Value                    |
@@ -451,9 +368,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
         # 1x ContentStreamWasForked, 2x NodeAggregateWithNodeWasCreated, 2x NodeVariantWasCreated, 2x NodePropertiesWereSet via autotranslation
     Then I expect exactly 7 events to be published on stream "ContentStream:user-cs-id"
     And I expect exactly the following stale translations:
-      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
         # change the original
     When the command SetNodeProperties is executed with payload:
@@ -473,11 +388,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
 
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Change base workspace
     When the command ChangeBaseWorkspace is executed with payload:
@@ -486,16 +398,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | baseWorkspaceName | "user-workspace"       |
     Then I expect exactly the following stale translations:
       | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | other-user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | other-user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command ChangeBaseWorkspace is executed with payload:
       | Key               | Value                  |
@@ -503,11 +409,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | baseWorkspaceName | "live"                 |
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Publish workspace
     When the command PublishWorkspace is executed with payload:
@@ -516,16 +419,10 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | newContentStreamId | "new-user-cs-id" |
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | live           | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase other workspace.
         # Pin the rebased content stream to a stable name so we can assert against it below — without `rebasedContentStreamId`,
@@ -536,39 +433,21 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | rebasedContentStreamId | "rebased-other-user-cs-id" |
     Then I expect exactly the following stale translations:
       | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | live                 | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | live                 | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | other-user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | other-user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Retranslate in other workspace
     When I retranslate node "sir-david-nodenborough" in workspace "other-user-workspace" and dimension space point {"language":"de"}
     Then I expect exactly the following stale translations:
-      | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | live                 | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live           | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
         # Retranslate fires its commands against the workspace's CURRENT content stream,
         # which after the rebase above is the freshly-forked `rebased-other-user-cs-id` stream — NOT the original `user-cs-id`
         # (that one is frozen since the user-workspace publish).
@@ -608,34 +487,16 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | workspaceName      | "other-user-workspace" |
       | newContentStreamId | "new-other-user-cs-id" |
     Then I expect exactly the following stale translations:
-      | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace       | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
         # Rebase workspace
     When the command RebaseWorkspace is executed with payload:
       | Key           | Value            |
       | workspaceName | "user-workspace" |
     Then I expect exactly the following stale translations:
-      | workspaceName        | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
-      | live                 | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | live                 | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live                 | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | other-user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | other-user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace       | {"language":"fr"}         | nody-mc-nodeface       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace       | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
   Scenario: Node Type Change
     When I am in workspace "user-workspace"
@@ -645,7 +506,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command ChangeNodeAggregateType is executed with payload:
       | Key             | Value                                                                       |
@@ -655,7 +515,6 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
 
     When the command PublishWorkspace is executed with payload:
       | Key                | Value            |
@@ -669,29 +528,76 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                                |
       | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","replacementAutoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"]            |
 
   Scenario: Changing a node's type to one excluded from automatic translation clears the stale translations
+        # Retyping into a type with `automaticTranslation: false` leaves no translatable properties, so the
+        # aggregate's stale records must be deleted rather than linger for a type that is never translated.
+        # StalePropertyCommandBuilder relies on exactly this invariant ("stale records only exist for
+        # translation-enabled node types") and therefore drops its own `directive->enabled` guard.
+        #
+        # `plain-node` covers the empty-record variant: a translation-enabled node whose translatable properties
+        # carry no value is recorded with an empty property list, so retyping it produces no CHANGE to the stored
+        # list. The handler's "nothing changed" short-circuit must not let that empty record survive the retype.
     When I am in workspace "user-workspace"
     And the following CreateNodeAggregateWithNode commands are executed:
       | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                                                        |
       | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} |
+      | plain-node             | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations        | {"stringProperty": "Plain"}                                                                                                  |
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | plain-node             | []                                                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command ChangeNodeAggregateType is executed with payload:
       | Key             | Value                                                                          |
       | nodeAggregateId | "sir-david-nodenborough"                                                       |
       | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation" |
       | strategy        | "happypath"                                                                    |
+        # The non-empty record is gone; `plain-node` is untouched by its sibling's retype.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | plain-node      | []            |
+
+    When the command ChangeNodeAggregateType is executed with payload:
+      | Key             | Value                                                                          |
+      | nodeAggregateId | "plain-node"                                                                   |
+      | newNodeTypeName | "Sitegeist.LostInTranslation.Testing:DocumentExcludedFromAutomaticTranslation" |
+      | strategy        | "happypath"                                                                    |
+        # The already-empty record must go too: an empty record is only legitimate for a translation-enabled type.
     Then I expect exactly the following stale translations:
       | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
 
-    # We explicitly ignore "NodeAggregateWasRemoved" events for now
+  Scenario: Removing a node aggregate drops its own stale records but leaves descendants alone
+        # Hierarchy is deliberately ignored (see top-level comment) — removing a parent does not
+        # cascade to descendant stale rows. The CR emits NodeAggregateWasRemoved only for the
+        # directly removed aggregate; tethered children cannot themselves be removed, and
+        # non-tethered descendants would need their own RemoveNodeAggregate command.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                     | initialPropertyValues                              | tetheredDescendantNodeAggregateIds |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "My Text"}      | {"tethered": "nodewyn-tetherton"}  |
+      | nody-mc-nodeface       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation | {"autoTranslatableStringProperty": "Sibling Text"} | {"tethered": "nodenberg"}          |
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    When the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value                    |
+      | workspaceName                | "user-workspace"         |
+      | nodeAggregateId              | "sir-david-nodenborough" |
+      | coveredDimensionSpacePoint   | {"language":"en"}        |
+      | nodeVariantSelectionStrategy | "allVariants"            |
+        # sir-david's stale row in `de` is gone; its tethered child `nodewyn-tetherton` is not
+        # touched (no cascade), and the sibling `nody-mc-nodeface` is untouched.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId   | propertyNames                      |
+      | user-workspace | {"language":"de"}         | nodenberg         | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | nodewyn-tetherton | ["autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | nody-mc-nodeface  | ["autoTranslatableStringProperty"] |
 
   Scenario: Changing a node aggregate's type thins out properties not translatable in the new type
     When I am in workspace "user-workspace"
@@ -701,9 +607,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command ChangeNodeAggregateType is executed with payload:
       | Key             | Value                                                           |
@@ -714,10 +618,8 @@ Feature: Track the staleness state of translations and run retranslation on stal
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
             # children are ignored (see top-level comment)
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
             # NodeWithFewerTranslations has no `autoTranslatableStringProperty`
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty"]   |
 
   Scenario: Publishing a workspace propagates stale records to the base workspace
     When I am in workspace "user-workspace"
@@ -727,9 +629,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
     When the command PublishWorkspace is executed with payload:
       | Key                | Value            |
@@ -738,13 +638,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
       | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"]                                |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
 
   Scenario: Partial publish propagates only the published nodes' stale records
     When I am in workspace "user-workspace"
@@ -755,13 +651,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodenberg              | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     When the command PublishIndividualNodesFromWorkspace is executed with payload:
       | Key            | Value                      |
@@ -770,17 +662,11 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | live           | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodenberg              | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
   Scenario: Discarding a workspace drops all its stale records
     When I am in workspace "user-workspace"
@@ -790,9 +676,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     When the command DiscardWorkspace is executed with payload:
       | Key                | Value                  |
@@ -810,13 +694,9 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | user-workspace | {"language":"de"}         | nodenberg              | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodenberg              | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface       | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     When the command DiscardIndividualNodesFromWorkspace is executed with payload:
       | Key                | Value                      |
@@ -826,9 +706,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                      |
       | user-workspace | {"language":"de"}         | nodenberg        | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodenberg        | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nody-mc-nodeface | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nody-mc-nodeface | ["autoTranslatableStringProperty"] |
 
   Scenario: Deleting a workspace drops all its stale records
     When I am in workspace "user-workspace"
@@ -838,9 +716,7 @@ Feature: Track the staleness state of translations and run retranslation on stal
     And I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     When the command DeleteWorkspace is executed with payload:
       | Key           | Value            |
@@ -859,17 +735,13 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | live           | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | live           | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
     When I change the content dimensions in content repository "default" to:
-      | Identifier | Values      | Generalizations |
-      | language   | en, ltz, fr |                 |
+      | Identifier | Values  | Generalizations |
+      | language   | en, ltz |                 |
     And the command MoveDimensionSpacePoint is executed with payload:
       | Key                  | Value              |
       | workspaceName        | "live"             |
@@ -879,11 +751,250 @@ Feature: Track the staleness state of translations and run retranslation on stal
     Then I expect exactly the following stale translations:
       | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
       | live           | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | live           | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | live           | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"ltz"}        | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | nodewyn-tetherton      | ["autoTranslatableStringProperty"] |
       | user-workspace | {"language":"ltz"}        | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
-      | user-workspace | {"language":"fr"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
 
+  Scenario: Document nodes are recorded as stale translations
+        # A Document.Page carries the auto-translatable `title` inherited from Neos.Neos:Document, so creating one
+        # records a stale translation for `title` in the target dimension — Documents are tracked for retranslation
+        # just like Content nodes. Its tethered `main` ContentCollection has no translatable properties and is
+        # recorded with an empty list.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                              | initialPropertyValues | tetheredDescendantNodeAggregateIds |
+      | homepage        | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page | {"title": "Home"}     | {"main": "homepage-main"}          |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | homepage        | ["title"]     |
+      | user-workspace | {"language":"de"}         | homepage-main   | []            |
+
+  Scenario: Changing a non-translatable property must not remove an existing (empty) stale record
+        # Regression: a node created with no stale translatable values is recorded with an empty property list. Editing a
+        # NON-translatable property on the source used to wrongly DELETE that record in the target dimension — the
+        # source-side merge produced an empty intersection and fell into a delete branch. A source-side property set can
+        # only ADD newly-stale properties to a target record; stale rows are removed only by retranslation/sync and by
+        # node/variant/workspace lifecycle events, never by an unrelated source edit.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                    | initialPropertyValues       |
+      | plain-node      | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:NodeWithFewerTranslations   | {"stringProperty": "Plain"} |
+        # Only the non-translatable `stringProperty` carries a value, so the stale record is empty.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | plain-node      | []            |
+
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                         |
+      | nodeAggregateId           | "plain-node"                  |
+      | originDimensionSpacePoint | {"language": "en"}            |
+      | propertyValues            | {"stringProperty": "Changed"} |
+        # The empty stale record must survive the non-translatable change (not be deleted).
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+      | user-workspace | {"language":"de"}         | plain-node      | []            |
+
+  Scenario: Retranslating a document removes all of its stale translations including its content collection
+        # A document's tethered ContentCollection carries no translatable properties and is recorded with an empty stale
+        # list. Retranslating the document must clear ALL stale records below it — the document's own properties, the
+        # content inside it, AND the empty content-collection record — leaving nothing behind (no orphaned stale rows).
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
+      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | intro-text      | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | page-home       | ["title"]                                                         |
+      | user-workspace | {"language":"de"}         | page-home-main  | []                                                                |
+
+    When I retranslate node "page-home" in workspace "user-workspace" and dimension space point {"language":"de"}
+
+        # Every stale record below the document is gone — including the empty content-collection record.
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+  Scenario: Reconcile prunes descendant orphans left behind by a parent removal
+        # When a Document with a tethered ContentCollection and nested content is removed, the CR cascades
+        # the removal in its hierarchy but only emits NodeAggregateWasRemoved for the document itself. The
+        # projection deletes the document's stale row but leaves the descendants' rows behind. Reconcile
+        # walks the ContentGraph and prunes those orphans.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                  | tetheredDescendantNodeAggregateIds |
+      | page-home       | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home"}                                                                      | {"main": "page-home-main"}         |
+      | page-home-2     | lady-eleonode-rootford | Sitegeist.LostInTranslation.Document.Page                            | {"title": "Home 2"}                                                                    | {"main": "page-home-main-2"}       |
+      | intro-text      | page-home-main         | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "Welcome", "autoTranslatableStringProperty": "Intro"} |                                    |
+    And I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | page-home        | ["title"]                                                         |
+      | user-workspace | {"language":"de"}         | page-home-2      | ["title"]                                                         |
+      | user-workspace | {"language":"de"}         | page-home-main   | []                                                                |
+      | user-workspace | {"language":"de"}         | page-home-main-2 | []                                                                |
+
+    When the command RemoveNodeAggregate is executed with payload:
+      | Key                          | Value             |
+      | workspaceName                | "user-workspace"  |
+      | nodeAggregateId              | "page-home"       |
+      | coveredDimensionSpacePoint   | {"language":"en"} |
+      | nodeVariantSelectionStrategy | "allVariants"     |
+        # page-home is gone but its tethered `main` and the nested `intro-text` linger as orphans.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | intro-text       | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | page-home-2      | ["title"]                                                         |
+      | user-workspace | {"language":"de"}         | page-home-main   | []                                                                |
+      | user-workspace | {"language":"de"}         | page-home-main-2 | []                                                                |
+
+    When I reconcile stale translations in workspace "user-workspace"
+        # Orphans are gone after reconcile.
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId  | propertyNames |
+      | user-workspace | {"language":"de"}         | page-home-2      | ["title"]     |
+      | user-workspace | {"language":"de"}         | page-home-main-2 | []            |
+
+  Scenario: Clearing Text should produce a StaleTranslation record and translating it should result in a cleared Text in target dimension
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                                                        |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text", "stringProperty": "Whatever"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Publish workspace — both workspaces end up with the stale row (live receives the create events,
+    # user-workspace is reset to match live by `replaceWorkspaceEntries`).
+    When the command PublishWorkspace is executed with payload:
+      | Key                | Value            |
+      | workspaceName      | "user-workspace" |
+      | newContentStreamId | "new-user-cs-id" |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | live           | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Retranslate in live — clears the live stale row and creates the `de` variant with translated values.
+    When I retranslate node "sir-david-nodenborough" in workspace "live" and dimension space point {"language":"de"}
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Rebase user-workspace on live — picks up live's translated state, clearing user-workspace's stale row.
+    When the command RebaseWorkspace is executed with payload:
+      | Key                    | Value                |
+      | workspaceName          | "user-workspace"     |
+      | rebasedContentStreamId | "rebased-user-cs-id" |
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+    # Clear the source property to "" in user-workspace — projection records a stale row at the target.
+    When I am in workspace "user-workspace"
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                   |
+      | nodeAggregateId           | "sir-david-nodenborough"                |
+      | originDimensionSpacePoint | {"language": "en"}                      |
+      | propertyValues            | {"autoTranslatableStringProperty": ""}  |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    # Retranslate — the cleared source must propagate to the target as "" (not skipped, not " translated").
+    When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"}
+
+    # Retranslate emits a SetNodeProperties at the target dimension with the literal empty value.
+    # The rebased stream contains: 1 ContentStreamWasForked + 1 NodePropertiesWereSet (the "en" clear)
+    # + 1 NodePropertiesWereSet (the "de" cleared propagation from retranslate).
+    Then I expect exactly 3 events to be published on stream "ContentStream:rebased-user-cs-id"
+    And event at index 2 is of type "NodePropertiesWereSet" with payload:
+      | Key                                                 | Expected                 |
+      | workspaceName                                       | "user-workspace"         |
+      | contentStreamId                                     | "rebased-user-cs-id"     |
+      | nodeAggregateId                                     | "sir-david-nodenborough" |
+      | originDimensionSpacePoint                           | {"language": "de"}       |
+      | propertyValues.autoTranslatableStringProperty.value | ""                       |
+
+    # Stale row cleared.
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+  Scenario: Retranslating a no-op stale node (nothing translatable to set) still clears its stale row
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                   |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Create the de variant so the target exists — the cascade translates and clears the stale row.
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value                    |
+      | nodeAggregateId | "sir-david-nodenborough" |
+      | sourceOrigin    | {"language":"en"}        |
+      | targetOrigin    | {"language":"de"}        |
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+    # Unset a translatable source property on en — the projection records a fresh stale row at de for it.
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                    |
+      | nodeAggregateId           | "sir-david-nodenborough"                 |
+      | originDimensionSpacePoint | {"language": "en"}                       |
+      | propertyValues            | {"autoTranslatableStringProperty": null} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+
+    # Retranslate de — the source property is unset, so there is nothing to translate and no
+    # SetNodeProperties (hence no NodePropertiesWereSet) is emitted. The stale row must still be cleared
+    # rather than lingering forever and reporting the node as perpetually out of sync.
+    When I retranslate node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"}
+    Then I expect exactly the following stale translations:
+      | workspaceName | originDimensionSpacePoint | nodeAggregateId | propertyNames |
+
+  Scenario: A partially cleared stale row stays a JSON list, not a JSON object
+    # `array_diff` and `array_intersect` PRESERVE keys, so clearing the FIRST of two stale properties leaves
+    # `[1 => "autoTranslatableStringProperty"]` — and `json_encode` writes a PHP array with a gap in its keys as the
+    # object `{"1":"..."}`, not the list `["..."]`. Every writer of the column re-indexes to prevent that; this pins it.
+    #
+    # It has to read the raw column to do so. `PropertyNames::fromArray` re-indexes on the way back in, so the
+    # read-model assertions used everywhere else in this file launder the corruption and pass either way — which is
+    # also why nothing caught it before.
+    When I am in workspace "user-workspace"
+    And the following CreateNodeAggregateWithNode commands are executed:
+      | nodeAggregateId        | parentNodeAggregateId  | nodeTypeName                                                         | initialPropertyValues                                                                         |
+      | sir-david-nodenborough | lady-eleonode-rootford | Sitegeist.LostInTranslation.Testing:LeafNodeWithAutomaticTranslation | {"inlineEditableStringProperty": "My Text", "autoTranslatableStringProperty": "My Other Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # Translate once so the de variant exists and the row is cleared, then make BOTH properties stale again.
+    When the command CreateNodeVariant is executed with payload:
+      | Key             | Value                    |
+      | nodeAggregateId | "sir-david-nodenborough" |
+      | sourceOrigin    | {"language":"en"}        |
+      | targetOrigin    | {"language":"de"}        |
+    And the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                                                                            |
+      | nodeAggregateId           | "sir-david-nodenborough"                                                                                         |
+      | originDimensionSpacePoint | {"language": "en"}                                                                                               |
+      | propertyValues            | {"inlineEditableStringProperty": "My adjusted Text", "autoTranslatableStringProperty": "My adjusted Other Text"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                                                     |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["inlineEditableStringProperty","autoTranslatableStringProperty"] |
+
+    # An editor fixes ONE of the two translations by hand, directly in de: that property is no longer stale, the other
+    # still is. Clearing the FIRST entry is what leaves the gap — clearing the second would re-index harmlessly and
+    # prove nothing.
+    When the command SetNodeProperties is executed with payload:
+      | Key                       | Value                                                  |
+      | nodeAggregateId           | "sir-david-nodenborough"                               |
+      | originDimensionSpacePoint | {"language": "de"}                                     |
+      | propertyValues            | {"inlineEditableStringProperty": "Von Hand uebersetzt"} |
+    Then I expect exactly the following stale translations:
+      | workspaceName  | originDimensionSpacePoint | nodeAggregateId        | propertyNames                      |
+      | user-workspace | {"language":"de"}         | sir-david-nodenborough | ["autoTranslatableStringProperty"] |
+    # The assertion the one above cannot make.
+    And I expect the stale translation row for node "sir-david-nodenborough" in workspace "user-workspace" and dimension space point {"language":"de"} to store propertyNames as the JSON list ["autoTranslatableStringProperty"]

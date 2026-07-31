@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="en" datatype="plaintext">
+        <body>
+            <!-- Module registration -->
+            <trans-unit id="module.label">
+                <source>Lost In Translation</source>
+            </trans-unit>
+            <trans-unit id="module.description">
+                <source>DeepL based Translations for Neos</source>
+            </trans-unit>
+
+            <!-- Shared navigation tabs -->
+            <trans-unit id="tabs.glossaries">
+                <source>Glossaries</source>
+            </trans-unit>
+            <trans-unit id="tabs.apiStatus">
+                <source>API-Status</source>
+            </trans-unit>
+            <trans-unit id="tabs.synchronization">
+                <source>Synchronization</source>
+            </trans-unit>
+
+            <!-- Shared actions and status -->
+            <trans-unit id="action.back">
+                <source>Back</source>
+            </trans-unit>
+            <trans-unit id="action.cancel">
+                <source>Cancel</source>
+            </trans-unit>
+            <trans-unit id="status.upToDate">
+                <source>up to date</source>
+            </trans-unit>
+            <trans-unit id="status.outdated">
+                <source>outdated</source>
+            </trans-unit>
+            <trans-unit id="glossary.save">
+                <source>Save Glossary</source>
+            </trans-unit>
+
+            <!-- Glossaries overview (Index) -->
+            <trans-unit id="glossaries.heading">
+                <source>Glossaries</source>
+            </trans-unit>
+            <trans-unit id="glossaries.empty">
+                <source>No glossaries found!</source>
+            </trans-unit>
+            <trans-unit id="glossaries.col.source">
+                <source>Source</source>
+            </trans-unit>
+            <trans-unit id="glossaries.col.target">
+                <source>Target</source>
+            </trans-unit>
+            <trans-unit id="glossaries.col.lastModified">
+                <source>Last Modified</source>
+            </trans-unit>
+            <trans-unit id="glossaries.col.lastSynchronized">
+                <source>Last Synchronized</source>
+            </trans-unit>
+            <trans-unit id="glossaries.col.remoteId">
+                <source>Remote ID</source>
+            </trans-unit>
+            <trans-unit id="glossaries.col.status">
+                <source>Status</source>
+            </trans-unit>
+            <trans-unit id="glossaries.delete">
+                <source>Delete Glossary</source>
+            </trans-unit>
+            <trans-unit id="glossaries.delete.title">
+                <source>Delete glossary</source>
+            </trans-unit>
+            <trans-unit id="glossaries.delete.confirmHeader">
+                <source>Delete Glossary {0}</source>
+            </trans-unit>
+            <trans-unit id="glossaries.upload">
+                <source>Upload Glossary</source>
+            </trans-unit>
+            <trans-unit id="glossaries.upload.title">
+                <source>Upload glossary</source>
+            </trans-unit>
+            <trans-unit id="glossaries.edit">
+                <source>Edit Glossary</source>
+            </trans-unit>
+            <trans-unit id="glossaries.add">
+                <source>Add new Glossary</source>
+            </trans-unit>
+
+            <!-- API status (ShowStatus) -->
+            <trans-unit id="status.heading">
+                <source>API-Status</source>
+            </trans-unit>
+            <trans-unit id="status.connectionFailed">
+                <source>!!! NO DeepL API connection, please check your API-Key !!!</source>
+            </trans-unit>
+            <trans-unit id="status.connectionSuccess">
+                <source>DeepL API connection successful</source>
+            </trans-unit>
+            <trans-unit id="status.freeApi" xml:space="preserve">
+                <source> (Free API)</source>
+            </trans-unit>
+            <trans-unit id="status.paidApi" xml:space="preserve">
+                <source> (Paid API)</source>
+            </trans-unit>
+            <trans-unit id="status.charactersUsed">
+                <source>{0} from {1} characters used ({2}%)</source>
+            </trans-unit>
+            <trans-unit id="status.limitReached">
+                <source>Character limit of {0} reached. No further translations possible.</source>
+            </trans-unit>
+            <trans-unit id="status.setKey">
+                <source>Set API-Key</source>
+            </trans-unit>
+            <trans-unit id="status.changeKey">
+                <source>Change custom API-Key</source>
+            </trans-unit>
+            <trans-unit id="status.removeKey">
+                <source>Remove custom API-Key</source>
+            </trans-unit>
+            <trans-unit id="status.removeKey.title">
+                <source>Remove custom API-Key</source>
+            </trans-unit>
+
+            <!-- Synchronization (SynchronizationStatus) -->
+            <trans-unit id="synchronization.heading">
+                <source>Synchronization</source>
+            </trans-unit>
+            <trans-unit id="synchronization.noRules">
+                <source>No synchronization rules are configured. Add rules under</source>
+            </trans-unit>
+            <trans-unit id="synchronization.col.source">
+                <source>Source</source>
+            </trans-unit>
+            <trans-unit id="synchronization.col.target">
+                <source>Target</source>
+            </trans-unit>
+            <trans-unit id="synchronization.col.scope">
+                <source>Scope</source>
+            </trans-unit>
+            <trans-unit id="synchronization.col.mode">
+                <source>Mode</source>
+            </trans-unit>
+            <trans-unit id="synchronization.col.status">
+                <source>Status</source>
+            </trans-unit>
+            <trans-unit id="synchronization.targetProblem.missing">
+                <source>target workspace does not exist</source>
+            </trans-unit>
+            <trans-unit id="synchronization.targetProblem.notBasedOnSource">
+                <source>target workspace is not based on the source workspace</source>
+            </trans-unit>
+            <trans-unit id="synchronization.pending">
+                <source>{0} translation(s) pending</source>
+            </trans-unit>
+            <trans-unit id="synchronization.syncNow">
+                <source>Sync now</source>
+            </trans-unit>
+            <trans-unit id="synchronization.syncAll">
+                <source>Sync all rules ({0} pending)</source>
+            </trans-unit>
+
+            <!-- Synchronization rule scope/mode values -->
+            <trans-unit id="synchronization.scope.Content">
+                <source>Content only</source>
+            </trans-unit>
+            <trans-unit id="synchronization.scope.Document">
+                <source>Document &amp; content</source>
+            </trans-unit>
+            <trans-unit id="synchronization.mode.auto">
+                <source>Automatic</source>
+            </trans-unit>
+            <trans-unit id="synchronization.mode.ask">
+                <source>On request</source>
+            </trans-unit>
+
+            <!-- Create glossary (CreateGlossary) -->
+            <trans-unit id="createGlossary.heading">
+                <source>Add a Glossary</source>
+            </trans-unit>
+            <trans-unit id="createGlossary.sourceTargetLabel">
+                <source>Source -&gt; Target language</source>
+            </trans-unit>
+
+            <!-- Show glossary (ShowGlossary) -->
+            <trans-unit id="showGlossary.heading">
+                <source>Glossary {0}</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.modified">
+                <source>Modified</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.synchronized">
+                <source>Synchronized</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.remoteId">
+                <source>Remote ID</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.status">
+                <source>Status</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.entries">
+                <source>Entries</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.noEntries">
+                <source>No entries yet. Please create one.</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.col.source">
+                <source>Source - {0}</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.col.target">
+                <source>Target - {0}</source>
+            </trans-unit>
+            <trans-unit id="showGlossary.backToList">
+                <source>Back to list</source>
+            </trans-unit>
+
+            <!-- Glossary entries (ShowGlossary, Create/EditGlossaryEntry) -->
+            <trans-unit id="entry.delete">
+                <source>Delete Entry</source>
+            </trans-unit>
+            <trans-unit id="entry.edit">
+                <source>Edit Entry</source>
+            </trans-unit>
+            <trans-unit id="entry.delete.confirmHeader">
+                <source>Delete Entry {0}</source>
+            </trans-unit>
+            <trans-unit id="entry.add">
+                <source>Add Entry</source>
+            </trans-unit>
+            <trans-unit id="entry.sourceTextLabel">
+                <source>Source Text - {0}</source>
+            </trans-unit>
+            <trans-unit id="entry.targetTextLabel">
+                <source>Target Text - {0}</source>
+            </trans-unit>
+            <trans-unit id="createGlossaryEntry.heading">
+                <source>Add entry to Glossary {0}</source>
+            </trans-unit>
+            <trans-unit id="editGlossaryEntry.heading">
+                <source>Edit entry to Glossary {0}</source>
+            </trans-unit>
+
+            <!-- Custom API key (SetCustomKey) -->
+            <trans-unit id="setCustomKey.heading">
+                <source>Store custom DeepL API-key</source>
+            </trans-unit>
+            <trans-unit id="setCustomKey.label">
+                <source>DeepL Api-key</source>
+            </trans-unit>
+            <trans-unit id="setCustomKey.save">
+                <source>Save Key</source>
+            </trans-unit>
+
+            <!-- Flash messages (controller) -->
+            <trans-unit id="flash.syncRuleNotFound">
+                <source>Synchronization rule not found.</source>
+            </trans-unit>
+            <trans-unit id="flash.syncSkipped">
+                <source>{0}: skipped ({1})</source>
+            </trans-unit>
+            <trans-unit id="flash.syncResult">
+                <source>{0}: {1} properties, {2} variants, {3} removed, {4} tag changes, {5} skipped.</source>
+            </trans-unit>
+            <trans-unit id="flash.fullSyncNeeded">
+                <source>{0}: {1} node(s) were skipped because an ancestor document is missing in the target dimension and has no pending translation. A full sync is needed to create the missing ancestors — run on the CLI: ./flow lostintranslation:synchronize {2} {3} {4} {5} --full</source>
+            </trans-unit>
+            <trans-unit id="flash.glossaryExists">
+                <source>Glossary already exists!</source>
+            </trans-unit>
+            <trans-unit id="flash.glossaryUploaded">
+                <source>Glossary was uploaded</source>
+            </trans-unit>
+            <trans-unit id="flash.glossaryUploadedRemovedOne">
+                <source>Glossary was uploaded, {0} outdated glossary was removed</source>
+            </trans-unit>
+            <trans-unit id="flash.glossaryUploadedRemovedMany">
+                <source>Glossary was uploaded, {0} outdated glossaries were removed</source>
+            </trans-unit>
+            <trans-unit id="flash.uploadFailed">
+                <source>Upload failed</source>
+            </trans-unit>
+            <trans-unit id="flash.glossaryDeleted">
+                <source>Glossary deleted</source>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>

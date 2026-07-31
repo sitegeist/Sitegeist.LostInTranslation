@@ -12,6 +12,7 @@ use Sitegeist\LostInTranslation\Domain\CollectionComparison\Result;
 use Sitegeist\LostInTranslation\Domain\CollectionComparison\Comparator;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 
+// TODO: still used?
 class TranslationHelper implements ProtectedContextAwareInterface
 {
      /**

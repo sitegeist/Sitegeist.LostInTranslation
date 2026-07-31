@@ -3,10 +3,10 @@ name: build
 on:
   push:
     branches:
-      - '3.0'
+      - '3.*'
   pull_request:
     branches:
-      - '3.0'
+      - '3.*'
 
 jobs:
   test:
@@ -34,12 +34,14 @@ jobs:
 
       - name: Install Neos Project
         run: |
-          composer create --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "^${{ matrix.neos-versions }}"
+          composer create --stability dev --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "~${{ matrix.neos-versions }}.0"
           cd "${{ env.NEOS_FOLDER }}"
           composer config --no-plugins allow-plugins.neos/composer-plugin true
+          composer config minimum-stability dev
+          composer config prefer-stable true
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ${{ env.NEOS_FOLDER }}${{ env.DIST_FOLDER }}
 
@@ -55,7 +57,7 @@ jobs:
 
       - name: Cache Composer packages
         id: composer-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/composer
@@ -90,3 +92,104 @@ jobs:
         run: |
           cd "${{ env.NEOS_FOLDER }}"
           bin/phpunit --colors --stop-on-failure -c ${{ env.DIST_FOLDER }}/Tests/FunctionalTests.xml --testsuite "LostInTranslation" --verbose
+
+  behat:
+    name: "Behat (PHP ${{ matrix.php-versions }}, Neos ${{ matrix.neos-versions }})"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: ['8.2', '8.3', '8.4']
+        neos-versions: ['9.0', '9.1']
+    runs-on: ubuntu-latest
+
+    env:
+      FLOW_CONTEXT: Testing/Behat
+      NEOS_FOLDER: neos/
+      DIST_FOLDER: DistributionPackages/Sitegeist.LostInTranslation
+
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: flow_functional_testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: mbstring, xml, json, zlib, iconv, intl, pdo_sqlite, mysql, pgsql, redis, memcached, memcache, apcu
+          ini-values: date.timezone="Africa/Tunis", opcache.fast_shutdown=0, apc.enable_cli=on
+
+      - name: Install Neos Project and other dependencies
+        run: |
+          composer create --stability dev --no-scripts --no-install neos/neos-base-distribution "${{ env.NEOS_FOLDER }}" "~${{ matrix.neos-versions }}.0"
+          cd "${{ env.NEOS_FOLDER }}"
+          composer config --no-plugins allow-plugins.neos/composer-plugin true
+          composer config minimum-stability dev
+          composer config prefer-stable true
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          path: ${{ env.NEOS_FOLDER }}${{ env.DIST_FOLDER }}
+
+      - name: Finish composer setup
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          composer config repositories.lostintranslation '{ "type": "path", "url": "./${{ env.DIST_FOLDER }}", "options": { "symlink": false } }'
+          composer require sitegeist/lostintranslation "@dev" --no-install
+          jq -r '(."require-dev" // {}) | to_entries[] | "\(.key) \(.value)"' "${{ env.DIST_FOLDER }}/composer.json" \
+            | while read -r package constraint; do
+                composer require "$package" "$constraint" --no-install --dev
+              done
+
+      - name: Cache Composer packages
+        id: composer-cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/composer
+            ~/${{ env.NEOS_FOLDER }}Packages
+          key: behat-php-${{ matrix.php-versions }}-${{ hashFiles('**/composer.json') }}
+          restore-keys: behat-php-${{ matrix.php-versions }}-
+
+      - name: Install dependencies
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          composer update --no-progress --no-interaction
+
+      - name: Configure test database
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          cat > Configuration/Testing/Settings.Database.yaml <<'YAML'
+          Neos:
+            Flow:
+              persistence:
+                backendOptions:
+                  driver: pdo_mysql
+                  host: 127.0.0.1
+                  port: 3306
+                  user: root
+                  password: root
+          YAML
+
+      - name: Run database migrations
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          ./flow doctrine:migrate --quiet
+
+      - name: Run behavioral (Behat) tests
+        run: |
+          cd "${{ env.NEOS_FOLDER }}"
+          php -d memory_limit=2G -d "error_reporting=E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED" \
+            ./bin/behat -c ${{ env.DIST_FOLDER }}/Tests/Behavior/behat.yml.dist

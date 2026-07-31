@@ -10,7 +10,6 @@ use DeepL\GlossaryInfo;
 use DeepL\GlossaryLanguagePair;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\Model\Glossary;
-use Sitegeist\LostInTranslation\Domain\Model\GlossaryLanguageKeys;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
 use Neos\Flow\Annotations as Flow;
 
@@ -60,6 +59,11 @@ class DeepLGlossaryService
         return $client->getGlossaryLanguages();
     }
 
+    /**
+     * Uploads the glossary to DeepL and returns the new remote id.
+     *
+     * DeepL's glossary API is immutable - an existing remote glossary cannot be edited in place.
+     */
     public function uploadRemoteGlossary(Glossary $glossary): ?string
     {
         try {

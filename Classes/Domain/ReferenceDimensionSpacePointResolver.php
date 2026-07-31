@@ -21,34 +21,37 @@ final readonly class ReferenceDimensionSpacePointResolver
     }
 
     /**
-     * @return array<int,DimensionSpacePoint>
+     * Find every dimension space point that declares `$dimensionSpacePoint`'s language as its `options.referenceLanguage`.
+     * A source language can drive translation into more than one target (e.g. `de.options.referenceLanguage = en` and
+     * `es.options.referenceLanguage = en`), so the result is a set — empty if no target references this source or no
+     * resolved point lives in the allowed subspace.
      */
-    public function resolveTargetDimensionSpacePoints(DimensionSpacePoint $dimensionSpacePoint): array
+    public function findAllTargetDimensionSpacePoints(DimensionSpacePoint $dimensionSpacePoint): DimensionSpacePointSet
     {
         $languageDimension = $this->contentDimensionSource->getDimension($this->languageDimensionId);
         if ($languageDimension === null) {
-            return [];
+            return new DimensionSpacePointSet([]);
         }
 
         $languageValue = $dimensionSpacePoint->coordinates[$this->languageDimensionId->value] ?? null;
         if ($languageValue === null) {
-            return [];
+            return new DimensionSpacePointSet([]);
         }
 
-        $targetDimensionSpacePoints = [];
+        $targets = [];
         foreach ($languageDimension->values as $language) {
-            if (($language->configuration['options']['referenceLanguage'] ?? null) === $languageValue) {
-                $coordinates = $dimensionSpacePoint->coordinates;
-                $coordinates[$this->languageDimensionId->value] = $language->value;
-                $targetDimensionSpacePoint = DimensionSpacePoint::fromArray($coordinates);
-
-                if ($this->allowedDimensionSubspace->contains($targetDimensionSpacePoint)) {
-                    $targetDimensionSpacePoints[] = $targetDimensionSpacePoint;
-                }
+            if (($language->configuration['options']['referenceLanguage'] ?? null) !== $languageValue) {
+                continue;
+            }
+            $coordinates = $dimensionSpacePoint->coordinates;
+            $coordinates[$this->languageDimensionId->value] = $language->value;
+            $targetDimensionSpacePoint = DimensionSpacePoint::fromArray($coordinates);
+            if ($this->allowedDimensionSubspace->contains($targetDimensionSpacePoint)) {
+                $targets[] = $targetDimensionSpacePoint;
             }
         }
 
-        return $targetDimensionSpacePoints;
+        return new DimensionSpacePointSet($targets);
     }
 
     public function tryResolveSourceDimensionSpacePoint(DimensionSpacePoint $dimensionSpacePoint): ?DimensionSpacePoint

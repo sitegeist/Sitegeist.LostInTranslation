@@ -9,6 +9,8 @@ use Neos\ContentRepository\Core\Feature\Security\Dto\UserId;
 interface TranslationServiceInterface
 {
     /**
+     * Translate every value in `$texts`, preserving keys.
+     *
      * @param array<string,string> $texts
      * @param string $targetLanguage
      * @param string|null $sourceLanguage

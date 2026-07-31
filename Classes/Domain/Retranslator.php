@@ -4,34 +4,23 @@ declare(strict_types=1);
 
 namespace Sitegeist\LostInTranslation\Domain;
 
-use Neos\ContentRepository\Core\CommandHandler\CommandInterface;
-use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Dimension\ContentDimensionId;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\DimensionSpace\OriginDimensionSpacePoint;
-use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetNodeProperties;
-use Neos\ContentRepository\Core\Feature\NodeModification\Dto\PropertyValuesToWrite;
 use Neos\ContentRepository\Core\Feature\NodeVariation\Command\CreateNodeVariant;
-use Neos\ContentRepository\Core\NodeType\NodeTypeManager;
 use Neos\ContentRepository\Core\NodeType\NodeTypeNames;
-use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
-use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
-use Neos\ContentRepository\Core\SharedModel\Node\PropertyNames;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Security\Context as SecurityContext;
 use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
-use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
-use Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AISystemTranslationRuntimeState;
 use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
 use Sitegeist\LostInTranslation\Domain\Directive\DimensionValueDirectiveFactory;
-use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
-use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
 
 /**
  * Driver that brings a target-language dimension subtree back in sync with its source (reference)
@@ -43,8 +32,13 @@ use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
  *    {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook}
  *    then cascades translation onto the freshly-created variant (including tethered children).
  *
- * Stale-property commands are dispatched while {@see AISystemTranslationRuntimeState} marks the AI
- * as the actor so event metadata is attributed to the AI service, not the editor.
+ * Commands are dispatched via {@see AiCommandDispatcher} so their event metadata is attributed to the
+ * AI service, not the editor who triggered the run.
+ *
+ * This is the per-subtree driver only. Workspace-wide runs belong to {@see WorkspaceSynchronizer}
+ * (stale-driven) and {@see FullWorkspaceSynchronizer} (`--full`); both call back into
+ * {@see self::retranslateSubtree()} or share {@see StalePropertyCommandBuilder}, so the translation
+ * pipeline exists exactly once.
  */
 class Retranslator
 {
@@ -52,22 +46,19 @@ class Retranslator
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
     #[Flow\Inject]
-    protected TranslationServiceInterface $translationService;
+    protected AiCommandDispatcher $aiCommandDispatcher;
 
     #[Flow\Inject]
-    protected NodeTypeTranslationDirectiveFactory $nodeTypeTranslationDirectiveFactory;
+    protected StalePropertyCommandBuilder $stalePropertyCommandBuilder;
 
     #[Flow\Inject]
-    protected AISystemTranslationRuntimeState $aiSystemTranslationRuntimeState;
+    protected DimensionValueDirectiveFactory $dimensionValueDirectiveFactory;
 
     #[Flow\Inject]
-    protected NodeUriPathSegmentGenerator $nodeUriPathSegmentGenerator;
+    protected SecurityContext $securityContext;
 
     #[Flow\InjectConfiguration(path: 'nodeTranslation.languageDimensionName')]
     protected string $languageDimensionName;
-
-    #[Flow\InjectConfiguration(path: 'nodeTranslation.experimental-applyHtmlEntityDecodeAfterTranslation')]
-    protected bool $experimentalApplyHtmlEntityDecodeAfterTranslation = false;
 
     /**
      * Retranslate the subtree below `$nodeAggregateId` into `$targetDimensionSpacePoint`.
@@ -75,6 +66,11 @@ class Retranslator
      * The source DSP is derived from the target via the `referenceLanguage` config on the target
      * preset — callers do not pass it. Calling with the source language itself (no `referenceLanguage`)
      * is a legitimate no-op, returning `RetranslationResult::skipped(...)` rather than throwing.
+     *
+     * `$sourceWorkspaceName` defaults to `$workspaceName`. When it differs, the source subtree (and the stale
+     * records flagged against it) are read from `$sourceWorkspaceName`, while every emitted command is dispatched
+     * into `$workspaceName` — the cross-workspace case (e.g. read `live`, write `de-review`). The target workspace
+     * must contain the source-dimension nodes (true when forked from the source workspace).
      *
      * Best-effort: every misconfiguration returns `skipped`; callers distinguish real work from
      * no-ops via the dispatch counts on the returned {@see RetranslationResult}. Repeated invocations
@@ -85,13 +81,71 @@ class Retranslator
         WorkspaceName $workspaceName,
         NodeAggregateId $nodeAggregateId,
         DimensionSpacePoint $targetDimensionSpacePoint,
+        ?WorkspaceName $sourceWorkspaceName = null,
     ): RetranslationResult {
+        $plan = $this->runSubtree(
+            $contentRepositoryId,
+            $workspaceName,
+            $nodeAggregateId,
+            $targetDimensionSpacePoint,
+            $sourceWorkspaceName,
+            false,
+        );
+        if ($plan->skippedReason !== null) {
+            return RetranslationResult::skipped($plan->skippedReason);
+        }
+        return new RetranslationResult(
+            stalePropertyCommandsDispatched: count($plan->propertyUpdates),
+            variantCommandsDispatched: count($plan->variantCreations),
+        );
+    }
+
+    /**
+     * Preview counterpart of {@see self::retranslateSubtree()}: the same walk reaching the same per-node decisions,
+     * but nothing is translated, dispatched or pruned — so a `--dry-run` leaves no trace and, crucially, costs no
+     * DeepL calls. (Building a `SetNodeProperties` *is* the translation, so a preview that built commands and threw
+     * them away would cost exactly as much as the run it is meant to estimate.)
+     *
+     * Returns the affected node ids rather than counts; {@see RetranslationPlan} explains why the caller needs them.
+     */
+    public function planSubtree(
+        ContentRepositoryId $contentRepositoryId,
+        WorkspaceName $workspaceName,
+        NodeAggregateId $nodeAggregateId,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+        ?WorkspaceName $sourceWorkspaceName = null,
+    ): RetranslationPlan {
+        return $this->runSubtree(
+            $contentRepositoryId,
+            $workspaceName,
+            $nodeAggregateId,
+            $targetDimensionSpacePoint,
+            $sourceWorkspaceName,
+            true,
+        );
+    }
+
+    /**
+     * Shared implementation of {@see self::retranslateSubtree()} and {@see self::planSubtree()}. `$dryRun` decides
+     * three things and nothing else: whether stale properties are translated or merely tested for translatability,
+     * whether the collected commands are dispatched, and whether unsatisfiable stale rows are pruned. The decision of
+     * *what* each node needs is identical either way, which is what makes the preview trustworthy.
+     */
+    private function runSubtree(
+        ContentRepositoryId $contentRepositoryId,
+        WorkspaceName $workspaceName,
+        NodeAggregateId $nodeAggregateId,
+        DimensionSpacePoint $targetDimensionSpacePoint,
+        ?WorkspaceName $sourceWorkspaceName,
+        bool $dryRun,
+    ): RetranslationPlan {
+        $sourceWorkspaceName ??= $workspaceName;
         $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
         $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
 
         $languageDimension = $cr->getContentDimensionSource()->getDimension($languageDimensionId);
         if ($languageDimension === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'language dimension "%s" not configured in CR "%s"',
                 $this->languageDimensionName,
                 $contentRepositoryId->value,
@@ -105,40 +159,33 @@ class Retranslator
         );
         $sourceDimensionSpacePoint = $resolver->tryResolveSourceDimensionSpacePoint($targetDimensionSpacePoint);
         if ($sourceDimensionSpacePoint === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'no referenceLanguage configured for target DSP %s',
                 $targetDimensionSpacePoint->toJson(),
             ));
         }
 
-        $dimensionValueDirectiveFactory = new DimensionValueDirectiveFactory();
-        $sourceDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
+        $languagePair = $this->dimensionValueDirectiveFactory->tryResolveLanguagePair(
             $languageDimension,
-            OriginDimensionSpacePoint::fromDimensionSpacePoint($sourceDimensionSpacePoint),
-        )?->deeplSourceId;
-        $targetDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
-            $languageDimension,
-            OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
-        )?->deeplTargetId;
-        if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
-            return RetranslationResult::skipped(sprintf(
+            $sourceDimensionSpacePoint,
+            $targetDimensionSpacePoint,
+        );
+        if ($languagePair === null) {
+            return RetranslationPlan::skipped(sprintf(
                 'DeepL language not resolvable for source %s or target %s',
                 $sourceDimensionSpacePoint->toJson(),
                 $targetDimensionSpacePoint->toJson(),
             ));
         }
+        $sourceDeeplLanguage = $languagePair->sourceLanguage;
+        $targetDeeplLanguage = $languagePair->targetLanguage;
 
-        $contentGraph = $cr->getContentGraph($workspaceName);
-        // we don't want to translate removed content
-        $sourceSubgraph = $contentGraph->getSubgraph(
-            $sourceDimensionSpacePoint,
-            NeosVisibilityConstraints::excludeRemoved()
-        );
-        // we must evaluate removed targets because CreateVariant will fail otherwise
-        $targetSubgraph = $contentGraph->getSubgraph(
-            $targetDimensionSpacePoint,
-            VisibilityConstraints::createEmpty()
-        );
+        // Source subtree is read from the source workspace; target-variant existence from the (possibly different)
+        // target workspace. They are the same graph in the common single-workspace case.
+        $sourceContentGraph = $cr->getContentGraph($sourceWorkspaceName);
+        $targetContentGraph = $cr->getContentGraph($workspaceName);
+        $sourceSubgraph = $sourceContentGraph->getSubgraph($sourceDimensionSpacePoint, NeosVisibilityConstraints::excludeRemoved());
+        $targetSubgraph = $targetContentGraph->getSubgraph($targetDimensionSpacePoint, VisibilityConstraints::createEmpty());
 
         // Scope to the current document: nested documents are out of scope for a retranslation run.
         // The entry node itself is always returned by `findSubtree`, so a document entry still gets its own properties retranslated.
@@ -151,7 +198,7 @@ class Retranslator
             ),
         );
         if ($sourceSubtree === null) {
-            return RetranslationResult::skipped(sprintf(
+            return RetranslationPlan::skipped(sprintf(
                 'source node %s not found in DSP %s',
                 $nodeAggregateId->value,
                 $sourceDimensionSpacePoint->toJson(),
@@ -162,7 +209,8 @@ class Retranslator
         // The finder takes the *source* subtree (for the node id list) but filters by the *target*
         // origin dsp hash — that's where stale records live.
         $targetOrigin = OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint);
-        $staleTranslations = $cr->projectionState(StaleTranslationReadModel::class)
+        $staleTranslationReadModel = $cr->projectionState(StaleTranslationReadModel::class);
+        $staleTranslations = $staleTranslationReadModel
             ->staleTranslationFinder
             ->findBySubtree($sourceSubtree, $targetOrigin);
         $staleByNodeAggregateId = [];
@@ -179,33 +227,76 @@ class Retranslator
         // Children are pushed onto the stack in reverse so they pop in declaration order
         // (preserves pre-order; matches event-index assertions in the Behat tests).
         $nodeTypeManager = $cr->getNodeTypeManager();
+        $staleTranslationMaintenance = $staleTranslationReadModel->staleTranslationMaintenance;
         $stalePropertyCommands = [];
         $variantCommands = [];
+        /** @var list<NodeAggregateId> $propertyUpdates */
+        $propertyUpdates = [];
+        /** @var list<NodeAggregateId> $variantCreations */
+        $variantCreations = [];
         $stack = [$sourceSubtree];
         while ($stack !== []) {
             $currentSubtree = array_pop($stack);
             $sourceNode = $currentSubtree->node;
+            $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
 
             $stale = $staleByNodeAggregateId[$sourceNode->aggregateId->value] ?? null;
-            if ($stale !== null) {
-                $command = $this->resolveRetranslationCommand(
-                    $sourceNode,
-                    $stale->propertyNames,
-                    $sourceDeeplLanguage,
-                    $targetDeeplLanguage,
-                    $targetOrigin,
-                    $targetSubgraph,
-                    $nodeTypeManager,
+            $writesProperties = false;
+            if ($stale !== null && $existsInTarget) {
+                if ($dryRun) {
+                    // Ask whether the source values would produce a command instead of producing one: building it
+                    // performs the DeepL translation, which a preview must not spend.
+                    $writesProperties = $this->stalePropertyCommandBuilder->wouldBuildSetNodeProperties(
+                        $nodeTypeManager,
+                        $sourceNode,
+                        $stale->propertyNames,
+                    );
+                } else {
+                    $command = $this->stalePropertyCommandBuilder->buildSetNodeProperties(
+                        nodeTypeManager: $nodeTypeManager,
+                        sourceNode: $sourceNode,
+                        stalePropertyNames: $stale->propertyNames,
+                        // Use the OriginDimensionSpacePoint from the stale record, not a freshly built
+                        // one — it reflects where the variant actually lives (matters for spec/gen
+                        // variants).
+                        targetOrigin: $stale->originDimensionSpacePoint,
+                        sourceDeeplLanguage: $sourceDeeplLanguage,
+                        targetDeeplLanguage: $targetDeeplLanguage,
+                        targetWorkspaceName: $workspaceName,
+                    );
+                    if ($command !== null) {
+                        $stalePropertyCommands[] = $command;
+                        $writesProperties = true;
+                    }
+                }
+            }
+            if ($writesProperties) {
+                $propertyUpdates[] = $sourceNode->aggregateId;
+            }
+
+            if (!$existsInTarget && !$sourceNode->classification->isTethered()) {
+                $variantCreations[] = $sourceNode->aggregateId;
+                $variantCommands[] = CreateNodeVariant::create(
+                    $workspaceName,
+                    $sourceNode->aggregateId,
+                    $sourceNode->originDimensionSpacePoint,
+                    OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
                 );
-                if ($command instanceof SetNodeProperties) {
-                    $stalePropertyCommands[] = $command;
-                }
-                if ($command instanceof CreateNodeVariant) {
-                    /**
-                     * we only need a variation command here as SetNodeProperties is then subsequently handled by {@see TranslationCommandHook::onAfterHandle()}
-                     */
-                    $variantCommands[] = $command;
-                }
+            }
+
+            // No SetNodeProperties was produced for this stale node — prune the row if no event will ever clear it
+            // (target variant exists with nothing translatable to set, or a tethered no-op). The reconciler leaves a
+            // target-absent non-tethered node alone, since its CreateNodeVariant cascade above will translate it.
+            // A dry run reports only, so it never prunes.
+            if (!$dryRun && $stale !== null && !$writesProperties) {
+                StaleRecordReconciler::pruneIfUnsatisfiable(
+                    $staleTranslationMaintenance,
+                    $workspaceName,
+                    $stale,
+                    $sourceNode,
+                    $sourceSubgraph,
+                    $targetSubgraph,
+                );
             }
 
             foreach (array_reverse([...$currentSubtree->children]) as $childSubtree) {
@@ -213,317 +304,27 @@ class Retranslator
             }
         }
 
-        foreach ($stalePropertyCommands as $command) {
-            // Mark commands as "triggered by AI"
-            $this->dispatchAsAi($cr, $command);
-        }
-        foreach ($variantCommands as $command) {
-            $cr->handle($command);
-        }
-
-        return new RetranslationResult(
-            stalePropertyCommandsDispatched: count($stalePropertyCommands),
-            variantCommandsDispatched: count($variantCommands),
-        );
-    }
-
-    public function retranslateWorkspace(
-        ContentRepositoryId $contentRepositoryId,
-        WorkspaceName $workspaceName,
-        DimensionSpacePoint $targetDimensionSpacePoint,
-    ): RetranslationResult {
-        $cr = $this->contentRepositoryRegistry->get($contentRepositoryId);
-        $languageDimensionId = new ContentDimensionId($this->languageDimensionName);
-
-        $languageDimension = $cr->getContentDimensionSource()->getDimension($languageDimensionId);
-        if ($languageDimension === null) {
-            return RetranslationResult::skipped(sprintf(
-                'language dimension "%s" not configured in CR "%s"',
-                $this->languageDimensionName,
-                $contentRepositoryId->value,
-            ));
-        }
-
-        $resolver = new ReferenceDimensionSpacePointResolver(
-            allowedDimensionSubspace: $cr->getVariationGraph()->getDimensionSpacePoints(),
-            contentDimensionSource: $cr->getContentDimensionSource(),
-            languageDimensionId: $languageDimensionId,
-        );
-        $sourceDimensionSpacePoint = $resolver->tryResolveSourceDimensionSpacePoint($targetDimensionSpacePoint);
-        if ($sourceDimensionSpacePoint === null) {
-            return RetranslationResult::skipped(sprintf(
-                'no referenceLanguage configured for target DSP %s',
-                $targetDimensionSpacePoint->toJson(),
-            ));
-        }
-
-        $dimensionValueDirectiveFactory = new DimensionValueDirectiveFactory();
-        $sourceDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
-            $languageDimension,
-            OriginDimensionSpacePoint::fromDimensionSpacePoint($sourceDimensionSpacePoint),
-        )?->deeplSourceId;
-        $targetDeeplLanguage = $dimensionValueDirectiveFactory->tryCreateForDimensionAndOriginDimensionSpacePoint(
-            $languageDimension,
-            OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
-        )?->deeplTargetId;
-        if ($sourceDeeplLanguage === null || $targetDeeplLanguage === null) {
-            return RetranslationResult::skipped(sprintf(
-                'DeepL language not resolvable for source %s or target %s',
-                $sourceDimensionSpacePoint->toJson(),
-                $targetDimensionSpacePoint->toJson(),
-            ));
-        }
-
-        $contentGraph = $cr->getContentGraph($workspaceName);
-        // we don't want to translate removed content
-        $sourceSubgraph = $contentGraph->getSubgraph(
-            $sourceDimensionSpacePoint,
-            NeosVisibilityConstraints::excludeRemoved()
-        );
-        // we must evaluate removed targets because CreateVariant will fail otherwise
-        $targetSubgraph = $contentGraph->getSubgraph(
-            $targetDimensionSpacePoint,
-            VisibilityConstraints::createEmpty()
-        );
-
-        $staleTranslations = $cr->projectionState(StaleTranslationReadModel::class)
-            ->staleTranslationFinder
-            ->findByWorkspace(
-                $workspaceName,
-                OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint)
-            );
-
-        $nodeVariationCommands = [];
-        $nodeModificationCommands = [];
-        /** @var array<string,list<CreateNodeVariant>> $stalledNodeVariationCommands indexed by ancestor that has to be varied first */
-        $stalledNodeVariationCommands = [];
-        foreach ($staleTranslations as $staleTranslation) {
-            $sourceNode = $sourceSubgraph->findNodeById($staleTranslation->nodeAggregateId);
-            if (!$sourceNode) {
-                // the source might be deleted by now, but the stale translation projection cannot keep track of that
-                continue;
-            }
-            $command = $this->resolveRetranslationCommand(
-                $sourceNode,
-                $staleTranslation->propertyNames,
-                $sourceDeeplLanguage,
-                $targetDeeplLanguage,
-                OriginDimensionSpacePoint::fromDimensionSpacePoint($targetDimensionSpacePoint),
-                $targetSubgraph,
-                $cr->getNodeTypeManager(),
-            );
-
-            if ($command instanceof CreateNodeVariant) {
-                $requiredAncestor = $this->resolveAncestorThatHasToBeVariedFirst($command->nodeAggregateId, $sourceSubgraph, $targetSubgraph);
-                if ($requiredAncestor) {
-                    $stalledNodeVariationCommands[$requiredAncestor->value][] = $command;
-                } else {
-                    $nodeVariationCommands[] = $command;
+        // AI synchronization is a system operation: it must write the translations into the target workspace
+        // regardless of the workspace role of whoever triggered it (an editor publishing, or clicking "sync now",
+        // need not have write access to e.g. `live`). We therefore dispatch with CR authorization checks disabled.
+        // The writes remain bounded to translation commands for the configured/stale nodes.
+        // Both command groups are dispatched as AI: this is a system translation operation, so every resulting event
+        // (the structural NodePeerVariantWasCreated AND the translated NodePropertiesWereSet) is attributed to the AI
+        // service rather than the editor who triggered the run — consistent with the publish-driven
+        // SynchronizationCommandHook. The two groups act on disjoint nodes (SetNodeProperties for variants that already
+        // exist in the target, CreateNodeVariant for those that do not), so their relative order is immaterial; only
+        // the within-`$variantCommands` pre-order (ancestor before descendant) matters and is preserved by the walk.
+        if (!$dryRun) {
+            $this->securityContext->withoutAuthorizationChecks(function () use ($cr, $stalePropertyCommands, $variantCommands): void {
+                foreach ($stalePropertyCommands as $command) {
+                    $this->aiCommandDispatcher->dispatch($cr, $command);
                 }
-            } elseif ($command instanceof SetNodeProperties) {
-                $nodeModificationCommands[] = $command;
-            }
-        }
-
-        foreach ($nodeModificationCommands as $command) {
-            // Mark commands as "triggered by AI"
-            $this->dispatchAsAi($cr, $command);
-        }
-        $numberOfCreatedVariants = 0;
-        foreach ($nodeVariationCommands as $command) {
-            $cr->handle($command);
-            $numberOfCreatedVariants++;
-            if (array_key_exists($command->nodeAggregateId->value, $stalledNodeVariationCommands)) {
-                foreach ($stalledNodeVariationCommands[$command->nodeAggregateId->value] as $stalledNodeVariationCommand) {
-                    $cr->handle($stalledNodeVariationCommand);
-                    $numberOfCreatedVariants++;
+                foreach ($variantCommands as $command) {
+                    $this->aiCommandDispatcher->dispatch($cr, $command);
                 }
-            }
+            });
         }
 
-        return new RetranslationResult(
-            stalePropertyCommandsDispatched: count($nodeModificationCommands),
-            variantCommandsDispatched: $numberOfCreatedVariants,
-        );
-    }
-
-    private function resolveAncestorThatHasToBeVariedFirst(
-        NodeAggregateId $nodeAggregateId,
-        ContentSubgraphInterface $sourceSubgraph,
-        ContentSubgraphInterface $targetSubgraph,
-    ): ?NodeAggregateId {
-        $sourceParent = $sourceSubgraph->findParentNode($nodeAggregateId);
-        if (!$sourceParent) {
-            return null;
-        }
-        $targetParent = $targetSubgraph->findNodeById($sourceParent->aggregateId);
-        if ($targetParent) {
-            return null;
-        } elseif ($sourceParent->classification->isTethered()) {
-            return $this->resolveAncestorThatHasToBeVariedFirst($sourceParent->aggregateId, $sourceSubgraph, $targetSubgraph);
-        } else {
-            return $sourceParent->aggregateId;
-        }
-    }
-
-    public function resolveRetranslationCommand(
-        Node $sourceNode,
-        PropertyNames $propertyNames,
-        string $sourceDeeplLanguage,
-        string $targetDeeplLanguage,
-        OriginDimensionSpacePoint $targetOrigin,
-        ContentSubgraphInterface $targetSubgraph,
-        NodeTypeManager $nodeTypeManager,
-    ): SetNodeProperties|CreateNodeVariant|null {
-        $existsInTarget = $targetSubgraph->findNodeById($sourceNode->aggregateId) !== null;
-        if ($existsInTarget) {
-            return $this->tryBuildSetNodeProperties(
-                nodeTypeManager: $nodeTypeManager,
-                sourceNode: $sourceNode,
-                stalePropertyNames: $propertyNames,
-                targetOrigin: $targetOrigin,
-                sourceDeeplLanguage: $sourceDeeplLanguage,
-                targetDeeplLanguage: $targetDeeplLanguage,
-            );
-        } else {
-            if (
-                // variation will be handled automatically for tethered nodes
-                !$sourceNode->classification->isTethered()
-            ) {
-                return CreateNodeVariant::create(
-                    $sourceNode->workspaceName,
-                    $sourceNode->aggregateId,
-                    $sourceNode->originDimensionSpacePoint,
-                    OriginDimensionSpacePoint::fromDimensionSpacePoint($targetSubgraph->getDimensionSpacePoint()),
-                );
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Build a translated `SetNodeProperties` for the explicit stale property list, or `null`.
-     *
-     * Slimmed clone of {@see \Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHook::tryPrepareSetNodeProperties}.
-     * The difference: the hook iterates ALL translatable properties (fresh variant, everything is
-     * new); we iterate ONLY the explicit stale list, because editors may have manually overridden
-     * other translated properties on the target side.
-     *
-     * Trusts the projection's invariant that stale records only exist for translation-enabled
-     * node types and translatable properties — so guards on `directive->enabled` and `findByName`
-     * are dropped. The `hasProperty` + empty-source guards remain: editors can blank source
-     * properties between the projection write and our dispatch.
-     */
-    private function tryBuildSetNodeProperties(
-        NodeTypeManager $nodeTypeManager,
-        Node $sourceNode,
-        PropertyNames $stalePropertyNames,
-        OriginDimensionSpacePoint $targetOrigin,
-        string $sourceDeeplLanguage,
-        string $targetDeeplLanguage,
-    ): ?SetNodeProperties {
-        $nodeType = $nodeTypeManager->getNodeType($sourceNode->nodeTypeName);
-        // Defensive: projection guarantees the node type existed when the record was written.
-        // If it's since been removed, we can't resolve the connector for non-string props.
-        if ($nodeType === null) {
-            return null;
-        }
-        $directive = $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType);
-
-        /** @var array<non-empty-string, string|array<non-empty-string, string>> $propertiesToTranslate */
-        $propertiesToTranslate = [];
-        foreach ($stalePropertyNames as $propertyName) {
-            if (!$nodeType->hasProperty($propertyName->value)) {
-                continue;
-            }
-            $sourceValue = $sourceNode->getProperty($propertyName);
-            if ($sourceValue === null || (is_string($sourceValue) && trim($sourceValue) === '')) {
-                continue;
-            }
-
-            $name = $propertyName->value;
-            assert($name !== '');
-
-            $translatable = $directive->translatablePropertyNames->findByName($propertyName);
-            if (is_object($sourceValue) && $translatable?->translationConnector !== null) {
-                $propertiesToTranslate[$name] = $translatable->translationConnector->extractTranslations($sourceValue);
-            } elseif (is_string($sourceValue)) {
-                $propertiesToTranslate[$name] = $sourceValue;
-            }
-        }
-
-        if ($propertiesToTranslate === []) {
-            return null;
-        }
-
-        // deflate → translate → enflate so DeepL sees one string per leaf, connectors get reassembled.
-        $deflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
-        /** @var array<non-empty-string, string> $translatedDeflated */
-        $translatedDeflated = $this->translationService->translate(
-            $deflated,
-            $targetDeeplLanguage,
-            $sourceDeeplLanguage,
-        );
-        if ($this->experimentalApplyHtmlEntityDecodeAfterTranslation) {
-            $translatedDeflated = array_map(
-                static fn (string $value): string => html_entity_decode($value),
-                $translatedDeflated,
-            );
-        }
-        $translatedProperties = ArrayFlatteningUtility::enflate($translatedDeflated);
-
-        $propertiesToSet = [];
-        foreach ($translatedProperties as $name => $translatedValue) {
-            // uriPathSegment has strict charset; DeepL routinely violates it.
-            if (
-                $name === 'uriPathSegment'
-                && is_string($translatedValue)
-                && !preg_match('/^[a-z0-9\-]+$/i', $translatedValue)
-            ) {
-                $translatedValue = $this->nodeUriPathSegmentGenerator->generateUriPathSegment(null, $translatedValue);
-            }
-            $targetValue = null;
-            if (is_array($translatedValue)) {
-                $translatable = $directive->translatablePropertyNames->findByName($name);
-                $connector = $translatable?->translationConnector;
-                if ($connector !== null) {
-                    $sourceValue = $sourceNode->getProperty($name);
-                    if (is_object($sourceValue)) {
-                        $targetValue = $connector->applyTranslations($sourceValue, $translatedValue);
-                    }
-                }
-            } else {
-                $targetValue = $translatedValue;
-            }
-            if ($targetValue !== null) {
-                $propertiesToSet[$name] = $targetValue;
-            }
-        }
-
-        if ($propertiesToSet === []) {
-            return null;
-        }
-
-        return SetNodeProperties::create(
-            workspaceName: $sourceNode->workspaceName,
-            nodeAggregateId: $sourceNode->aggregateId,
-            originDimensionSpacePoint: $targetOrigin,
-            propertyValues: PropertyValuesToWrite::fromArray($propertiesToSet),
-        );
-    }
-
-    /**
-     * Dispatch a command with AI authorship active. `try/finally` is load-bearing: an exception
-     * inside `handle()` must still reset the singleton runtime state.
-     */
-    private function dispatchAsAi(ContentRepository $cr, CommandInterface $command): void
-    {
-        $this->aiSystemTranslationRuntimeState->setActiveAIServiceId($this->translationService->getAIServiceId());
-        try {
-            $cr->handle($command);
-        } finally {
-            $this->aiSystemTranslationRuntimeState->resetActiveAIServiceId();
-        }
+        return new RetranslationPlan($propertyUpdates, $variantCreations);
     }
 }

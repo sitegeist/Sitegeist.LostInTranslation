@@ -10,6 +10,7 @@ use Neos\ContentRepository\Core\Dimension\Exception\ContentDimensionIdIsInvalid;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Error\Messages\Message;
+use Neos\Flow\I18n\Translator;
 use Neos\Fusion\View\FusionView;
 use Neos\Neos\Controller\Module\AbstractModuleController;
 use Neos\Flow\Annotations as Flow;
@@ -17,6 +18,12 @@ use Sitegeist\LostInTranslation\Domain\Model\Glossary;
 use Sitegeist\LostInTranslation\Domain\Model\GlossaryEntry;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryEntryRepository;
 use Sitegeist\LostInTranslation\Domain\Repository\GlossaryRepository;
+use Sitegeist\LostInTranslation\Domain\StaleTranslationProjectionStatusProvider;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRule;
+use Sitegeist\LostInTranslation\Domain\SynchronizationRules;
+use Sitegeist\LostInTranslation\Domain\SynchronizationStatusProvider;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizationResult;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCacheService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLCustomAuthenticationKeyService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLGlossaryService;
@@ -45,11 +52,29 @@ class LostInTranslationModuleController extends AbstractModuleController
     #[Flow\Inject]
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
+    #[Flow\Inject]
+    protected SynchronizationStatusProvider $synchronizationStatusProvider;
+
+    #[Flow\Inject]
+    protected StaleTranslationProjectionStatusProvider $staleTranslationProjectionStatusProvider;
+
+    #[Flow\Inject]
+    protected WorkspaceSynchronizer $workspaceSynchronizer;
+
+    #[Flow\Inject]
+    protected Translator $translator;
+
     #[Flow\InjectConfiguration(path: "nodeTranslation.contentRepositoryIdentifier")]
     protected string $contentRepositoryIdentifier;
 
     #[Flow\InjectConfiguration(path: "nodeTranslation.languageDimensionName")]
     protected string $languageDimensionName;
+
+    /**
+     * @var array<int,array<string,string>>
+     */
+    #[Flow\InjectConfiguration(path: "nodeTranslation.synchronization")]
+    protected array $synchronization = [];
 
     /**
      * @var FusionView
@@ -68,6 +93,125 @@ class LostInTranslationModuleController extends AbstractModuleController
     {
         $status = $this->translationService->getStatus();
         $this->view->assign('status', $status);
+    }
+
+    /**
+     * Overview of all configured synchronization rules and how many translations are currently out of sync for each,
+     * with a per-rule and a "sync all" manual trigger. Unlike the publish-driven prompt this is mode-agnostic — it
+     * lists and can synchronize `auto` and `ask` rules alike.
+     */
+    public function synchronizationStatusAction(): void
+    {
+        $contentRepositoryId = ContentRepositoryId::fromString($this->contentRepositoryIdentifier);
+        $rules = SynchronizationRules::fromArray($this->synchronization);
+
+        // The pending counts are read from the stale-translation projection. If that projection is not set up yet (e.g.
+        // a fresh install before `./flow cr:setup`) querying it would fault on missing tables, so report its status and
+        // skip the counts rather than crash the module.
+        $projectionStatus = $this->staleTranslationProjectionStatusProvider->forContentRepository($contentRepositoryId);
+        $this->view->assign('projectionStatus', $projectionStatus);
+        if (!$projectionStatus->isReady) {
+            $this->view->assign('rules', []);
+            $this->view->assign('pendingTotal', 0);
+            return;
+        }
+
+        $rows = [];
+        foreach ($this->synchronizationStatusProvider->forRules($contentRepositoryId, $rules) as $index => $status) {
+            $rows[] = [
+                'index' => $index,
+                'sourceWorkspaceName' => $status->rule->sourceWorkspaceName,
+                'sourceDimension' => $status->rule->sourceDimension,
+                'targetWorkspaceName' => $status->rule->targetWorkspaceName,
+                'targetDimension' => $status->rule->targetDimension,
+                'scope' => $status->rule->scope->value,
+                'mode' => $status->rule->mode->value,
+                'pendingCount' => $status->pendingCount,
+                // The enum's VALUE, not the enum: the view uses it as the trailing segment of a translation key, the
+                // same way it renders scope and mode. Null (the rule can run) renders as no problem at all.
+                'targetProblem' => $status->targetProblem?->value,
+            ];
+        }
+
+        $this->view->assign('rules', $rows);
+        $this->view->assign('pendingTotal', array_sum(array_column($rows, 'pendingCount')));
+    }
+
+    public function synchronizeRuleAction(int $ruleIndex): void
+    {
+        $rules = SynchronizationRules::fromArray($this->synchronization);
+        $rule = $rules->items[$ruleIndex] ?? null;
+        if (!$rule instanceof SynchronizationRule) {
+            $this->addFlashMessage($this->translateById('flash.syncRuleNotFound'), '', Message::SEVERITY_ERROR);
+            $this->forward('synchronizationStatus');
+        }
+
+        $result = $this->workspaceSynchronizer->synchronizeRule(
+            ContentRepositoryId::fromString($this->contentRepositoryIdentifier),
+            $rule,
+        );
+        $this->addSynchronizationResultFlashMessage($rule, $result);
+        $this->forward('synchronizationStatus');
+    }
+
+    public function synchronizeAllRulesAction(): void
+    {
+        $contentRepositoryId = ContentRepositoryId::fromString($this->contentRepositoryIdentifier);
+        foreach (SynchronizationRules::fromArray($this->synchronization) as $rule) {
+            $result = $this->workspaceSynchronizer->synchronizeRule($contentRepositoryId, $rule);
+            $this->addSynchronizationResultFlashMessage($rule, $result);
+        }
+        $this->forward('synchronizationStatus');
+    }
+
+    private function addSynchronizationResultFlashMessage(SynchronizationRule $rule, WorkspaceSynchronizationResult $result): void
+    {
+        $label = sprintf('%s → %s', $rule->sourceDimension, $rule->targetDimension);
+        if ($result->skippedReason !== null) {
+            $this->addFlashMessage(
+                $this->translateById('flash.syncSkipped', [$label, $result->skippedReason]),
+                '',
+                Message::SEVERITY_WARNING,
+            );
+            return;
+        }
+        // Counts are passed as separate placeholders with neutral label:count phrasing so the message can be
+        // localized without porting English inline pluralization (propert-y/-ies, tag change-/s) to other languages.
+        $this->addFlashMessage($this->translateById('flash.syncResult', [
+            $label,
+            $result->totalStalePropertyCommandsDispatched(),
+            $result->totalVariantCommandsDispatched(),
+            $result->totalRemovalCommandsDispatched(),
+            $result->totalTagCommandsDispatched(),
+            $result->totalSkippedNodes(),
+        ]));
+
+        $nodesRequiringFullSync = $result->totalNodesRequiringFullSync();
+        if ($nodesRequiringFullSync > 0) {
+            $this->addFlashMessage(
+                $this->translateById('flash.fullSyncNeeded', [
+                    $label,
+                    $nodesRequiringFullSync,
+                    $rule->sourceWorkspaceName,
+                    $rule->sourceDimension,
+                    $rule->targetWorkspaceName,
+                    $rule->targetDimension,
+                ]),
+                '',
+                Message::SEVERITY_WARNING,
+            );
+        }
+    }
+
+    /**
+     * Resolves a backend-module flash message from the Modules.xlf catalog in the current backend UI language,
+     * falling back to the id itself if the catalog has no matching unit.
+     *
+     * @param array<int,string|int> $arguments
+     */
+    private function translateById(string $id, array $arguments = []): string
+    {
+        return $this->translator->translateById($id, $arguments, null, null, 'Modules', 'Sitegeist.LostInTranslation') ?? $id;
     }
 
     // Renders the fusion view for the form to store a custom deepl key
@@ -133,7 +277,7 @@ class LostInTranslationModuleController extends AbstractModuleController
         list ($source, $target) = explode(' -> ', $sourceAndTarget);
         $existingGlossary = $this->glossaryRepository->findOneBySourceAndTargetLanguageKey($source, $target);
         if ($existingGlossary instanceof Glossary) {
-            $this->addFlashMessage('Glossary already exists!', '', Message::SEVERITY_WARNING);
+            $this->addFlashMessage($this->translateById('flash.glossaryExists'), '', Message::SEVERITY_WARNING);
             $this->forward(actionName: 'showGlossary', arguments: ['glossary' => $existingGlossary]);
         }
         $glossary = Glossary::create($source, $target);
@@ -157,14 +301,14 @@ class LostInTranslationModuleController extends AbstractModuleController
             $deleted = $this->glossaryService->cleanupRemoteGlossaries();
             $removedNumber = count($deleted);
             if ($removedNumber == 0) {
-                $this->addFlashMessage("Glossary was uploaded", "");
+                $this->addFlashMessage($this->translateById('flash.glossaryUploaded'), "");
             } elseif ($removedNumber == 1) {
-                $this->addFlashMessage(sprintf("Glossary was uploaded, %s outdated glossary was removed", $removedNumber), "");
+                $this->addFlashMessage($this->translateById('flash.glossaryUploadedRemovedOne', [$removedNumber]), "");
             } else {
-                $this->addFlashMessage(sprintf("Glossary was uploaded, %s outdated glossaries were removed", $removedNumber), "");
+                $this->addFlashMessage($this->translateById('flash.glossaryUploadedRemovedMany', [$removedNumber]), "");
             }
         } else {
-            $this->addFlashMessage("Upload failed", "", Message::SEVERITY_ERROR);
+            $this->addFlashMessage($this->translateById('flash.uploadFailed'), "", Message::SEVERITY_ERROR);
         }
 
         if ($toIndex === true) {
@@ -180,7 +324,7 @@ class LostInTranslationModuleController extends AbstractModuleController
             $this->glossaryEntryRepository->remove($entry);
         }
         $this->glossaryRepository->remove($glossary);
-        $this->addFlashMessage('Glossary deleted');
+        $this->addFlashMessage($this->translateById('flash.glossaryDeleted'));
         $this->forward('index');
     }
 

@@ -60,6 +60,11 @@ Sitegeist:
       #
       # Enable the automatic translations of nodes while they are adopted to another dimension
       #
+      # Setting this to `false` switches the package off completely: its command hooks are registered on the `default`
+      # content repository preset and therefore built for every CR using it, so `false` also means a CR WITHOUT the
+      # `languageDimensionName` dimension below stays buildable. With it left at `true`, a missing language dimension is
+      # a hard error — that is a misconfiguration of a package which is switched on, and failing silently would hide it.
+      #
       enabled: true
 
       #
@@ -100,6 +105,115 @@ Sitegeist:
       #
       experimental-applyHtmlEntityDecodeAfterTranslation: false
 
+      #
+      # Automatic synchronization on workspace publish.
+      #
+      # When a workspace is published, (text) properties in `sourceDimension` are translated into `targetDimension` in
+      # `targetWorkspaceName`. A rule fires when the publish target workspace equals the rule's `sourceWorkspaceName`.
+      #
+      # Synchronization operates on the contentDimension identified by `languageDimensionName` above and is ALWAYS
+      # driven by the stale-translation projection — only nodes whose source changed (or that were freshly created) are
+      # considered. Walking the whole tree from the root is the separate, manual `./flow lostintranslation:synchronize
+      # --full` CLI command; it is a heavy operation and is never triggered automatically.
+      #
+      # Multiple rules are supported; do not configure cycles (e.g. en→de AND de→en).
+      #
+      # WHAT SYNCHRONIZATION MEANS. The target dimension is a PROJECTION of the source dimension: the source language is
+      # the single source of truth for properties, structure and subtree tags. Changes made on the target side are
+      # overwritten when a synchronization runs — that is intended, not a limitation, and nothing tries to preserve them.
+      # A rule therefore has exactly two knobs, `scope` and `mode`.
+      #
+      # Each rule requires a `scope` — the ONE thing that limits what synchronization manages:
+      #
+      #   scope: Content | Document   (required)
+      #     Content  = only create/translate nodes whose containing Document already exists in the target dimension +
+      #                workspace. Documents are never created automatically — adopting a Document into the target
+      #                dimension stays a manual editor action. A Document that already exists in the target still has
+      #                its own properties (re-)translated when stale.
+      #     Document = mirror the whole Document and Content structure: create (and translate) the missing Document
+      #                variants as well as Content variants.
+      #
+      #   `scope` governs CREATION only. Subtree tags and removals are mirrored regardless of it: a node hidden or deleted
+      #   in the source language is hidden or deleted in the target under either scope.
+      #
+      # Each rule may set an optional `mode` (default `auto`):
+      #
+      #   mode: auto | ask   (optional, default: auto)
+      #     auto = translate inline during the publish (the command hook emits the translation commands as part of
+      #            the publish). No editor action needed, but the publish blocks on DeepL and a partial cascade can be
+      #            interrupted by concurrent publishes.
+      #     ask  = do NOT translate on publish. After a successful publish the Neos UI prompts the editor with the
+      #            number of out-of-sync translations and a "sync now" action; the backend module lists the rule too.
+      #            The translation then runs in its own request via `WorkspaceSynchronizer`, so the publish stays
+      #            fast and atomic. Regardless of mode, the backend module can always trigger a manual "sync now".
+      #
+      #     `mode` decides WHEN the TRANSLATION runs, never WHAT synchronization does: for the same source-side change both
+      #     modes converge on the same target state. Everything cheap happens inline on every publish for BOTH modes —
+      #     subtree tags (including deletions, see below), mirrored hard removals, and the cross-workspace rebase. Only
+      #     translating, which costs a DeepL call per node, is what `ask` defers.
+      #
+      #     The one difference that remains is coverage — the publish-driven run sees just that publish's delta, while a
+      #     deliberate "sync now" / CLI run diffs the whole target dimension against the source and so also catches up on
+      #     changes no publish carried (made before the rule existed, or outside a publish).
+      #
+      # SUBTREE TAGS AND DELETIONS are always synchronized; there is nothing to configure.
+      #
+      #   Source-language subtree-tag changes — the `disabled` hide/show tag, the `removed` soft-removal tag, and any
+      #   custom `SubtreeTag` — are mirrored onto the target variant. The mirror is idempotent (a tag already matching the
+      #   target's explicit state is skipped) and only EXPLICIT tags are mirrored, since inherited ones reproduce
+      #   themselves once their tagged ancestor is reconciled.
+      #
+      #   Deleting a node IS a tag change: Neos 9.1 soft-removes by tagging `removed` rather than destroying the node, so
+      #   deletions ride this same mirror. Restoring a node from the trash bin mirrors back the other way. When a soft
+      #   removal becomes a hard one is Neos's own `SoftRemovalGarbageCollector`'s business, per dimension — not
+      #   synchronization's. A hard `RemoveNodeAggregate` that a publish happens to carry is mirrored too.
+      #
+      #   Because the source owns the target's tag state, hiding or deleting ONLY the translation does not stick: the next
+      #   synchronization converges it back onto the source. There is no per-rule opt-out — if a dimension needs its own
+      #   independent visibility, do not point a rule at it.
+      #
+      # NOTE: A rule fires when a publish lands on its `sourceWorkspaceName` (the base workspace of the publish). The
+      # hook then iterates the stale-translation records already recorded for the rule's
+      # `(targetWorkspaceName, targetDimension)` — i.e. anything that needs (re-)translation as of that moment, which
+      # in practice means nodes whose translatable properties were set or that were freshly created upstream and have
+      # just been replicated to the publish target.
+      #
+      # Cross-workspace synchronization (`sourceWorkspaceName` != `targetWorkspaceName`, e.g. translating published
+      # `live` content into a separate `de-review` workspace):
+      #
+      #   - Publish-driven (these rules): the target workspace is never auto-created and MUST already exist and be
+      #     based on the source workspace — a rule whose target is missing or based on something else is skipped for
+      #     that publish. Given that, the hook FORCE-REBASES the target onto the source on every publish, so the
+      #     target's source dimension is current before anything is translated; it then reads the SOURCE dimension
+      #     from the TARGET workspace and acts on the target workspace's own stale records, skipping any record whose
+      #     source node is still not present there.
+      #
+      #     Two consequences worth knowing:
+      #       * The rebase runs for `ask` rules too. Only the *translation* is deferred by `mode: ask`; the rebase is
+      #         not, so a reviewer's conflicting edit in the target can be dropped by someone else's publish before
+      #         the reviewer ever clicks "sync now".
+      #       * Force-rebase means "source wins" on genuine conflicts and mints a new content stream for the target;
+      #         non-conflicting target-dimension review edits survive the replay.
+      #
+      #   - Manual CLI `./flow lostintranslation:synchronize --source-workspace live --target-workspace de-review …`
+      #     (and `--full`): reads the source content from `--source-workspace`, but dispatches the translated commands
+      #     into `--target-workspace`. When the two differ it first FORCE-REBASES the target onto its base (which must be
+      #     the source workspace) so the target's source dimension is current and holds every source node — conflicting
+      #     target-side changes are dropped, non-conflicting target-dimension review edits are kept by the rebase replay.
+      #     The source workspace itself is never modified; its stale rows are not cleared (its own target variant is
+      #     still untranslated), so re-running stays idempotent. `--source-dimension` must equal the configured
+      #     `referenceLanguage` of `--target-dimension`.
+      #
+      # Empty list (default) = feature off.
+      #
+      synchronization: []
+      #  - sourceWorkspaceName: live
+      #    sourceDimension: en
+      #    targetWorkspaceName: de-review
+      #    targetDimension: de
+      #    scope: Document
+      #    mode: auto
+
 Neos:
   Flow:
     mvc:
@@ -112,6 +226,8 @@ Neos:
         providers:
           # Protect the retranslation endpoints with the standard Neos backend
           # authentication. Without this, anyone could POST to retranslateNode.
+          # NOTE: the authoritative request patterns (incl. WorkspaceSynchronizationController) live in
+          # Settings.Authentication.yaml, which wins the merge for this key.
           'Neos.Neos:Backend':
             requestPatterns:
               'Sitegeist.LostInTranslation:Retranslation':

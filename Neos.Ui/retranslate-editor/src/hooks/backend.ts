@@ -29,8 +29,31 @@ export type TranslateResponse = {
     skippedReason: string | null;
 };
 
+export type PendingSynchronizationResponse = {
+    pendingCount: number;
+    perRule: {
+        targetWorkspaceName: string;
+        targetDimension: string;
+        count: number;
+    }[];
+};
+
+export type SynchronizeResponse = {
+    stalePropertyCommandsDispatched: number;
+    variantCommandsDispatched: number;
+    // Source-language deletions / subtree-tag changes (e.g. hide/show) mirrored into the target by `remove-target` /
+    // `sync-to-target` rules.
+    removalCommandsDispatched: number;
+    tagCommandsDispatched: number;
+    skippedNodes: number;
+    // Per-rule short-circuit reasons (e.g. target workspace missing or not based on source). Empty when all rules ran.
+    errors: string[];
+};
+
 const CONTENT_INFO_ENDPOINT = '/lostintranslation/retranslation/getmetadata';
 const TRANSLATE_ENDPOINT = '/lostintranslation/retranslation/retranslatenode';
+const SYNCHRONIZATION_PENDING_ENDPOINT = '/lostintranslation/synchronization/pending';
+const SYNCHRONIZATION_SYNCHRONIZE_ENDPOINT = '/lostintranslation/synchronization/synchronize';
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
@@ -61,6 +84,31 @@ export const endpoints = () => ({
 
         return parseJsonResponse<TranslateResponse>(
             await fetch(TRANSLATE_ENDPOINT, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Flow-Csrftoken': csrfToken,
+                },
+                body: JSON.stringify(payload)
+            })
+        );
+    },
+    getPending: async (payload: { workspaceName: string }): Promise<PendingSynchronizationResponse> => {
+        const searchParams = new URLSearchParams({ workspaceName: payload.workspaceName });
+
+        return parseJsonResponse<PendingSynchronizationResponse>(
+            await fetch(`${SYNCHRONIZATION_PENDING_ENDPOINT}?${searchParams.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin'
+            })
+        );
+    },
+    synchronize: async (payload: { workspaceName: string }): Promise<SynchronizeResponse> => {
+        const csrfToken = document.getElementById('appContainer')!.dataset.csrfToken as string;
+
+        return parseJsonResponse<SynchronizeResponse>(
+            await fetch(SYNCHRONIZATION_SYNCHRONIZE_ENDPOINT, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {

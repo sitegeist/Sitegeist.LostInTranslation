@@ -37,18 +37,42 @@ final class StaleTranslationFinder implements ProjectionStateInterface
         return StaleTranslations::fromDatabaseRows($staleTranslationRows);
     }
 
-    public function findByWorkspace(WorkspaceName $workspaceName, OriginDimensionSpacePoint $targetOriginSpacePoint): StaleTranslations
-    {
+    /**
+     * Find the stale-translation records for one (workspace, target-origin) slice — the slice the synchronizers and the
+     * backend status actually act on. Scoped in SQL so callers no longer hydrate the whole projection via
+     * {@see self::findAll()} and filter by `workspaceName` + `originDimensionSpacePointHash` in PHP.
+     *
+     * HOW A ROW IS KEYED. `$workspaceName` is the workspace whose content the row was written from — the projection
+     * stamps every row with the `workspaceName` of the event it reacted to. `$originDimensionSpacePoint` is the TARGET
+     * dimension that now owes a (re-)translation. A row reads "in workspace W, node N still owes a translation at
+     * origin O": the workspace coordinate is not a target-vs-source distinction at all, which is what makes the callers
+     * look inconsistent when they are not.
+     *
+     * ALL CALLERS PASS THE TARGET WORKSPACE, and must. It is the slice a run CLEARS — translating dispatches into the
+     * target, so the resulting `NodePropertiesWereSet` closes the target's rows and leaves the source's alone (which is
+     * what keeps re-running idempotent). Only the target's slice therefore converges to empty, which is also why
+     * {@see SynchronizationStatusProvider} must count it or the backend module would never stop saying "out of sync".
+     *
+     * Passing the SOURCE workspace instead is very nearly undetectable, so do not conclude from a green test run that
+     * it does not matter. Same-workspace the two are the same slice. Cross-workspace, every driver force-rebases the
+     * target onto the source before reading, and the projection's `WorkspaceWasRebased` handler REPLACES the rebased
+     * workspace's rows with a wholesale copy of its base's — so the slices are identical from that moment on. The only
+     * run that skips the rebase is a dry run, and that short-circuits before it consumes the slice for translation.
+     */
+    public function findByWorkspaceAndOrigin(
+        WorkspaceName $workspaceName,
+        OriginDimensionSpacePoint $originDimensionSpacePoint,
+    ): StaleTranslations {
         $staleTranslationRows = $this->dbal->executeQuery(
             <<<SQL
             SELECT * FROM {$this->tableName}
                 WHERE workspaceName = :workspaceName
-                AND originDimensionSpacePointHash = :originDimensionSpacePointHash
+                    AND originDimensionSpacePointHash = :originDimensionSpacePointHash
             SQL,
             [
                 'workspaceName' => $workspaceName->value,
-                'originDimensionSpacePointHash' => $targetOriginSpacePoint->hash,
-            ]
+                'originDimensionSpacePointHash' => $originDimensionSpacePoint->hash,
+            ],
         )->fetchAllAssociative();
 
         return StaleTranslations::fromDatabaseRows($staleTranslationRows);

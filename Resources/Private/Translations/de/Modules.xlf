@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2">
+    <file original="" product-name="Sitegeist.LostInTranslation" source-language="en" target-language="de" datatype="plaintext">
+        <body>
+            <!-- Module registration -->
+            <trans-unit id="module.label" xml:space="preserve" approved="yes">
+                <source>Lost In Translation</source>
+                <target state="translated">Lost In Translation</target>
+            </trans-unit>
+            <trans-unit id="module.description" xml:space="preserve" approved="yes">
+                <source>DeepL based Translations for Neos</source>
+                <target state="translated">DeepL-basierte Übersetzungen für Neos</target>
+            </trans-unit>
+
+            <!-- Shared navigation tabs -->
+            <trans-unit id="tabs.glossaries" xml:space="preserve" approved="yes">
+                <source>Glossaries</source>
+                <target state="translated">Glossare</target>
+            </trans-unit>
+            <trans-unit id="tabs.apiStatus" xml:space="preserve" approved="yes">
+                <source>API-Status</source>
+                <target state="translated">API-Status</target>
+            </trans-unit>
+            <trans-unit id="tabs.synchronization" xml:space="preserve" approved="yes">
+                <source>Synchronization</source>
+                <target state="translated">Synchronisation</target>
+            </trans-unit>
+
+            <!-- Shared actions and status -->
+            <trans-unit id="action.back" xml:space="preserve" approved="yes">
+                <source>Back</source>
+                <target state="translated">Zurück</target>
+            </trans-unit>
+            <trans-unit id="action.cancel" xml:space="preserve" approved="yes">
+                <source>Cancel</source>
+                <target state="translated">Abbrechen</target>
+            </trans-unit>
+            <trans-unit id="status.upToDate" xml:space="preserve" approved="yes">
+                <source>up to date</source>
+                <target state="translated">aktuell</target>
+            </trans-unit>
+            <trans-unit id="status.outdated" xml:space="preserve" approved="yes">
+                <source>outdated</source>
+                <target state="translated">veraltet</target>
+            </trans-unit>
+            <trans-unit id="glossary.save" xml:space="preserve" approved="yes">
+                <source>Save Glossary</source>
+                <target state="translated">Glossar speichern</target>
+            </trans-unit>
+
+            <!-- Glossaries overview (Index) -->
+            <trans-unit id="glossaries.heading" xml:space="preserve" approved="yes">
+                <source>Glossaries</source>
+                <target state="translated">Glossare</target>
+            </trans-unit>
+            <trans-unit id="glossaries.empty" xml:space="preserve" approved="yes">
+                <source>No glossaries found!</source>
+                <target state="translated">Keine Glossare gefunden!</target>
+            </trans-unit>
+            <trans-unit id="glossaries.col.source" xml:space="preserve" approved="yes">
+                <source>Source</source>
+                <target state="translated">Quelle</target>
+            </trans-unit>
+            <trans-unit id="glossaries.col.target" xml:space="preserve" approved="yes">
+                <source>Target</source>
+                <target state="translated">Ziel</target>
+            </trans-unit>
+            <trans-unit id="glossaries.col.lastModified" xml:space="preserve" approved="yes">
+                <source>Last Modified</source>
+                <target state="translated">Zuletzt geändert</target>
+            </trans-unit>
+            <trans-unit id="glossaries.col.lastSynchronized" xml:space="preserve" approved="yes">
+                <source>Last Synchronized</source>
+                <target state="translated">Zuletzt synchronisiert</target>
+            </trans-unit>
+            <trans-unit id="glossaries.col.remoteId" xml:space="preserve" approved="yes">
+                <source>Remote ID</source>
+                <target state="translated">Remote-ID</target>
+            </trans-unit>
+            <trans-unit id="glossaries.col.status" xml:space="preserve" approved="yes">
+                <source>Status</source>
+                <target state="translated">Status</target>
+            </trans-unit>
+            <trans-unit id="glossaries.delete" xml:space="preserve" approved="yes">
+                <source>Delete Glossary</source>
+                <target state="translated">Glossar löschen</target>
+            </trans-unit>
+            <trans-unit id="glossaries.delete.title" xml:space="preserve" approved="yes">
+                <source>Delete glossary</source>
+                <target state="translated">Glossar löschen</target>
+            </trans-unit>
+            <trans-unit id="glossaries.delete.confirmHeader" xml:space="preserve" approved="yes">
+                <source>Delete Glossary {0}</source>
+                <target state="translated">Glossar {0} löschen</target>
+            </trans-unit>
+            <trans-unit id="glossaries.upload" xml:space="preserve" approved="yes">
+                <source>Upload Glossary</source>
+                <target state="translated">Glossar hochladen</target>
+            </trans-unit>
+            <trans-unit id="glossaries.upload.title" xml:space="preserve" approved="yes">
+                <source>Upload glossary</source>
+                <target state="translated">Glossar hochladen</target>
+            </trans-unit>
+            <trans-unit id="glossaries.edit" xml:space="preserve" approved="yes">
+                <source>Edit Glossary</source>
+                <target state="translated">Glossar bearbeiten</target>
+            </trans-unit>
+            <trans-unit id="glossaries.add" xml:space="preserve" approved="yes">
+                <source>Add new Glossary</source>
+                <target state="translated">Neues Glossar hinzufügen</target>
+            </trans-unit>
+
+            <!-- API status (ShowStatus) -->
+            <trans-unit id="status.heading" xml:space="preserve" approved="yes">
+                <source>API-Status</source>
+                <target state="translated">API-Status</target>
+            </trans-unit>
+            <trans-unit id="status.connectionFailed" xml:space="preserve" approved="yes">
+                <source>!!! NO DeepL API connection, please check your API-Key !!!</source>
+                <target state="translated">!!! KEINE Verbindung zur DeepL-API, bitte überprüfen Sie Ihren API-Key !!!</target>
+            </trans-unit>
+            <trans-unit id="status.connectionSuccess" xml:space="preserve" approved="yes">
+                <source>DeepL API connection successful</source>
+                <target state="translated">Verbindung zur DeepL-API erfolgreich</target>
+            </trans-unit>
+            <trans-unit id="status.freeApi" xml:space="preserve" approved="yes">
+                <source> (Free API)</source>
+                <target state="translated"> (Kostenlose API)</target>
+            </trans-unit>
+            <trans-unit id="status.paidApi" xml:space="preserve" approved="yes">
+                <source> (Paid API)</source>
+                <target state="translated"> (Kostenpflichtige API)</target>
+            </trans-unit>
+            <trans-unit id="status.charactersUsed" xml:space="preserve" approved="yes">
+                <source>{0} from {1} characters used ({2}%)</source>
+                <target state="translated">{0} von {1} Zeichen verwendet ({2} %)</target>
+            </trans-unit>
+            <trans-unit id="status.limitReached" xml:space="preserve" approved="yes">
+                <source>Character limit of {0} reached. No further translations possible.</source>
+                <target state="translated">Zeichenlimit von {0} erreicht. Keine weiteren Übersetzungen möglich.</target>
+            </trans-unit>
+            <trans-unit id="status.setKey" xml:space="preserve" approved="yes">
+                <source>Set API-Key</source>
+                <target state="translated">API-Key festlegen</target>
+            </trans-unit>
+            <trans-unit id="status.changeKey" xml:space="preserve" approved="yes">
+                <source>Change custom API-Key</source>
+                <target state="translated">Eigenen API-Key ändern</target>
+            </trans-unit>
+            <trans-unit id="status.removeKey" xml:space="preserve" approved="yes">
+                <source>Remove custom API-Key</source>
+                <target state="translated">Eigenen API-Key entfernen</target>
+            </trans-unit>
+            <trans-unit id="status.removeKey.title" xml:space="preserve" approved="yes">
+                <source>Remove custom API-Key</source>
+                <target state="translated">Eigenen API-Key entfernen</target>
+            </trans-unit>
+
+            <!-- Synchronization (SynchronizationStatus) -->
+            <trans-unit id="synchronization.heading" xml:space="preserve" approved="yes">
+                <source>Synchronization</source>
+                <target state="translated">Synchronisation</target>
+            </trans-unit>
+            <trans-unit id="synchronization.noRules" xml:space="preserve" approved="yes">
+                <source>No synchronization rules are configured. Add rules under</source>
+                <target state="translated">Es sind keine Synchronisationsregeln konfiguriert. Fügen Sie Regeln hinzu unter</target>
+            </trans-unit>
+            <trans-unit id="synchronization.col.source" xml:space="preserve" approved="yes">
+                <source>Source</source>
+                <target state="translated">Quelle</target>
+            </trans-unit>
+            <trans-unit id="synchronization.col.target" xml:space="preserve" approved="yes">
+                <source>Target</source>
+                <target state="translated">Ziel</target>
+            </trans-unit>
+            <trans-unit id="synchronization.col.scope" xml:space="preserve" approved="yes">
+                <source>Scope</source>
+                <target state="translated">Geltungsbereich</target>
+            </trans-unit>
+            <trans-unit id="synchronization.col.mode" xml:space="preserve" approved="yes">
+                <source>Mode</source>
+                <target state="translated">Modus</target>
+            </trans-unit>
+            <trans-unit id="synchronization.col.status" xml:space="preserve" approved="yes">
+                <source>Status</source>
+                <target state="translated">Status</target>
+            </trans-unit>
+            <trans-unit id="synchronization.targetProblem.missing" xml:space="preserve" approved="yes">
+                <source>target workspace does not exist</source>
+                <target state="translated">Ziel-Workspace existiert nicht</target>
+            </trans-unit>
+            <trans-unit id="synchronization.targetProblem.notBasedOnSource" xml:space="preserve" approved="yes">
+                <source>target workspace is not based on the source workspace</source>
+                <target state="translated">Ziel-Workspace basiert nicht auf dem Quell-Workspace</target>
+            </trans-unit>
+            <trans-unit id="synchronization.pending" xml:space="preserve" approved="yes">
+                <source>{0} translation(s) pending</source>
+                <target state="translated">{0} ausstehende Übersetzung(en)</target>
+            </trans-unit>
+            <trans-unit id="synchronization.syncNow" xml:space="preserve" approved="yes">
+                <source>Sync now</source>
+                <target state="translated">Jetzt synchronisieren</target>
+            </trans-unit>
+            <trans-unit id="synchronization.syncAll" xml:space="preserve" approved="yes">
+                <source>Sync all rules ({0} pending)</source>
+                <target state="translated">Alle Regeln synchronisieren ({0} ausstehend)</target>
+            </trans-unit>
+
+            <!-- Synchronization rule scope/mode values -->
+            <trans-unit id="synchronization.scope.Content" xml:space="preserve" approved="yes">
+                <source>Content only</source>
+                <target state="translated">Nur Inhalt</target>
+            </trans-unit>
+            <trans-unit id="synchronization.scope.Document" xml:space="preserve" approved="yes">
+                <source>Document &amp; content</source>
+                <target state="translated">Dokument &amp; Inhalt</target>
+            </trans-unit>
+            <trans-unit id="synchronization.mode.auto" xml:space="preserve" approved="yes">
+                <source>Automatic</source>
+                <target state="translated">Automatisch</target>
+            </trans-unit>
+            <trans-unit id="synchronization.mode.ask" xml:space="preserve" approved="yes">
+                <source>On request</source>
+                <target state="translated">Auf Anfrage</target>
+            </trans-unit>
+
+            <!-- Create glossary (CreateGlossary) -->
+            <trans-unit id="createGlossary.heading" xml:space="preserve" approved="yes">
+                <source>Add a Glossary</source>
+                <target state="translated">Glossar hinzufügen</target>
+            </trans-unit>
+            <trans-unit id="createGlossary.sourceTargetLabel" xml:space="preserve" approved="yes">
+                <source>Source -&gt; Target language</source>
+                <target state="translated">Quell- -&gt; Zielsprache</target>
+            </trans-unit>
+
+            <!-- Show glossary (ShowGlossary) -->
+            <trans-unit id="showGlossary.heading" xml:space="preserve" approved="yes">
+                <source>Glossary {0}</source>
+                <target state="translated">Glossar {0}</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.modified" xml:space="preserve" approved="yes">
+                <source>Modified</source>
+                <target state="translated">Geändert</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.synchronized" xml:space="preserve" approved="yes">
+                <source>Synchronized</source>
+                <target state="translated">Synchronisiert</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.remoteId" xml:space="preserve" approved="yes">
+                <source>Remote ID</source>
+                <target state="translated">Remote-ID</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.status" xml:space="preserve" approved="yes">
+                <source>Status</source>
+                <target state="translated">Status</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.entries" xml:space="preserve" approved="yes">
+                <source>Entries</source>
+                <target state="translated">Einträge</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.noEntries" xml:space="preserve" approved="yes">
+                <source>No entries yet. Please create one.</source>
+                <target state="translated">Noch keine Einträge. Bitte erstellen Sie einen.</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.col.source" xml:space="preserve" approved="yes">
+                <source>Source - {0}</source>
+                <target state="translated">Quelle - {0}</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.col.target" xml:space="preserve" approved="yes">
+                <source>Target - {0}</source>
+                <target state="translated">Ziel - {0}</target>
+            </trans-unit>
+            <trans-unit id="showGlossary.backToList" xml:space="preserve" approved="yes">
+                <source>Back to list</source>
+                <target state="translated">Zurück zur Liste</target>
+            </trans-unit>
+
+            <!-- Glossary entries (ShowGlossary, Create/EditGlossaryEntry) -->
+            <trans-unit id="entry.delete" xml:space="preserve" approved="yes">
+                <source>Delete Entry</source>
+                <target state="translated">Eintrag löschen</target>
+            </trans-unit>
+            <trans-unit id="entry.edit" xml:space="preserve" approved="yes">
+                <source>Edit Entry</source>
+                <target state="translated">Eintrag bearbeiten</target>
+            </trans-unit>
+            <trans-unit id="entry.delete.confirmHeader" xml:space="preserve" approved="yes">
+                <source>Delete Entry {0}</source>
+                <target state="translated">Eintrag {0} löschen</target>
+            </trans-unit>
+            <trans-unit id="entry.add" xml:space="preserve" approved="yes">
+                <source>Add Entry</source>
+                <target state="translated">Eintrag hinzufügen</target>
+            </trans-unit>
+            <trans-unit id="entry.sourceTextLabel" xml:space="preserve" approved="yes">
+                <source>Source Text - {0}</source>
+                <target state="translated">Quelltext - {0}</target>
+            </trans-unit>
+            <trans-unit id="entry.targetTextLabel" xml:space="preserve" approved="yes">
+                <source>Target Text - {0}</source>
+                <target state="translated">Zieltext - {0}</target>
+            </trans-unit>
+            <trans-unit id="createGlossaryEntry.heading" xml:space="preserve" approved="yes">
+                <source>Add entry to Glossary {0}</source>
+                <target state="translated">Eintrag zu Glossar {0} hinzufügen</target>
+            </trans-unit>
+            <trans-unit id="editGlossaryEntry.heading" xml:space="preserve" approved="yes">
+                <source>Edit entry to Glossary {0}</source>
+                <target state="translated">Eintrag zu Glossar {0} bearbeiten</target>
+            </trans-unit>
+
+            <!-- Custom API key (SetCustomKey) -->
+            <trans-unit id="setCustomKey.heading" xml:space="preserve" approved="yes">
+                <source>Store custom DeepL API-key</source>
+                <target state="translated">Eigenen DeepL-API-Key speichern</target>
+            </trans-unit>
+            <trans-unit id="setCustomKey.label" xml:space="preserve" approved="yes">
+                <source>DeepL Api-key</source>
+                <target state="translated">DeepL-API-Key</target>
+            </trans-unit>
+            <trans-unit id="setCustomKey.save" xml:space="preserve" approved="yes">
+                <source>Save Key</source>
+                <target state="translated">Key speichern</target>
+            </trans-unit>
+
+            <!-- Flash messages (controller) -->
+            <trans-unit id="flash.syncRuleNotFound" xml:space="preserve" approved="yes">
+                <source>Synchronization rule not found.</source>
+                <target state="translated">Synchronisationsregel nicht gefunden.</target>
+            </trans-unit>
+            <trans-unit id="flash.syncSkipped" xml:space="preserve" approved="yes">
+                <source>{0}: skipped ({1})</source>
+                <target state="translated">{0}: übersprungen ({1})</target>
+            </trans-unit>
+            <trans-unit id="flash.syncResult" xml:space="preserve" approved="yes">
+                <source>{0}: {1} properties, {2} variants, {3} removed, {4} tag changes, {5} skipped.</source>
+                <target state="translated">{0}: {1} Eigenschaften, {2} Varianten, {3} entfernt, {4} Tag-Änderungen, {5} übersprungen.</target>
+            </trans-unit>
+            <trans-unit id="flash.fullSyncNeeded" xml:space="preserve" approved="yes">
+                <source>{0}: {1} node(s) were skipped because an ancestor document is missing in the target dimension and has no pending translation. A full sync is needed to create the missing ancestors — run on the CLI: ./flow lostintranslation:synchronize {2} {3} {4} {5} --full</source>
+                <target state="translated">{0}: {1} Knoten wurden übersprungen, weil ein übergeordnetes Dokument in der Zieldimension fehlt und keine ausstehende Übersetzung hat. Eine vollständige Synchronisation ist nötig, um die fehlenden übergeordneten Dokumente zu erstellen — führen Sie auf der CLI aus: ./flow lostintranslation:synchronize {2} {3} {4} {5} --full</target>
+            </trans-unit>
+            <trans-unit id="flash.glossaryExists" xml:space="preserve" approved="yes">
+                <source>Glossary already exists!</source>
+                <target state="translated">Glossar existiert bereits!</target>
+            </trans-unit>
+            <trans-unit id="flash.glossaryUploaded" xml:space="preserve" approved="yes">
+                <source>Glossary was uploaded</source>
+                <target state="translated">Glossar wurde hochgeladen</target>
+            </trans-unit>
+            <trans-unit id="flash.glossaryUploadedRemovedOne" xml:space="preserve" approved="yes">
+                <source>Glossary was uploaded, {0} outdated glossary was removed</source>
+                <target state="translated">Glossar wurde hochgeladen, {0} veraltetes Glossar wurde entfernt</target>
+            </trans-unit>
+            <trans-unit id="flash.glossaryUploadedRemovedMany" xml:space="preserve" approved="yes">
+                <source>Glossary was uploaded, {0} outdated glossaries were removed</source>
+                <target state="translated">Glossar wurde hochgeladen, {0} veraltete Glossare wurden entfernt</target>
+            </trans-unit>
+            <trans-unit id="flash.uploadFailed" xml:space="preserve" approved="yes">
+                <source>Upload failed</source>
+                <target state="translated">Hochladen fehlgeschlagen</target>
+            </trans-unit>
+            <trans-unit id="flash.glossaryDeleted" xml:space="preserve" approved="yes">
+                <source>Glossary deleted</source>
+                <target state="translated">Glossar gelöscht</target>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>

@@ -30,6 +30,46 @@
                 <source>Retranslate</source>
                 <target state="translated">Neu Übersetzen</target>
             </trans-unit>
+            <trans-unit id="syncDialog.title" xml:space="preserve" approved="yes">
+                <source>Translate published changes</source>
+                <target state="translated">Veröffentlichte Änderungen übersetzen</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.body" xml:space="preserve" approved="yes">
+                <source>{pendingCount} translation(s) are out of sync with the content you just published. Translate them into the configured languages now?</source>
+                <target state="translated">{pendingCount} Übersetzung(en) sind nicht mehr synchron mit dem soeben veröffentlichten Inhalt. Jetzt in die konfigurierten Sprachen übersetzen?</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.cancel" xml:space="preserve" approved="yes">
+                <source>Not now</source>
+                <target state="translated">Nicht jetzt</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.sync" xml:space="preserve" approved="yes">
+                <source>Sync now</source>
+                <target state="translated">Jetzt synchronisieren</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.syncing" xml:space="preserve" approved="yes">
+                <source>Translating…</source>
+                <target state="translated">Wird übersetzt…</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.success" xml:space="preserve" approved="yes">
+                <source>Translated {count} change(s) into the configured languages.</source>
+                <target state="translated">{count} Änderung(en) in die konfigurierten Sprachen übersetzt.</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.success.removed" xml:space="preserve" approved="yes">
+                <source>Also removed {count} node(s).</source>
+                <target state="translated">Außerdem {count} Knoten entfernt.</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.success.tags" xml:space="preserve" approved="yes">
+                <source>Also updated {count} visibility/tag change(s).</source>
+                <target state="translated">Außerdem {count} Sichtbarkeits-/Tag-Änderung(en) aktualisiert.</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.error.couldNotRun" xml:space="preserve" approved="yes">
+                <source>Translation synchronization could not run: {errors}</source>
+                <target state="translated">Übersetzungssynchronisation konnte nicht ausgeführt werden: {errors}</target>
+            </trans-unit>
+            <trans-unit id="syncDialog.error.failed" xml:space="preserve" approved="yes">
+                <source>Translation synchronization failed. You can retry from the Lost In Translation backend module.</source>
+                <target state="translated">Übersetzungssynchronisation fehlgeschlagen. Sie können es im Backend-Modul „Lost In Translation“ erneut versuchen.</target>
+            </trans-unit>
         </body>
     </file>
 </xliff>

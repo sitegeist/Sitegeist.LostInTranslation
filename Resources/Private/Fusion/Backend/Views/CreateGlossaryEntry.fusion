@@ -1,6 +1,6 @@
 prototype(Sitegeist.LostInTranslation:Views.CreateGlossaryEntry) < prototype(Neos.Fusion:Component) {
     renderer = afx`
-    <legend>Add entry to Glossary {glossary.label}</legend>
+    <legend>{I18n.translate('createGlossaryEntry.heading', 'Add entry to Glossary {0}', [glossary.label], 'Modules', 'Sitegeist.LostInTranslation')}</legend>
 
     <Neos.Fusion.Form:Form
       form.target.action="addGlossaryEntry"
@@ -8,22 +8,22 @@ prototype(Sitegeist.LostInTranslation:Views.CreateGlossaryEntry) < prototype(Neo
       <Neos.Fusion.Form:Hidden field.name="glossary" field.value={glossary} />
 
       <div class="neos-control-group">
-        <label class="neos-control-label" for="key">Source Text - {glossary.sourceLanguageKey}</label>
+        <label class="neos-control-label" for="key">{I18n.translate('entry.sourceTextLabel', 'Source Text - {0}', [glossary.sourceLanguageKey], 'Modules', 'Sitegeist.LostInTranslation')}</label>
         <div class="neos-controls neos-controls-row">
           <Neos.Fusion.Form:Input field.name="sourceText" attributes.class="neos-span12"/>
         </div>
       </div>
       <div class="neos-control-group">
 
-        <label class="neos-control-label" for="key">Target Text - {glossary.targetLanguageKey}</label>
+        <label class="neos-control-label" for="key">{I18n.translate('entry.targetTextLabel', 'Target Text - {0}', [glossary.targetLanguageKey], 'Modules', 'Sitegeist.LostInTranslation')}</label>
         <div class="neos-controls neos-controls-row">
           <Neos.Fusion.Form:Input field.name="targetText" attributes.class="neos-span12"/>
         </div>
       </div>
 
       <div class="neos-footer">
-        <Neos.Fusion:Link.Action href.action="index" class="neos-button">Back</Neos.Fusion:Link.Action>
-        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">Save Glossary</Neos.Fusion.Form:Button>
+        <Neos.Fusion:Link.Action href.action="index" class="neos-button">{I18n.translate('action.back', 'Back', [], 'Modules', 'Sitegeist.LostInTranslation')}</Neos.Fusion:Link.Action>
+        <Neos.Fusion.Form:Button attributes.class="neos-button neos-button-primary">{I18n.translate('glossary.save', 'Save Glossary', [], 'Modules', 'Sitegeist.LostInTranslation')}</Neos.Fusion.Form:Button>
       </div>
 
     </Neos.Fusion.Form:Form>

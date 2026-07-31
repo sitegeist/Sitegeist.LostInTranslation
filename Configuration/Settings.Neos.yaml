@@ -7,9 +7,9 @@ Neos:
       management:
         submodules:
           sitegeist_lostintranslation:
-            label: 'Lost In Translation'
-            description: 'DeepL based Translations for Neos'
-            icon: 'icon-language'
+            label: 'Sitegeist.LostInTranslation:Modules:module.label'
+            description: 'Sitegeist.LostInTranslation:Modules:module.description'
+            icon: 'fas fa-language'
             controller: 'Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController'
             privilegeTarget: 'Sitegeist.LostInTranslation:AccessBackendModule'
 
@@ -19,6 +19,8 @@ Neos:
         commandHooks:
           'Sitegeist.LostInTranslation:TranslationCommandHook':
             factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\TranslationCommandHookFactory
+          'Sitegeist.LostInTranslation:SynchronizationCommandHook':
+            factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\CommandHook\SynchronizationCommandHookFactory
         # Activate for content governance mode:
         #authProvider:
         #  factoryObjectName: Sitegeist\LostInTranslation\ContentRepository\AuthProvider\AIAwareContentRepositoryAuthProviderFactory

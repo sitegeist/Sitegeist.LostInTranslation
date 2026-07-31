@@ -1,0 +1,92 @@
+# Fully containerized Behat / E2E runner.
+#
+# `make e2e` (from the package root) builds the PHP image, starts MariaDB and runs
+# the suite. Only Docker is required on the host — no PHP, Composer or database.
+#
+# Override defaults via env, e.g.:
+#   PHP_VERSION=8.2 NEOS_VERSION=9.0 make e2e
+name: lostintranslation-e2e
+
+services:
+  database:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: flow_functional_testing
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  behat:
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      NEOS_VERSION: ${NEOS_VERSION:-9.1}
+      DB_HOST: database
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: flow_functional_testing
+    volumes:
+      # The package source, symlinked into the distribution for live editing.
+      - ../../..:/package
+      # Mask the host's local Neos-distribution overlay (all gitignored) so it
+      # does not leak into the container. In particular the host's
+      # Packages/Application/Sitegeist.LostInTranslation '-> ../../..' symlink
+      # would make Flow's package scanner recurse infinitely.
+      - /package/Packages
+      - /package/bin
+      - /package/Data
+      - /package/Web
+      - /package/Build
+      - /package/node_modules
+      # The bootstrapped distribution, cached across runs.
+      - dist:/dist
+
+  # Manual-testing "system under test": the same image, but bootstrapped into a
+  # Development-context Neos with a real content repository and served over HTTP.
+  # Driven by `make dev`. Uses its own database + distribution volume so a Behat
+  # run cannot wipe the site you are clicking through.
+  sut:
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+    depends_on:
+      database:
+        condition: service_healthy
+    entrypoint: ["bash", "/package/Tests/Behavior/Docker/dev-entrypoint.sh"]
+    ports:
+      - "${SUT_PORT:-8081}:${SUT_PORT:-8081}"
+    environment:
+      NEOS_VERSION: ${NEOS_VERSION:-9.1}
+      DB_HOST: database
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: neos
+      SUT_PORT: ${SUT_PORT:-8081}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password}
+    volumes:
+      # Same source symlink + host-overlay masking as the behat service above.
+      - ../../..:/package
+      - /package/Packages
+      - /package/bin
+      - /package/Data
+      - /package/Web
+      - /package/Build
+      - /package/node_modules
+      # The bootstrapped dev distribution, cached across runs (separate from behat's).
+      - dist-dev:/dist
+
+volumes:
+  dist:
+  dist-dev:

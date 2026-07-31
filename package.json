@@ -7,7 +7,8 @@
     ],
     "scripts": {
         "build": "yarn workspace @sitegeist/lostintranslation-plugin run build",
-        "watch": "yarn workspace @sitegeist/lostintranslation-plugin run watch"
+        "watch": "yarn workspace @sitegeist/lostintranslation-plugin run watch",
+        "typecheck": "yarn workspace @sitegeist/lostintranslation-retranslate-editor run typecheck"
     },
     "devDependencies": {
         "@types/react": "^17.0.3",

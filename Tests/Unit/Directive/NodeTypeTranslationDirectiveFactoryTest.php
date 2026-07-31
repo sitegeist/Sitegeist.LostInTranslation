@@ -14,6 +14,7 @@ use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirective;
 use Sitegeist\LostInTranslation\Domain\Directive\NodeTypeTranslationDirectiveFactory;
 use Sitegeist\LostInTranslation\Domain\Directive\TranslatablePropertyName;
 use Sitegeist\LostInTranslation\Domain\Directive\TranslatablePropertyNames;
+use Sitegeist\LostInTranslation\Domain\PostProcessor\TranslatedPropertyPostProcessorInterface;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 use Symfony\Component\Yaml\Yaml;
 
@@ -373,6 +374,41 @@ class NodeTypeTranslationDirectiveFactoryTest extends UnitTestCase
             new TranslatablePropertyNames(
                 new TranslatablePropertyName(PropertyName::fromString('object'), $mockTranslationConnector)
             )
+        );
+
+        $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType));
+    }
+
+    public function testStringPropertyWithConfiguredPostProcessor(): void
+    {
+        $mockPostProcessor = $this->createMock(TranslatedPropertyPostProcessorInterface::class);
+
+        $mockObjectManager = $this->createMock(ObjectManagerInterface::class);
+        $mockObjectManager
+            ->expects(self::once())
+            ->method('get')
+            ->with('Example\PostProcessor')
+            ->willReturn($mockPostProcessor);
+
+        $this->inject($this->nodeTypeTranslationDirectiveFactory, 'objectManager', $mockObjectManager);
+
+        $nodeType = new NodeType(NodeTypeName::fromString('Example'), [], [
+            'properties' => [
+                'uriPathSegment' => [
+                    'type' => 'string',
+                    'options' => [
+                        'automaticTranslation' => true,
+                        'translationPostProcessor' => 'Example\PostProcessor',
+                    ],
+                ],
+            ],
+        ]);
+
+        $expectedDirective = new NodeTypeTranslationDirective(
+            true,
+            new TranslatablePropertyNames(
+                new TranslatablePropertyName(PropertyName::fromString('uriPathSegment'), null, $mockPostProcessor),
+            ),
         );
 
         $this->assertEquals($expectedDirective, $this->nodeTypeTranslationDirectiveFactory->createForNodeType($nodeType));

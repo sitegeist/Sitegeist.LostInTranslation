@@ -1,0 +1,42 @@
+# Example LostInTranslation configuration for the manual dev SUT.
+#
+# dev-entrypoint.sh copies this into the distribution as Configuration/Settings.LostInTranslation.yaml on every boot, so
+# editing this file and restarting (`make dev-stop && make dev`) re-applies it. It is loaded and merged by Flow like any
+# other Settings*.yaml — it does NOT replace the distribution's own Settings.yaml.
+#
+# It does two things against the bundled Neos.Demo site (language dimension: en_US / en_UK / de):
+#   1. Makes `de` a translation target of `en_US` (the `referenceLanguage` the stale-translation projection fans out to)
+#      and maps each value to its DeepL language code.
+#   2. Declares a publish-driven synchronization rule so the LostInTranslation > Synchronization module lists a rule.
+#
+# After changing the reference language you must replay the projection for pending counts to reflect it: `make dev-cr-setup`.
+Neos:
+  ContentRepositoryRegistry:
+    contentRepositories:
+      default:
+        contentDimensions:
+          language:
+            values:
+              en_US:
+                options:
+                  deeplLanguage: 'EN:EN-US'
+              en_UK:
+                options:
+                  deeplLanguage: 'EN:EN-GB'
+              de:
+                # `de` content is the German translation of `en_US` content; this drives the stale-translation fan-out.
+                options:
+                  referenceLanguage: en_US
+                  deeplLanguage: 'DE'
+
+Sitegeist:
+  LostInTranslation:
+    nodeTranslation:
+      synchronization:
+        # On publish to `live`, (re)translate changed/new en_US documents + their content into de in `live`.
+        - sourceWorkspaceName: live
+          sourceDimension: en_US
+          targetWorkspaceName: live
+          targetDimension: de
+          scope: Document
+          mode: ask

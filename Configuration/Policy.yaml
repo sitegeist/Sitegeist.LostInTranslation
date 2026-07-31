@@ -4,6 +4,8 @@ privilegeTargets:
       matcher: 'method(Sitegeist\LostInTranslation\Controller\LostInTranslationModuleController->(index)Action())'
     'Sitegeist.LostInTranslation:Retranslation':
       matcher: 'method(Sitegeist\LostInTranslation\Controller\RetranslationController->(.*)Action())'
+    'Sitegeist.LostInTranslation:Synchronization':
+      matcher: 'method(Sitegeist\LostInTranslation\Controller\WorkspaceSynchronizationController->(.*)Action())'
   'Neos\Neos\Security\Authorization\Privilege\ModulePrivilege':
     'Sitegeist.LostInTranslation:AccessBackendModule':
       matcher: 'management/sitegeist_lostintranslation'
@@ -17,6 +19,9 @@ roles:
       -
         privilegeTarget: 'Sitegeist.LostInTranslation:Retranslation'
         permission: GRANT
+      -
+        privilegeTarget: 'Sitegeist.LostInTranslation:Synchronization'
+        permission: GRANT
 
   'Neos.Neos:AbstractEditor':
     privileges:
@@ -25,4 +30,7 @@ roles:
         permission: GRANT
       -
         privilegeTarget: 'Sitegeist.LostInTranslation:Retranslation'
+        permission: GRANT
+      -
+        privilegeTarget: 'Sitegeist.LostInTranslation:Synchronization'
         permission: GRANT

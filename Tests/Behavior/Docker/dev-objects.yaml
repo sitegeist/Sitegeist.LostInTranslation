@@ -1,0 +1,9 @@
+# Object bindings for the manual dev SUT.
+#
+# dev-entrypoint.sh copies this into the distribution as Configuration/Development/Objects.yaml on every boot.
+#
+# Bind the translation service to the DummyTranslationService (which just suffixes " translated" to each text) so the
+# Synchronization module's "Sync now" — and publish-driven auto-translation — work end to end without a DeepL API key.
+# Swap this binding out (or remove the file and set a real key in the API-Status tab) to exercise the real DeepL service.
+Sitegeist\LostInTranslation\Domain\TranslationServiceInterface:
+  className: 'Sitegeist\LostInTranslation\Infrastructure\Dummy\DummyTranslationService'

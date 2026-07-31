@@ -22,7 +22,11 @@ use Neos\Flow\Cli\CommandController;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\Exception\StopCommandException;
 use Neos\Flow\Security\Context;
+use Sitegeist\LostInTranslation\ContentRepository\StaleTranslationProjection\StaleTranslationReadModel;
+use Sitegeist\LostInTranslation\Domain\FullWorkspaceSynchronizer;
+use Sitegeist\LostInTranslation\Domain\PerNodeSynchronizationResult;
 use Sitegeist\LostInTranslation\Domain\Retranslator;
+use Sitegeist\LostInTranslation\Domain\WorkspaceSynchronizer;
 
 class LostInTranslationCommandController extends CommandController
 {
@@ -37,6 +41,12 @@ class LostInTranslationCommandController extends CommandController
 
     #[Flow\Inject]
     public Retranslator $retranslator;
+
+    #[Flow\Inject]
+    public WorkspaceSynchronizer $workspaceSynchronizer;
+
+    #[Flow\Inject]
+    public FullWorkspaceSynchronizer $fullWorkspaceSynchronizer;
 
     /**
      * This command recursively copies content from the source to the target language dimension within the specified repository, workspace, and node path.
@@ -121,6 +131,218 @@ class LostInTranslationCommandController extends CommandController
         $this->outputLine(
             'Retranslation for node "%s" -> "%s": dispatched %d stale property update(s) and %d variant creation(s).',
             [$nodeAggregateId, $target, $result->stalePropertyCommandsDispatched, $result->variantCommandsDispatched],
+        );
+    }
+
+    /**
+     * Synchronize translations in the target workspace+dimension. Two modes:
+     *
+     *  - **default (stale-driven)**: dispatches one retranslation per record the projection has flagged stale at
+     *    `(targetWorkspace, targetDimension)`.
+     *  - **`--full`**: walks the entire source-dimension subgraph from every root aggregate down and considers every
+     *    translatable node, regardless of stale state, re-translating existing target variants too (see
+     *    --skip-existing).
+     *
+     * Either mode also converges the target dimension's subtree tags onto the source — hide/show, the `removed`
+     * soft-removal tag (i.e. deletions and restores) and any other tag. That is unconditional: the target dimension is a
+     * projection of the source language, so target-side changes are overwritten by design.
+     *
+     * Source and target workspace may differ (cross-workspace sync): the source content is read from
+     * --source-workspace while the resulting variant/property commands are dispatched into --target-workspace, e.g.
+     * preparing a `de` translation of published `live` content inside a forked `de-review` workspace. In that case the
+     * target workspace is first force-rebased onto its base (which must be the source workspace) so its source
+     * dimension is current and holds every source node; conflicting target-side changes are dropped, non-conflicting
+     * review edits are kept. --source-dimension must still equal the configured `referenceLanguage` of
+     * --target-dimension.
+     *
+     * @param string $sourceWorkspace Source workspace name (content is read from here; may differ from --target-workspace).
+     * @param string $sourceDimension Source language dimension value. Must equal the configured `referenceLanguage` of
+     *                                --target-dimension.
+     * @param string $targetWorkspace Target workspace the translation commands are dispatched into.
+     * @param string $targetDimension Target language dimension value (e.g. "de").
+     * @param string $contentRepository Content repository id (defaults to "default").
+     * @param bool $dryRun If set, report what the run would do — per node and as totals — without dispatching any
+     *                     command, translating anything (no DeepL calls are made or paid for) or, cross-workspace,
+     *                     rebasing the target. Because it does not rebase, a cross-workspace preview reports against
+     *                     the un-rebased target: source nodes the target has not seen yet are still missing.
+     * @param bool $full If set, run full-workspace sync instead of the stale-driven default.
+     * @param bool $skipExisting Only with --full: keep target variants that already exist and have no stale row, instead
+     *                           of re-translating them. Preserves target-side property edits on nodes the source has not
+     *                           touched — the deliberate exception to "the target is a projection of the source",
+     *                           because re-asserting a property costs a DeepL call per node.
+     * @throws StopCommandException
+     */
+    public function synchronizeCommand(
+        string $sourceWorkspace,
+        string $sourceDimension,
+        string $targetWorkspace,
+        string $targetDimension,
+        string $contentRepository = 'default',
+        bool $dryRun = false,
+        bool $full = false,
+        bool $skipExisting = false,
+    ): void {
+        $contentRepositoryId = ContentRepositoryId::fromString($contentRepository);
+        $sourceDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $sourceDimension]);
+        $targetDsp = DimensionSpacePoint::fromArray([$this->languageDimensionName => $targetDimension]);
+        $sourceWorkspaceName = WorkspaceName::fromString($sourceWorkspace);
+        $targetWorkspaceName = WorkspaceName::fromString($targetWorkspace);
+
+        $result = $full
+            ? $this->fullWorkspaceSynchronizer->synchronizeWorkspaceFull(
+                contentRepositoryId: $contentRepositoryId,
+                sourceWorkspaceName: $sourceWorkspaceName,
+                sourceDimensionSpacePoint: $sourceDsp,
+                targetWorkspaceName: $targetWorkspaceName,
+                targetDimensionSpacePoint: $targetDsp,
+                skipExisting: $skipExisting,
+                dryRun: $dryRun,
+            )
+            : $this->workspaceSynchronizer->synchronizeWorkspace(
+                contentRepositoryId: $contentRepositoryId,
+                sourceWorkspaceName: $sourceWorkspaceName,
+                sourceDimensionSpacePoint: $sourceDsp,
+                targetWorkspaceName: $targetWorkspaceName,
+                targetDimensionSpacePoint: $targetDsp,
+                dryRun: $dryRun,
+            );
+
+        if ($result->skippedReason !== null) {
+            $this->outputLine('<error>Synchronization skipped: %s</error>', [$result->skippedReason]);
+            $this->quit(1);
+        }
+
+        if ($result->perNodeResults === []) {
+            $this->outputLine('No stale translations to synchronize for workspace "%s" / dimension "%s".', [$targetWorkspace, $targetDimension]);
+            return;
+        }
+
+        foreach ($result->perNodeResults as $perNode) {
+            $this->outputLine($this->formatPerNodeLine($perNode, $dryRun));
+        }
+        $this->outputLine(
+            '%s: %d node(s) processed, %d stale property update(s), %d variant creation(s), %d removal(s) and %d tag change(s) %s, %d skipped.',
+            [
+                $dryRun ? 'Dry run' : 'Synchronization finished',
+                count($result->perNodeResults),
+                $result->totalStalePropertyCommandsDispatched(),
+                $result->totalVariantCommandsDispatched(),
+                $result->totalRemovalCommandsDispatched(),
+                $result->totalTagCommandsDispatched(),
+                $dryRun ? 'pending' : 'dispatched',
+                $result->totalSkippedNodes(),
+            ],
+        );
+
+        $nodesRequiringFullSync = $result->totalNodesRequiringFullSync();
+        if ($nodesRequiringFullSync > 0) {
+            $this->outputLine();
+            $this->outputLine(
+                '<comment>%d node(s) were skipped because an ancestor document is missing in the target dimension '
+                . 'and has no pending translation. The stale-driven sync cannot bootstrap it. Run a full sync to '
+                . 'create the missing ancestors:</comment>',
+                [$nodesRequiringFullSync],
+            );
+            $this->outputLine(
+                '  ./flow lostintranslation:synchronize %s %s %s %s --full',
+                [$sourceWorkspace, $sourceDimension, $targetWorkspace, $targetDimension],
+            );
+        }
+    }
+
+    /**
+     * Remove stale-translation rows whose node aggregate no longer exists in the ContentGraph for the
+     * given workspace. The projection only cleans up the directly-removed aggregate on
+     * NodeAggregateWasRemoved; descendants (e.g. a Document's tethered content collection or nested
+     * content nodes) cascade away in the ContentGraph but leave orphan rows behind here. Run this after
+     * bulk deletes to prune them.
+     *
+     * @param string $workspace Workspace whose stale rows will be reconciled.
+     * @param string $contentRepository Content repository id (defaults to "default").
+     * @param bool $dryRun If set, report the orphans without DELETing anything.
+     */
+    public function reconcileCommand(
+        string $workspace = 'live',
+        string $contentRepository = 'default',
+        bool $dryRun = false,
+    ): void {
+        $cr = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString($contentRepository));
+        $workspaceName = WorkspaceName::fromString($workspace);
+        if ($cr->findWorkspaceByName($workspaceName) === null) {
+            $this->outputLine('Workspace "%s" not found in content repository "%s".', [$workspace, $contentRepository]);
+            $this->quit(1);
+        }
+        $contentGraph = $cr->getContentGraph($workspaceName);
+        $readModel = $cr->projectionState(StaleTranslationReadModel::class);
+
+        // Aggregate orphans across all (workspace, nodeAggregateId) — a single aggregate can have multiple
+        // stale rows (one per target dimension) and a single DELETE drops them all at once.
+        /** @var array<string, NodeAggregateId> $orphans */
+        $orphans = [];
+        foreach ($readModel->staleTranslationFinder->findAll() as $stale) {
+            if (!$stale->workspaceName->equals($workspaceName)) {
+                continue;
+            }
+            if (isset($orphans[$stale->nodeAggregateId->value])) {
+                continue;
+            }
+            if ($contentGraph->findNodeAggregateById($stale->nodeAggregateId) === null) {
+                $orphans[$stale->nodeAggregateId->value] = $stale->nodeAggregateId;
+            }
+        }
+
+        if ($orphans === []) {
+            $this->outputLine('No orphaned stale-translation rows in workspace "%s".', [$workspace]);
+            return;
+        }
+
+        $deletedRows = 0;
+        foreach ($orphans as $nodeAggregateId) {
+            if ($dryRun) {
+                $this->outputLine('  - %s: would prune', [$nodeAggregateId->value]);
+                continue;
+            }
+            $deletedRows += $readModel->staleTranslationMaintenance->removeStaleRowsForNodeAggregate($workspaceName, $nodeAggregateId);
+            $this->outputLine('  - %s: pruned', [$nodeAggregateId->value]);
+        }
+
+        if ($dryRun) {
+            $this->outputLine('Dry run: %d orphaned node aggregate(s) in workspace "%s" would be pruned.', [count($orphans), $workspace]);
+            return;
+        }
+        $this->outputLine('Pruned %d row(s) for %d orphaned node aggregate(s) in workspace "%s".', [$deletedRows, count($orphans), $workspace]);
+    }
+
+    private function formatPerNodeLine(PerNodeSynchronizationResult $perNode, bool $dryRun): string
+    {
+        $r = $perNode->result;
+        if ($r->skippedReason !== null) {
+            return sprintf('  - %s: skipped (%s)', $perNode->nodeAggregateId->value, $r->skippedReason);
+        }
+        if ($r->isNoOp()) {
+            return sprintf('  - %s: no-op (already in sync)', $perNode->nodeAggregateId->value);
+        }
+        if ($r->removalCommandsDispatched > 0) {
+            return sprintf(
+                '  - %s: %sremoval (source variant gone)',
+                $perNode->nodeAggregateId->value,
+                $dryRun ? 'would dispatch ' : 'dispatched ',
+            );
+        }
+        if ($r->tagCommandsDispatched > 0) {
+            return sprintf(
+                '  - %s: %s%d subtree-tag change(s)',
+                $perNode->nodeAggregateId->value,
+                $dryRun ? 'would dispatch ' : 'dispatched ',
+                $r->tagCommandsDispatched,
+            );
+        }
+        return sprintf(
+            '  - %s: %s%d stale property update(s), %d variant creation(s)',
+            $perNode->nodeAggregateId->value,
+            $dryRun ? 'would dispatch ' : 'dispatched ',
+            $r->stalePropertyCommandsDispatched,
+            $r->variantCommandsDispatched,
         );
     }
 }

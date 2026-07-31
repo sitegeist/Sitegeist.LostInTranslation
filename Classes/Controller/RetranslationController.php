@@ -29,7 +29,7 @@ use Sitegeist\LostInTranslation\Domain\Retranslator;
  *    source (reference) language. "In sync" is sourced from the {@see StaleTranslationProjection}:
  *    if no stale records exist below the node at the target origin, the UI shows the up-to-date
  *    state.
- *  - `retranslateNode` delegates to {@see Retranslator} (same path as the CLI command).
+ *  - `retranslateSubtree` delegates to {@see Retranslator} (same path as the CLI command).
  *
  * The reference language is derived from the target preset's `referenceLanguage` configuration via
  * {@see ReferenceDimensionSpacePointResolver}; if the target has no reference language configured
