@@ -406,73 +406,76 @@ class NodeTranslationService
             return;
         }
 
+        $previousRecursionPreventionEnabled = $this->recursionPreventionEnabled;
         $this->recursionPreventionEnabled = false;
-        foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
-            if ($nodeSourceDimensionValue === $presetIdentifier) {
-                continue;
-            }
-
-            if ($targetPresetIdentifier && $targetPresetIdentifier !== $presetIdentifier) {
-                continue;
-            }
-
-            $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
-            if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC && !$force) {
-                continue;
-            }
-            if (!$sourceNode->isRemoved()) {
-                $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
-                $context->getFirstLevelNodeCache()->flush();
-
-                $targetNode = $context->adoptNode($sourceNode);
-
-                // The source node type cannot be resolved anymore, so syncing it would overwrite the
-                // node type the target dimension still has stored and the move below would fail the
-                // node type constraints of the new parent anyway.
-                if ($sourceNode->getNodeType()->getName() === $this->fallbackNodeTypeName) {
-                    $this->logger->warning(sprintf(
-                        'Skipped syncing node %s (%s) into the language preset "%s" because its node type "%s" is not available anymore.',
-                        $sourceNode->getIdentifier(),
-                        $sourceNode->getPath(),
-                        $presetIdentifier,
-                        $sourceNode->getNodeData()->getNodeTypeNameWithoutFallback()
-                    ));
+        try {
+            foreach ($this->contentDimensionConfiguration[$this->languageDimensionName]['presets'] as $presetIdentifier => $languagePreset) {
+                if ($nodeSourceDimensionValue === $presetIdentifier) {
                     continue;
                 }
 
-                // The node type has to be synced before the move, as moving validates the node type
-                // the target node currently has against the constraints of the new parent.
-                $targetNode->setNodeType($sourceNode->getNodeType());
+                if ($targetPresetIdentifier && $targetPresetIdentifier !== $presetIdentifier) {
+                    continue;
+                }
 
-                // Move node if targetNode has no parent or node parents are not matching
-                if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
-                    $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
-                    if ($referenceNode instanceof NodeInterface) {
-                        $targetNode->moveInto($referenceNode);
+                $translationStrategy = $languagePreset['options']['translationStrategy'] ?? null;
+                if ($translationStrategy !== self::TRANSLATION_STRATEGY_SYNC && !$force) {
+                    continue;
+                }
+                if (!$sourceNode->isRemoved()) {
+                    $context = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
+                    $context->getFirstLevelNodeCache()->flush();
+
+                    $targetNode = $context->adoptNode($sourceNode);
+
+                    // The source node type cannot be resolved anymore, so syncing it would overwrite the
+                    // node type the target dimension still has stored and the move below would fail the
+                    // node type constraints of the new parent anyway.
+                    if ($sourceNode->getNodeType()->getName() === $this->fallbackNodeTypeName) {
+                        $this->logger->warning(sprintf(
+                            'Skipped syncing node %s (%s) into the language preset "%s" because its node type "%s" is not available anymore.',
+                            $sourceNode->getIdentifier(),
+                            $sourceNode->getPath(),
+                            $presetIdentifier,
+                            $sourceNode->getNodeData()->getNodeTypeNameWithoutFallback()
+                        ));
+                        continue;
+                    }
+
+                    // The node type has to be synced before the move, as moving validates the node type
+                    // the target node currently has against the constraints of the new parent.
+                    $targetNode->setNodeType($sourceNode->getNodeType());
+
+                    // Move node if targetNode has no parent or node parents are not matching
+                    if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
+                        $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
+                        if ($referenceNode instanceof NodeInterface) {
+                            $targetNode->moveInto($referenceNode);
+                        }
+                    }
+
+                    // Sync internal properties
+                    $targetNode->setHidden($sourceNode->isHidden());
+                    $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
+                    $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
+                    $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
+                    $targetNode->setIndex($sourceNode->getIndex());
+
+                    $this->translateNode($sourceNode, $targetNode, $context);
+
+                    $context->getFirstLevelNodeCache()->flush();
+                    $this->publishingService->publishNode($targetNode);
+                } else {
+                    $removeContext = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
+                    $targetNode = $removeContext->getNodeByIdentifier($sourceNode->getIdentifier());
+                    if ($targetNode !== null) {
+                        $targetNode->setRemoved(true);
                     }
                 }
-
-                // Sync internal properties
-                $targetNode->setHidden($sourceNode->isHidden());
-                $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
-                $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());
-                $targetNode->setHiddenAfterDateTime($sourceNode->getHiddenAfterDateTime());
-                $targetNode->setIndex($sourceNode->getIndex());
-
-                $this->translateNode($sourceNode, $targetNode, $context);
-
-                $context->getFirstLevelNodeCache()->flush();
-                $this->publishingService->publishNode($targetNode);
-            } else {
-                $removeContext = $this->getContextForLanguageDimensionAndWorkspaceName($presetIdentifier, $workspaceName);
-                $targetNode = $removeContext->getNodeByIdentifier($sourceNode->getIdentifier());
-                if ($targetNode !== null) {
-                    $targetNode->setRemoved(true);
-                }
             }
+        } finally {
+            $this->recursionPreventionEnabled = $previousRecursionPreventionEnabled;
         }
-
-        $this->recursionPreventionEnabled = true;
     }
 
     /**
