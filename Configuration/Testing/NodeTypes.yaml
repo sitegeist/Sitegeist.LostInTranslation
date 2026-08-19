@@ -8,3 +8,23 @@
         inlineEditable: true
     stringProperty:
       type: string
+
+'Sitegeist.LostInTranslation.Testing:AllowedContent':
+  superTypes:
+    'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation': true
+
+# Stands in for a node type that is refactored away while nodes of that type still exist
+'Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType':
+  superTypes:
+    'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation': true
+
+'Sitegeist.LostInTranslation.Testing:NodeWithConstrainedCollection':
+  superTypes:
+    'Neos.Neos:Node': true
+  childNodes:
+    main:
+      type: 'Neos.Neos:ContentCollection'
+      constraints:
+        nodeTypes:
+          '*': ~
+          'Sitegeist.LostInTranslation.Testing:AllowedContent': true

@@ -13,6 +13,7 @@ use Neos\Flow\Persistence\Doctrine\PersistenceManager;
 use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
+use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
@@ -75,6 +76,12 @@ class NodeTranslationService
     protected $contentDimensionConfiguration;
 
     /**
+     * @Flow\InjectConfiguration(package="Neos.ContentRepository", path="fallbackNodeType")
+     * @var string|null
+     */
+    protected $fallbackNodeTypeName;
+
+    /**
      * @var Context[]
      */
     protected $contextFirstLevelCache = [];
@@ -116,6 +123,12 @@ class NodeTranslationService
      * @var PersistenceManager
      */
     protected $persistenceManager;
+
+    /**
+     * @Flow\Inject
+     * @var LoggerInterface
+     */
+    protected $logger;
 
     /**
      * If nodes are moved in Neos, then it will move node variants in other dimensions
@@ -413,6 +426,24 @@ class NodeTranslationService
 
                 $targetNode = $context->adoptNode($sourceNode);
 
+                // The source node type cannot be resolved anymore, so syncing it would overwrite the
+                // node type the target dimension still has stored and the move below would fail the
+                // node type constraints of the new parent anyway.
+                if ($sourceNode->getNodeType()->getName() === $this->fallbackNodeTypeName) {
+                    $this->logger->warning(sprintf(
+                        'Skipped syncing node %s (%s) into the language preset "%s" because its node type "%s" is not available anymore.',
+                        $sourceNode->getIdentifier(),
+                        $sourceNode->getPath(),
+                        $presetIdentifier,
+                        $sourceNode->getNodeData()->getNodeTypeNameWithoutFallback()
+                    ));
+                    continue;
+                }
+
+                // The node type has to be synced before the move, as moving validates the node type
+                // the target node currently has against the constraints of the new parent.
+                $targetNode->setNodeType($sourceNode->getNodeType());
+
                 // Move node if targetNode has no parent or node parents are not matching
                 if (!$targetNode->getParent() || ($sourceNode->getParentPath() !== $targetNode->getParentPath())) {
                     $referenceNode = $context->getNodeByIdentifier($sourceNode->getParent()->getIdentifier());
@@ -422,7 +453,6 @@ class NodeTranslationService
                 }
 
                 // Sync internal properties
-                $targetNode->setNodeType($sourceNode->getNodeType());
                 $targetNode->setHidden($sourceNode->isHidden());
                 $targetNode->setHiddenInIndex($sourceNode->isHiddenInIndex());
                 $targetNode->setHiddenBeforeDateTime($sourceNode->getHiddenBeforeDateTime());

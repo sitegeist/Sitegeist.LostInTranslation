@@ -16,9 +16,12 @@ use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\ContentRepository\Domain\Service\NodeTypeManager;
 use Neos\ContentRepository\Exception\NodeException;
 use Neos\ContentRepository\Exception\NodeTypeNotFoundException;
+use Neos\Flow\Configuration\ConfigurationManager;
 use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Flow\Utility\Algorithms;
+use Neos\Utility\ObjectAccess;
 use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\ContentRepository\NodeTranslationService;
 use Sitegeist\LostInTranslation\Infrastructure\DeepL\DeepLTranslationService;
 use Sitegeist\LostInTranslation\Tests\Functional\AbstractFunctionalTestCase;
@@ -84,6 +87,21 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     protected string $userWorkspaceName;
 
     /**
+     * Only set by the test that removes a node type, so that the tear down restores the
+     * configured node types for the remaining tests
+     */
+    protected bool $nodeTypesWereOverridden = false;
+
+    /**
+     * Only set by the test that mocks the logger, so that the tear down restores it for the
+     * remaining tests. Untyped, because Flow injects the logger lazily and the raw property
+     * can still hold the dependency proxy.
+     *
+     * @var mixed
+     */
+    protected $originalLogger = null;
+
+    /**
      * @return void
      */
     public function setUp(): void
@@ -108,6 +126,14 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      */
     public function tearDown(): void
     {
+        if ($this->nodeTypesWereOverridden) {
+            $this->objectManager->get(NodeTypeManager::class)->overrideNodeTypes($this->getCompleteNodeTypeConfiguration());
+            $this->nodeTypesWereOverridden = false;
+        }
+        if ($this->originalLogger !== null) {
+            $this->inject($this->objectManager->get(NodeTranslationService::class), 'logger', $this->originalLogger);
+            $this->originalLogger = null;
+        }
         $this->saveNodesAndTearDown();
         parent::tearDown();
     }
@@ -324,6 +350,86 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
      * @return void
      * @throws Exception
      */
+    public function nodeWithRemovedNodeTypeInGermanIsRetypedBeforeItIsMovedInEnglish(): void
+    {
+        // Step 1: create a node with a constrained content collection and a node next to it
+        $documentNodeInGerman = $this->createTestNode([], 'new-node-1', 'Sitegeist.LostInTranslation.Testing:NodeWithConstrainedCollection');
+        $nodeInGerman = $this->createTestNode([], 'new-node-2', 'Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType');
+        $this->userWorkspace->publishNodes([$documentNodeInGerman, $documentNodeInGerman->getNode('main'), $nodeInGerman], $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node-1/main')), 'The content collection in German was automatically synced into English');
+
+        // The node type name is stored per dimension, so the English node data is what the sync has to
+        // repair; the dimension check makes sure this is really the English and not the German node data
+        $nodeDataInEnglish = $this->englishLiveContext->getNode('/new-node-2')->getNodeData();
+        $this->assertEquals(['language' => ['en']], $nodeDataInEnglish->getDimensionValues());
+        $this->assertEquals('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType', $nodeDataInEnglish->getNodeTypeNameWithoutFallback());
+
+        // Step 2: the node type is refactored away and the editor retypes and moves the node in one publication
+        $this->removeTestNodeType('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType');
+
+        $collectionNodeInGerman = $this->germanUserContext->getNode('/new-node-1/main');
+        $nodeInGerman2 = $this->germanUserContext->getNode('/new-node-2');
+        $nodeInGerman2->setWorkspace($this->userWorkspace);
+        $nodeInGerman2->setNodeType($this->getNodeType('Sitegeist.LostInTranslation.Testing:AllowedContent'));
+        $nodeInGerman2->moveInto($collectionNodeInGerman);
+        $this->userWorkspace->publishNode($nodeInGerman2, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $movedNodeInEnglish = $this->englishLiveContext->getNode('/new-node-1/main/new-node-2');
+
+        $this->assertTrue(!is_null($movedNodeInEnglish), 'The node in German was correctly moved into the content collection in English');
+        $this->assertEquals('Sitegeist.LostInTranslation.Testing:AllowedContent', $movedNodeInEnglish->getNodeData()->getNodeTypeNameWithoutFallback(), 'The new node type was synced into English');
+    }
+
+    /**
+     * @test
+     * @return void
+     * @throws Exception
+     */
+    public function nodeWithRemovedNodeTypeInGermanIsNotSyncedIntoEnglish(): void
+    {
+        // Step 1: create two nodes on the same level
+        $parentNodeInGerman = $this->createTestNode([], 'new-node-1');
+        $nodeInGerman = $this->createTestNode([], 'new-node-2', 'Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType');
+        $this->userWorkspace->publishNodes([$parentNodeInGerman, $nodeInGerman], $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $this->assertTrue(!is_null($this->englishLiveContext->getNode('/new-node-2')), 'The node in German was automatically synced into English');
+
+        // Step 2: the node type is refactored away and the node is moved without being retyped
+        $this->removeTestNodeType('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType');
+        $loggerMock = $this->injectLoggerMock();
+        $loggerMock->expects($this->atLeastOnce())->method('warning');
+
+        $parentNodeInGerman2 = $this->germanUserContext->getNode('/new-node-1');
+        $nodeInGerman2 = $this->germanUserContext->getNode('/new-node-2');
+        $nodeInGerman2->setWorkspace($this->userWorkspace);
+        $nodeInGerman2->moveInto($parentNodeInGerman2);
+        $this->userWorkspace->publishNode($nodeInGerman2, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInEnglish = $this->englishLiveContext->getNode('/new-node-2');
+
+        $this->assertTrue(is_null($this->englishLiveContext->getNode('/new-node-1/new-node-2')), 'The node in English was not moved');
+        $this->assertTrue(!is_null($nodeInEnglish), 'The node in English is still in place');
+        $this->assertEquals('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType', $nodeInEnglish->getNodeData()->getNodeTypeNameWithoutFallback(), 'The stored node type name in English was not overwritten with the fallback node type');
+    }
+
+    /**
+     * @test
+     * @return void
+     * @throws Exception
+     */
     public function movedNodeAfterInGermanIsAlsoMovedAfterInEnglish(): void
     {
         // Step 1: create two nodes on the same level
@@ -499,19 +605,60 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     /**
      * @param array  $properties
      * @param string $name
+     * @param string $nodeType
      *
      * @return NodeInterface
      * @throws Exception
      */
-    protected function createTestNode(array $properties = [], string $name = 'new-node'): NodeInterface
+    protected function createTestNode(array $properties = [], string $name = 'new-node', string $nodeType = 'Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation'): NodeInterface
     {
         $rootNodeInSourceContext = $this->germanUserContext->getRootNode();
         $rootNodeInSourceContext->setWorkspace($this->userWorkspace);
-        $node = $rootNodeInSourceContext->createNode($name, $this->getNodeType('Sitegeist.LostInTranslation.Testing:NodeWithAutomaticTranslation'), Algorithms::generateUUID());
+        $node = $rootNodeInSourceContext->createNode($name, $this->getNodeType($nodeType), Algorithms::generateUUID());
         foreach ($properties as $propertyName => $propertyValue) {
             $node->setProperty($propertyName, $propertyValue);
         }
         return $node;
+    }
+
+    /**
+     * Makes a node type disappear from the NodeTypeManager, as if it had been refactored away while
+     * nodes of that type still exist. The tear down restores the configured node types.
+     *
+     * @param string $nodeType
+     *
+     * @return void
+     */
+    protected function removeTestNodeType(string $nodeType): void
+    {
+        $nodeTypeConfiguration = $this->getCompleteNodeTypeConfiguration();
+        unset($nodeTypeConfiguration[$nodeType]);
+        $this->objectManager->get(NodeTypeManager::class)->overrideNodeTypes($nodeTypeConfiguration);
+        $this->nodeTypesWereOverridden = true;
+    }
+
+    /**
+     * @return array
+     */
+    protected function getCompleteNodeTypeConfiguration(): array
+    {
+        $configuration = $this->objectManager->get(ConfigurationManager::class)->getConfiguration('NodeTypes');
+
+        // Node types that are disabled are configured as booleans and cannot be loaded as node types
+        return array_filter($configuration, 'is_array');
+    }
+
+    /**
+     * @return LoggerInterface|MockObject
+     */
+    protected function injectLoggerMock(): LoggerInterface
+    {
+        $nodeTranslationService = $this->objectManager->get(NodeTranslationService::class);
+        $this->originalLogger = ObjectAccess::getProperty($nodeTranslationService, 'logger', true);
+        $loggerMock = $this->getMockBuilder(LoggerInterface::class)->getMock();
+        $this->inject($nodeTranslationService, 'logger', $loggerMock);
+
+        return $loggerMock;
     }
 
     /**
