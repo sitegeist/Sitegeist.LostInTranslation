@@ -67,8 +67,7 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
         $info->setMessage($count . ' outdated nodes were updated');
         $this->feedbackCollection->add($info);
 
-        $updateWorkspaceInfo = new UpdateWorkspaceInfo();
-        $updateWorkspaceInfo->setWorkspace(
+        $updateWorkspaceInfo = new UpdateWorkspaceInfo(
             $collection->getContext()->getWorkspace()
         );
         $this->feedbackCollection->add($updateWorkspaceInfo);

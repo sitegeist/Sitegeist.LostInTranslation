@@ -41,8 +41,7 @@ class AddMissingTranslations extends AbstractCollectionTranslationChange
         $info->setMessage($count . ' missing nodes were added');
         $this->feedbackCollection->add($info);
 
-        $updateWorkspaceInfo = new UpdateWorkspaceInfo();
-        $updateWorkspaceInfo->setWorkspace(
+        $updateWorkspaceInfo = new UpdateWorkspaceInfo(
             $collection->getContext()->getWorkspace()
         );
         $this->feedbackCollection->add($updateWorkspaceInfo);
