@@ -10,6 +10,7 @@ use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\Service\ContentContext;
 use Neos\Neos\Domain\Service\ContentContextFactory;
 use Neos\Neos\Domain\Service\ContentDimensionPresetSourceInterface;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 
 /**
  * @Flow\Scope("singleton")
@@ -21,6 +22,42 @@ class RetranslationService
      * @var string
      */
     protected $languageDimensionName;
+
+    /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.retranslation.removeNodesWithoutSource")
+     * @var bool
+     */
+    protected $removeNodesWithoutSource;
+
+    /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.retranslation.synchronizeUntranslatedProperties")
+     * @var bool
+     */
+    protected $synchronizeUntranslatedProperties;
+
+    /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.retranslation.synchronizeNodePosition")
+     * @var bool
+     */
+    protected $synchronizeNodePosition;
+
+    /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.retranslation.synchronizeNodeVisibility")
+     * @var bool
+     */
+    protected $synchronizeNodeVisibility;
+
+    /**
+     * @Flow\InjectConfiguration(path="nodeTranslation.retranslation.synchronizeNodeType")
+     * @var bool
+     */
+    protected $synchronizeNodeType;
+
+    /**
+     * @Flow\Inject
+     * @var TranslatablePropertyNamesFactory
+     */
+    protected $translatablePropertiesFactory;
 
     public function __construct(
         protected readonly ContentDimensionPresetSourceInterface $contentDimensionPresetSource,
@@ -40,17 +77,45 @@ class RetranslationService
         if (!$targetNode) {
             return $sourceReferenceDate;
         }
+
+        /**
+         * @var \DateTimeInterface[] $possibleModificationDates
+         */
+        $possibleModificationDates = [];
         $targetReferenceDate = $targetNode->getLastModificationDateTime();
         if ($targetReferenceDate < $sourceReferenceDate) {
-            return $sourceReferenceDate;
+            $possibleModificationDates[] = $sourceReferenceDate;
         }
 
+        /**
+         * @var array<string, NodeInterface> $sourceNodeByIdentifier
+         */
+        $sourceNodeByIdentifier = [];
         foreach ($sourceNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $sourceChildNode) {
+            $sourceNodeByIdentifier[$sourceChildNode->getIdentifier()] = $sourceChildNode;
             /** @var Node $sourceChildNode */
             $updateDate = $this->findFirstUpdateDateOnNodeOrDescendants($sourceChildNode, $sourceContext, $targetContext);
             if ($updateDate) {
-                return $updateDate;
+                $possibleModificationDates[] = $updateDate;
             }
+        }
+
+        foreach ($targetNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $targetChildNode) {
+            if (array_key_exists($targetChildNode->getIdentifier(), $sourceNodeByIdentifier)) {
+                $sourceNode = $sourceNodeByIdentifier[$targetChildNode->getIdentifier()];
+                if ($targetChildNode->getIndex() !== $sourceNode->getIndex()) {
+                    $possibleModificationDates[] = $targetNode->getLastModificationDateTime();
+                }
+            } else {
+                // we do not know the date of the deletion so we decide it was just now
+                // this will be improved for neos 9
+                $possibleModificationDates[] = new \DateTimeImmutable();
+            }
+        }
+
+        if (count($possibleModificationDates) > 0) {
+            sort($possibleModificationDates);
+            return reset($possibleModificationDates);
         }
 
         return null;
@@ -92,10 +157,62 @@ class RetranslationService
             /** @var Node $targetNode */
             if ($targetNode->getLastModificationDateTime() < $node->getLastModificationDateTime()) {
                 $this->nodeTranslationService->translateNode($node, $targetNode, $targetContentContext);
+                if ($this->synchronizeNodeType && $node->getNodeType()->getName() !== $targetNode->getNodeType()->getName()) {
+                    $targetNode->setNodeType($node->getNodeType());
+                }
+                if ($this->synchronizeUntranslatedProperties) {
+                    $translatableProperties = $this->translatablePropertiesFactory->createForNodeType($node->getNodeType());
+                    $sourceProperties = $node->getProperties();
+                    $targetProperties = $targetNode->getProperties();
+                    // set properties as in the source if no translation is configured
+                    foreach ($sourceProperties as $propertyName => $value) {
+                        if (!$translatableProperties->isTranslatable($propertyName) && $targetProperties[ $propertyName ] !== $value) {
+                            $targetNode->setProperty($propertyName, $value);
+                        }
+                    }
+                    // remove properties that are not present in the source
+                    foreach ($targetProperties as $propertyName => $value) {
+                        if ($sourceProperties->offsetExists($propertyName) === false) {
+                            $targetNode->removeProperty($propertyName);
+                        }
+                    }
+                }
+                // sync node position
+                if ($this->synchronizeNodePosition && $node->getIndex() !== $targetNode->getIndex()) {
+                    $targetNode->setIndex($node->getIndex());
+                }
+                if ($this->synchronizeNodeVisibility) {
+                    // sync visibility properties
+                    if ($node->isHidden() !== $targetNode->isHidden()) {
+                        $targetNode->setHidden($node->isHidden());
+                    }
+                    if ($node->getHiddenBeforeDateTime() !== $targetNode->getHiddenBeforeDateTime()) {
+                        $targetNode->setHiddenBeforeDateTime($node->getHiddenBeforeDateTime());
+                    }
+                    if ($node->getHiddenAfterDateTime() !== $targetNode->getHiddenAfterDateTime()) {
+                        $targetNode->setHiddenAfterDateTime($node->getHiddenAfterDateTime());
+                    }
+                }
             }
         }
+
+        /**
+         * @var array<string, NodeInterface> $sourceNodeByIdentifier
+         */
+        $sourceNodeByIdentifier = [];
         foreach ($node->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $sourceChildNode) {
+            $sourceNodeByIdentifier[$sourceChildNode->getIdentifier()] = $sourceChildNode;
             $this->translateDescendants($sourceChildNode, $targetContentContext);
+        }
+
+        if ($this->removeNodesWithoutSource) {
+            if ($targetNode instanceof NodeInterface) {
+                foreach ($targetNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $targetChildNode) {
+                    if (!array_key_exists($targetChildNode->getIdentifier(), $sourceNodeByIdentifier)) {
+                        $targetChildNode->remove();
+                    }
+                }
+            }
         }
     }
 
