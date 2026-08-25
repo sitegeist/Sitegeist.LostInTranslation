@@ -134,7 +134,7 @@ be integrated in backup and restore or synchronization scripts.
 
 ### Content-Repository 
 
-The translation of nodes can is configured via settings:
+The translation of nodes  is configured via settings:
 
 ```yaml
 Sitegeist:
@@ -157,6 +157,43 @@ Sitegeist:
       # The name of the language dimension. Usually needs no modification
       #
       languageDimensionName: 'language'
+
+      #
+      # To be used if editor access to the translated languages is disabled by policy.
+      # If enabled, the automated node translation will disregard the policy while translating the nodes.
+      #
+      skipAuthorizationChecks: false
+
+      excludedNodePaths: []
+
+      #
+      # Translate all object properties that have a translationConnector configured
+      # if this is set to false each property must be enabled via options.automaticTranslation
+      #
+      translateTypesWithConnectors: true
+
+      #
+      # Connectors to translate value object properties
+      #
+      # for each value object type a clas implementing the TranslationConnectorInterface
+      # can be configured to extract and apply translations
+      #
+      translationConnectors: []
+
+      #
+      # Configure behavior of the retranslation feature
+      #
+      retranslation:
+          # Nodes that are not present in the reference language are deleted
+          removeNodesWithoutSource: false
+          # All properties that are not translated are copied from the reference
+          synchronizeUntranslatedProperties: false
+          # The position is synced with the reference
+          synchronizeNodePosition: false
+          # The visibility is synced with the reference
+          synchronizeNodeVisibility: false
+          # The nodetype is synced with the reference
+          synchronizeNodeType: false
 ```
 
 To enable automated translations for a language preset, set `options.translationStrategy` to  `once`, `sync` or `none`.
