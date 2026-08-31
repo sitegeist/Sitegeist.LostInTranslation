@@ -8,6 +8,7 @@ use Neos\Flow\Annotations as Flow;
 use Neos\ContentRepository\Domain\Model\NodeType;
 use Neos\Flow\ObjectManagement\ObjectManagerInterface;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
+use Sitegeist\LostInTranslation\Domain\TranslationArrayConnectorInterface;
 
 class TranslatablePropertyNamesFactory
 {
@@ -60,6 +61,8 @@ class TranslatablePropertyNamesFactory
                 ?? false;
             $translationConnector = $this->translationConnectors[$type]
                 ?? null;
+            $translationConnectorFromPropertyDefinition = $propertyDefinition['options']['translationConnector']
+                ?? null;
 
             if ($automaticTranslationIsEnabled === false) {
                 continue;
@@ -72,6 +75,14 @@ class TranslatablePropertyNamesFactory
             } elseif ($translationConnector && ($this->translateTypesWithConnectors || $automaticTranslationIsEnabled)) {
                 $translationConnectorInstance = $this->objectManager->get($translationConnector);
                 assert($translationConnectorInstance instanceof TranslationConnectorInterface);
+                $translateProperties[] = new TranslatablePropertyName($propertyName, $translationConnectorInstance);
+            } elseif ($translationConnectorFromPropertyDefinition && $automaticTranslationIsEnabled) {
+                $translationConnectorInstance = $this->objectManager->get($translationConnectorFromPropertyDefinition);
+                if ($type === "array") {
+                    assert($translationConnectorInstance instanceof TranslationArrayConnectorInterface);
+                } else {
+                    assert($translationConnectorInstance instanceof TranslationConnectorInterface);
+                }
                 $translateProperties[] = new TranslatablePropertyName($propertyName, $translationConnectorInstance);
             }
         }

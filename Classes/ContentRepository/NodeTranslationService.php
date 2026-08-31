@@ -328,7 +328,7 @@ class NodeTranslationService
             if (is_array($propertyValue)) {
                 $targetValue = $sourceNode->getProperty($propertyName);
                 if ($connector = $translatableProperties->getTranslationObjectConnector($propertyName)) {
-                    if (is_object($targetValue)) {
+                    if (is_object($targetValue) || is_array($targetValue)) {
                         $targetValue = $connector->applyTranslations($targetValue, $propertyValue);
                     }
                 }

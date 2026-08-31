@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
+use Sitegeist\LostInTranslation\Domain\TranslationArrayConnectorInterface;
 
 class TranslatablePropertyName
 {
@@ -14,15 +15,15 @@ class TranslatablePropertyName
     protected $name;
 
     /**
-     * @var TranslationConnectorInterface<object>|null
+     * @var TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null
      */
     protected $translationConnector;
 
     /**
      * @param string $name
-     * @param TranslationConnectorInterface<object>|null $translationConnector
+     * @param TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null $translationConnector
      */
-    public function __construct(string $name, ?TranslationConnectorInterface $translationConnector = null)
+    public function __construct(string $name, TranslationConnectorInterface | TranslationArrayConnectorInterface | null $translationConnector = null)
     {
         $this->name = $name;
         $this->translationConnector = $translationConnector;
@@ -34,9 +35,9 @@ class TranslatablePropertyName
     }
 
     /**
-     * @return TranslationConnectorInterface<object>|null
+     * @return TranslationConnectorInterface<object>|TranslationArrayConnectorInterface<array<string,mixed>>|null
      */
-    public function getTranslationConnector(): ?TranslationConnectorInterface
+    public function getTranslationConnector(): TranslationConnectorInterface | TranslationArrayConnectorInterface | null
     {
         return $this->translationConnector;
     }
