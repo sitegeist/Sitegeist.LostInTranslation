@@ -288,8 +288,25 @@ class NodeTranslationService
         /** @phpstan-ignore arguments.count */
         $properties = (array)$sourceNode->getProperties(true);
         $propertiesToTranslate = [];
+        $repeatablePropertiesToTranslate = [];
 
         foreach ($properties as $propertyName => $propertyValue) {
+            // Check if this is a translatable repeatable property
+            $repeatableProperty = $translatableProperties->isTranslatableRepeatable($propertyName);
+            if ($repeatableProperty !== null) {
+                // Repeatable properties can be: JSON string, array, or object with toArray/jsonSerialize
+                $repeatableData = $this->normalizeRepeatableValue($propertyValue);
+                if ($repeatableData !== null) {
+                    $repeatablePropertiesToTranslate[$propertyName] = [
+                        'value' => $repeatableData,
+                        'subProperties' => $repeatableProperty->getTranslatableSubProperties()
+                    ];
+                    unset($properties[$propertyName]);
+                    continue;
+                }
+            }
+
+            // Handle regular string properties
             if (empty($propertyValue)) {
                 continue;
             }
@@ -320,6 +337,17 @@ class NodeTranslationService
             $translatedProperties = [];
         }
 
+        // Translate repeatable properties
+        foreach ($repeatablePropertiesToTranslate as $propertyName => $config) {
+            $translatedValue = $this->translateRepeatableProperty(
+                $config['value'],
+                $config['subProperties'],
+                $targetLanguage,
+                $sourceLanguage
+            );
+            $properties[$propertyName] = $translatedValue;
+        }
+
         foreach ($properties as $propertyName => $propertyValue) {
             // Make sure the uriPathSegment is valid
             if ($propertyName === 'uriPathSegment' && !preg_match('/^[a-z0-9\-]+$/i', $propertyValue)) {
@@ -331,6 +359,10 @@ class NodeTranslationService
                     if (is_object($targetValue)) {
                         $targetValue = $connector->applyTranslations($targetValue, $propertyValue);
                     }
+                } else {
+                    // For repeatable fields or other array properties without a connector,
+                    // use the translated array value directly
+                    $targetValue = $propertyValue;
                 }
             } else {
                 $targetValue = $propertyValue;
@@ -456,5 +488,125 @@ class NodeTranslationService
     public function resetContextCache(): void
     {
         $this->contextFirstLevelCache = [];
+    }
+
+    /**
+     * Normalize a repeatable property value to an array format
+     *
+     * @param mixed $propertyValue
+     * @return array<mixed>|null Returns array if successfully normalized, null otherwise
+     */
+    protected function normalizeRepeatableValue($propertyValue): ?array
+    {
+        // Already an array
+        if (is_array($propertyValue)) {
+            return $propertyValue;
+        }
+
+        // JSON string
+        if (is_string($propertyValue)) {
+            $decoded = json_decode($propertyValue, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+            return null;
+        }
+
+        // Object with toArray method (like Mireo\RepeatableFields\Model\Repeatable)
+        if (is_object($propertyValue)) {
+            if (method_exists($propertyValue, 'toArray')) {
+                $array = $propertyValue->toArray();
+                if (is_array($array)) {
+                    return $array;
+                }
+            }
+            // Try jsonSerialize
+            if ($propertyValue instanceof \JsonSerializable) {
+                $serialized = $propertyValue->jsonSerialize();
+                if (is_array($serialized)) {
+                    return $serialized;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Translate translatable sub-properties within a repeatable property
+     *
+     * @param array<mixed> $repeatableValue
+     * @param array<string> $translatableSubProperties
+     * @param string $targetLanguage
+     * @param string $sourceLanguage
+     * @return array<mixed>
+     */
+    protected function translateRepeatableProperty(
+        array $repeatableValue,
+        array $translatableSubProperties,
+        string $targetLanguage,
+        string $sourceLanguage
+    ): array {
+        // Handle repeatable structure: can be array of items or byGroup structure
+        $isByGroupStructure = isset($repeatableValue['byGroup']);
+        $items = $isByGroupStructure ? $repeatableValue['byGroup'] : $repeatableValue;
+
+        if (!is_array($items)) {
+            return $repeatableValue;
+        }
+
+        // Collect all strings to translate (for batch API call)
+        $stringsToTranslate = [];
+        $itemKeys = []; // Store the original keys for proper reassignment
+
+        foreach ($items as $itemIndex => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $itemKeys[] = $itemIndex;
+            foreach ($translatableSubProperties as $subPropertyName) {
+                if (isset($item[$subPropertyName]) && is_string($item[$subPropertyName])) {
+                    $value = $item[$subPropertyName];
+                    $trimmedValue = trim(strip_tags($value));
+                    if (!empty($trimmedValue)) {
+                        // Use a separator that won't appear in property names
+                        $mappingKey = $itemIndex . '::' . $subPropertyName;
+                        $stringsToTranslate[$mappingKey] = $value;
+                    }
+                }
+            }
+        }
+
+        if (empty($stringsToTranslate)) {
+            return $repeatableValue;
+        }
+
+        // Batch translate all strings
+        $translatedStrings = $this->translationService->translate(
+            $stringsToTranslate,
+            $targetLanguage,
+            $sourceLanguage
+        );
+
+        // Apply translations back to the structure
+        foreach ($translatedStrings as $mappingKey => $translatedValue) {
+            $parts = explode('::', $mappingKey, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            [$itemIndex, $subPropertyName] = $parts;
+            // Handle both numeric and string keys
+            $key = is_numeric($itemIndex) ? (int)$itemIndex : $itemIndex;
+            if (isset($items[$key]) && is_array($items[$key])) {
+                $items[$key][$subPropertyName] = $translatedValue;
+            }
+        }
+
+        // Restore byGroup structure if needed
+        if ($isByGroupStructure) {
+            return ['byGroup' => $items];
+        }
+
+        return $items;
     }
 }
