@@ -366,7 +366,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         // repair; the dimension check makes sure this is really the English and not the German node data
         $nodeDataInEnglish = $this->englishLiveContext->getNode('/new-node-2')->getNodeData();
         $this->assertEquals(['language' => ['en']], $nodeDataInEnglish->getDimensionValues());
-        $this->assertEquals('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType', $nodeDataInEnglish->getNodeTypeNameWithoutFallback());
+        $this->assertEquals('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType', (string) ObjectAccess::getProperty($nodeDataInEnglish, 'nodeType', true));
 
         // Step 2: the node type is refactored away and the editor retypes and moves the node in one publication
         $this->removeTestNodeType('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType');
@@ -384,7 +384,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
         $movedNodeInEnglish = $this->englishLiveContext->getNode('/new-node-1/main/new-node-2');
 
         $this->assertTrue(!is_null($movedNodeInEnglish), 'The node in German was correctly moved into the content collection in English');
-        $this->assertEquals('Sitegeist.LostInTranslation.Testing:AllowedContent', $movedNodeInEnglish->getNodeData()->getNodeTypeNameWithoutFallback(), 'The new node type was synced into English');
+        $this->assertEquals('Sitegeist.LostInTranslation.Testing:AllowedContent', (string) ObjectAccess::getProperty($movedNodeInEnglish->getNodeData(), 'nodeType', true), 'The new node type was synced into English');
     }
 
     /**
@@ -422,7 +422,7 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
 
         $this->assertTrue(is_null($this->englishLiveContext->getNode('/new-node-1/new-node-2')), 'The node in English was not moved');
         $this->assertTrue(!is_null($nodeInEnglish), 'The node in English is still in place');
-        $this->assertEquals('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType', $nodeInEnglish->getNodeData()->getNodeTypeNameWithoutFallback(), 'The stored node type name in English was not overwritten with the fallback node type');
+        $this->assertEquals('Sitegeist.LostInTranslation.Testing:RefactoredAwayNodeType', (string) ObjectAccess::getProperty($nodeInEnglish->getNodeData(), 'nodeType', true), 'The stored node type name in English was not overwritten with the fallback node type');
     }
 
     /**

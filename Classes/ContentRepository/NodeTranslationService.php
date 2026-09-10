@@ -13,6 +13,7 @@ use Neos\Flow\Persistence\Doctrine\PersistenceManager;
 use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Neos\Service\PublishingService;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
+use Neos\Utility\ObjectAccess;
 use Psr\Log\LoggerInterface;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
@@ -437,7 +438,7 @@ class NodeTranslationService
                             $sourceNode->getIdentifier(),
                             $sourceNode->getPath(),
                             $presetIdentifier,
-                            $sourceNode->getNodeData()->getNodeTypeNameWithoutFallback()
+                            (string) ObjectAccess::getProperty($sourceNode->getNodeData(), 'nodeType', true)
                         ));
                         continue;
                     }
