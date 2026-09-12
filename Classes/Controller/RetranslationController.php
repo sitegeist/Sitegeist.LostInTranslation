@@ -29,6 +29,17 @@ class RetranslationController extends ActionController
         $targetCoordinates = \json_decode($coordinates, true);
         $targetLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$targetCoordinates[$this->languageDimensionName]];
         $sourceLanguage = $targetLanguagePreset['options']['referenceLanguage'] ?? null;
+        if (!$sourceLanguage) {
+            // Retranslation is opt-in per language preset. Without a reference language there is nothing to
+            // compare against, so the target node is not resolved at all.
+            return \json_encode(
+                [
+                    'isUpToDate' => true,
+                    'referenceLanguage' => null,
+                ],
+                JSON_THROW_ON_ERROR,
+            );
+        }
 
         $targetContentContext = $this->retranslationService->getContentContext($workspaceName, $targetCoordinates, false);
         $targetNode = $targetContentContext->getNodeByIdentifier($nodeAggregateId);
@@ -37,20 +48,17 @@ class RetranslationController extends ActionController
         }
 
         $sourceUpdateDate = null;
-        $sourceLanguagePreset = null;
-        if ($sourceLanguage) {
-            $sourceContentContext = $this->retranslationService->getReferenceContentContext($workspaceName, $targetCoordinates);
-            /** @var ?Node $sourceNode */
-            $sourceNode = $sourceContentContext->getNodeByIdentifier($nodeAggregateId);
-            if ($sourceNode instanceof Node) {
-                $sourceUpdateDate = $this->retranslationService->findFirstUpdateDateOnNodeOrDescendants(
-                    $sourceNode,
-                    $sourceContentContext,
-                    $targetContentContext
-                );
-            }
-            $sourceLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$sourceContentContext->getTargetDimensions()[$this->languageDimensionName]];
+        $sourceContentContext = $this->retranslationService->getReferenceContentContext($workspaceName, $targetCoordinates);
+        /** @var ?Node $sourceNode */
+        $sourceNode = $sourceContentContext->getNodeByIdentifier($nodeAggregateId);
+        if ($sourceNode instanceof Node) {
+            $sourceUpdateDate = $this->retranslationService->findFirstUpdateDateOnNodeOrDescendants(
+                $sourceNode,
+                $sourceContentContext,
+                $targetContentContext
+            );
         }
+        $sourceLanguagePreset = $this->contentDimensionPresetSource->getAllPresets()[$this->languageDimensionName]['presets'][$sourceContentContext->getTargetDimensions()[$this->languageDimensionName]];
 
         /** otherwise, getNodeByIdentifier might register a new object ¯\_(ツ)_/¯ */
         $this->persistenceManager->clearState();
@@ -58,12 +66,10 @@ class RetranslationController extends ActionController
         return \json_encode(
             [
                 'isUpToDate' => $sourceUpdateDate === null,
-                'referenceLanguage' => $sourceLanguage
-                    ? [
-                        'label' => $sourceLanguagePreset ? $sourceLanguagePreset['label'] : null,
-                        'dateModified' => $sourceUpdateDate?->format(\DateTime::ATOM),
-                    ]
-                    : null,
+                'referenceLanguage' => [
+                    'label' => $sourceLanguagePreset ? $sourceLanguagePreset['label'] : null,
+                    'dateModified' => $sourceUpdateDate?->format(\DateTime::ATOM),
+                ],
             ],
             JSON_THROW_ON_ERROR,
         );
