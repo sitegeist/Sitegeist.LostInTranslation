@@ -56,6 +56,28 @@ Also, automatic translation for all types derived from `Neos.Neos:Node` is enabl
       automaticTranslation: true
 ```
 
+### Plain text properties with DeepL tag handling
+
+If DeepL is configured with `tag_handling: 'html'` or `tag_handling: 'xml'`, plain text properties that contain
+characters like `&`, `<` or `>` can be returned with encoded entities. For example, `Nudel & Suppe` may become
+`Pasta &amp; Soup`.
+
+Mark simple `string` properties that contain plain text as `automaticTranslationPlainText: true`. These values are
+escaped before they are sent to DeepL and decoded again before they are stored on the translated node.
+
+```yaml
+'Vendor.Site:Content.Example':
+  properties:
+    title:
+      type: string
+      options:
+        automaticTranslation: true
+        automaticTranslationPlainText: true
+```
+
+This option is intended for simple `string` properties. For value object properties with translation connectors, handle
+escaping inside the connector if needed.
+
 ### Retranslate View
 
 This package adds a Retranslate View to both `Neos.Neos:Document` and `Neos.Neos:Node`.

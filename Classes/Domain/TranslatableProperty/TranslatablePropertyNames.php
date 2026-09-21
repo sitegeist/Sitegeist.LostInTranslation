@@ -44,6 +44,16 @@ class TranslatablePropertyNames implements \IteratorAggregate
         return null;
     }
 
+    public function isPlainText(string $propertyName): bool
+    {
+        foreach ($this->translatableProperties as $translatableProperty) {
+            if ($translatableProperty->getName() == $propertyName) {
+                return $translatableProperty->isPlainText();
+            }
+        }
+        return false;
+    }
+
     /**
      * @return \ArrayIterator<int, TranslatablePropertyName>
      */

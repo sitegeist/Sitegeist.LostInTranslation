@@ -73,6 +73,23 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
                 new TranslatablePropertyName('textPropertyWithOptions'),
             ),
         ];
+
+        yield 'plaintext automaticTranslation' => [
+            new NodeType('Example', [], [
+                'properties' => [
+                    'plainTextProperty' => [
+                        'type' => 'string',
+                        'options' => [
+                            'automaticTranslation' => true,
+                            'automaticTranslationPlainText' => true,
+                        ]
+                    ]
+                ]
+            ]),
+            new TranslatablePropertyNames(
+                new TranslatablePropertyName('plainTextProperty', null, true),
+            ),
+        ];
     }
 
     /**

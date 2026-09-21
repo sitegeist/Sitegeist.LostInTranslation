@@ -56,6 +56,7 @@ class TranslatablePropertyNamesFactory
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
             $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ]
                 ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? null);
+            $automaticTranslationIsPlainText = (bool)($propertyDefinition[ 'options' ][ 'automaticTranslationPlainText' ] ?? false);
             $isInlineEditable = $propertyDefinition['ui']['inlineEditable']
                 ?? false;
             $translationConnector = $this->translationConnectors[$type]
@@ -66,9 +67,9 @@ class TranslatablePropertyNamesFactory
             }
 
             if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName);
+                $translateProperties[] = new TranslatablePropertyName($propertyName, null, $automaticTranslationIsPlainText);
             } elseif ($type === "string" && $automaticTranslationIsEnabled === true) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName);
+                $translateProperties[] = new TranslatablePropertyName($propertyName, null, $automaticTranslationIsPlainText);
             } elseif ($translationConnector && ($this->translateTypesWithConnectors || $automaticTranslationIsEnabled)) {
                 $translationConnectorInstance = $this->objectManager->get($translationConnector);
                 assert($translationConnectorInstance instanceof TranslationConnectorInterface);
