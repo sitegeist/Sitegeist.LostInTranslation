@@ -18,6 +18,18 @@ class TranslatablePropertyNamesFactory
     protected $translateInlineEditables;
 
     /**
+     * @var string
+     * @Flow\InjectConfiguration(path="nodeTranslation.defaultInlineEditableTranslationMode")
+     */
+    protected $defaultInlineEditableTranslationMode;
+
+    /**
+     * @var string
+     * @Flow\InjectConfiguration(path="nodeTranslation.defaultNonInlineEditableTranslationMode")
+     */
+    protected $defaultNonInlineEditableTranslationMode;
+
+    /**
      * @var bool
      * @Flow\InjectConfiguration(path="nodeTranslation.translateTypesWithConnectors")
      */
@@ -56,7 +68,6 @@ class TranslatablePropertyNamesFactory
             // @deprecated Fallback for renamed setting translateOnAdoption -> automaticTranslation
             $automaticTranslationIsEnabled = $propertyDefinition[ 'options' ][ 'automaticTranslation' ]
                 ?? ($propertyDefinition[ 'options' ][ 'translateOnAdoption' ] ?? null);
-            $automaticTranslationIsPlainText = (bool)($propertyDefinition[ 'options' ][ 'automaticTranslationPlainText' ] ?? false);
             $isInlineEditable = $propertyDefinition['ui']['inlineEditable']
                 ?? false;
             $translationConnector = $this->translationConnectors[$type]
@@ -67,9 +78,17 @@ class TranslatablePropertyNamesFactory
             }
 
             if ($type === "string" && $this->translateInlineEditables && $isInlineEditable) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName, null, $automaticTranslationIsPlainText);
+                $translateProperties[] = new TranslatablePropertyName(
+                    $propertyName,
+                    null,
+                    $this->getStringTranslationMode($propertyDefinition, $isInlineEditable)
+                );
             } elseif ($type === "string" && $automaticTranslationIsEnabled === true) {
-                $translateProperties[] = new TranslatablePropertyName($propertyName, null, $automaticTranslationIsPlainText);
+                $translateProperties[] = new TranslatablePropertyName(
+                    $propertyName,
+                    null,
+                    $this->getStringTranslationMode($propertyDefinition, $isInlineEditable)
+                );
             } elseif ($translationConnector && ($this->translateTypesWithConnectors || $automaticTranslationIsEnabled)) {
                 $translationConnectorInstance = $this->objectManager->get($translationConnector);
                 assert($translationConnectorInstance instanceof TranslationConnectorInterface);
@@ -78,5 +97,20 @@ class TranslatablePropertyNamesFactory
         }
         $this->firstLevelCache[$nodeType->getName()] = new TranslatablePropertyNames(...$translateProperties);
         return $this->firstLevelCache[$nodeType->getName()];
+    }
+
+    /**
+     * @param array<string, mixed> $propertyDefinition
+     */
+    private function getStringTranslationMode(array $propertyDefinition, bool $isInlineEditable): StringTranslationMode
+    {
+        $configuredMode = $propertyDefinition['options']['stringTranslationMode']
+            ?? (
+                $isInlineEditable
+                    ? $this->defaultInlineEditableTranslationMode
+                    : $this->defaultNonInlineEditableTranslationMode
+            );
+
+        return StringTranslationMode::from($configuredMode);
     }
 }

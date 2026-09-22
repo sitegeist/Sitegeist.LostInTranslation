@@ -69,6 +69,8 @@ Sitegeist:
       # `options.translateOnAdoption: true` for each property seperatly
       #
       translateInlineEditables: true
+      defaultInlineEditableTranslationMode: html
+      defaultNonInlineEditableTranslationMode: html
 
       #
       # The name of the language dimension. Usually needs no modification

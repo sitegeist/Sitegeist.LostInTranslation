@@ -44,11 +44,11 @@ class TranslatablePropertyNames implements \IteratorAggregate
         return null;
     }
 
-    public function isPlainText(string $propertyName): bool
+    public function hasStringTranslationMode(string $propertyName, StringTranslationMode $stringTranslationMode): bool
     {
         foreach ($this->translatableProperties as $translatableProperty) {
             if ($translatableProperty->getName() == $propertyName) {
-                return $translatableProperty->isPlainText();
+                return $translatableProperty->getStringTranslationMode() === $stringTranslationMode;
             }
         }
         return false;

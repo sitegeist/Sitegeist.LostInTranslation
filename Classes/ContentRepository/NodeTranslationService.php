@@ -323,6 +323,7 @@ class NodeTranslationService
                 $translatedPropertiesDeflated,
                 $translatableProperties
             );
+            /** @var array<non-empty-string, string> $translatedPropertiesDecoded */
             $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDecoded);
             $properties = array_merge($translatedProperties, $properties);
         } else {

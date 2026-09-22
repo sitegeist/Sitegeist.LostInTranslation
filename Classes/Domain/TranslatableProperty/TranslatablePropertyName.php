@@ -18,21 +18,20 @@ class TranslatablePropertyName
      */
     protected $translationConnector;
 
-    /**
-     * @var bool
-     */
-    protected $isPlainText;
+    protected ?StringTranslationMode $stringTranslationMode;
 
     /**
      * @param string $name
      * @param TranslationConnectorInterface<object>|null $translationConnector
-     * @param bool $isPlainText
      */
-    public function __construct(string $name, ?TranslationConnectorInterface $translationConnector = null, bool $isPlainText = false)
-    {
+    public function __construct(
+        string $name,
+        ?TranslationConnectorInterface $translationConnector = null,
+        ?StringTranslationMode $stringTranslationMode = null
+    ) {
         $this->name = $name;
         $this->translationConnector = $translationConnector;
-        $this->isPlainText = $isPlainText;
+        $this->stringTranslationMode = $stringTranslationMode;
     }
 
     public function getName(): string
@@ -48,8 +47,8 @@ class TranslatablePropertyName
         return $this->translationConnector;
     }
 
-    public function isPlainText(): bool
+    public function getStringTranslationMode(): ?StringTranslationMode
     {
-        return $this->isPlainText;
+        return $this->stringTranslationMode;
     }
 }

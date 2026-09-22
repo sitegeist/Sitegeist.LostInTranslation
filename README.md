@@ -62,8 +62,21 @@ If DeepL is configured with `tag_handling: 'html'` or `tag_handling: 'xml'`, pla
 characters like `&`, `<` or `>` can be returned with encoded entities. For example, `Nudel & Suppe` may become
 `Pasta &amp; Soup`.
 
-Mark simple `string` properties that contain plain text as `automaticTranslationPlainText: true`. These values are
-escaped before they are sent to DeepL and decoded again before they are stored on the translated node.
+By default, string properties use `stringTranslationMode: html` so existing behavior stays unchanged. Mark simple
+`string` properties that contain plain text as `stringTranslationMode: plain`. These values are escaped before they are
+sent to DeepL and decoded again before they are stored on the translated node.
+
+You can also change the default mode for non-inline editable strings globally:
+
+```yaml
+Sitegeist:
+  LostInTranslation:
+    nodeTranslation:
+      defaultNonInlineEditableTranslationMode: plain
+```
+
+If a non-inline editable translatable property should keep the previous HTML behavior while that global default is
+`plain`, set its mode explicitly to `html`.
 
 ```yaml
 'Vendor.Site:Content.Example':
@@ -72,7 +85,7 @@ escaped before they are sent to DeepL and decoded again before they are stored o
       type: string
       options:
         automaticTranslation: true
-        automaticTranslationPlainText: true
+        stringTranslationMode: plain
 ```
 
 This option is intended for simple `string` properties. For value object properties with translation connectors, handle

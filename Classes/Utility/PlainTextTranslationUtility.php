@@ -5,17 +5,18 @@ declare(strict_types=1);
 namespace Sitegeist\LostInTranslation\Utility;
 
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNames;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\StringTranslationMode;
 
 class PlainTextTranslationUtility
 {
     /**
-     * @param array<non-empty-string, string> $properties
-     * @return array<non-empty-string, string>
+     * @param array<string, string> $properties
+     * @return array<string, string>
      */
     public static function encodePlainTextProperties(array $properties, TranslatablePropertyNames $translatableProperties): array
     {
         foreach ($properties as $name => $value) {
-            if ($translatableProperties->isPlainText($name)) {
+            if ($translatableProperties->hasStringTranslationMode($name, StringTranslationMode::Plain)) {
                 $properties[$name] = htmlspecialchars(
                     $value,
                     ENT_QUOTES | ENT_SUBSTITUTE | ENT_XML1,
@@ -28,13 +29,13 @@ class PlainTextTranslationUtility
     }
 
     /**
-     * @param array<non-empty-string, string> $properties
-     * @return array<non-empty-string, string>
+     * @param array<string, string> $properties
+     * @return array<string, string>
      */
     public static function decodePlainTextProperties(array $properties, TranslatablePropertyNames $translatableProperties): array
     {
         foreach ($properties as $name => $value) {
-            if ($translatableProperties->isPlainText($name)) {
+            if ($translatableProperties->hasStringTranslationMode($name, StringTranslationMode::Plain)) {
                 $properties[$name] = htmlspecialchars_decode($value, ENT_QUOTES | ENT_XML1);
             }
         }
