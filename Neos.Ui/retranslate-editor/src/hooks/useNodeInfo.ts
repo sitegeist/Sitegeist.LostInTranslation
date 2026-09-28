@@ -9,24 +9,39 @@ type NodeInfoResult = {
     translate: 'nodes' | 'document';
 };
 
+/**
+ * Context paths look like "/sites/example/page@user-jdoe;language=de,en&country=at". The first value of
+ * each dimension is the one the node was requested for.
+ *
+ * The dimensions are read from the inspected node instead of the globally active ones: when a dimension is
+ * switched to one the node does not exist in, the Neos UI updates the active dimension before it resolves
+ * the node, so the two do not match while the "create variant" dialog is open.
+ */
+const dimensionsFromContextPath = (contextPath: string): Record<string, string | null> => {
+    const dimensionString = contextPath.split('@').pop()?.split(';')[1] ?? '';
+    if (dimensionString === '') {
+        return {};
+    }
+
+    return Object.fromEntries(
+        dimensionString.split('&').map((dimension) => {
+            const [dimensionName, values = ''] = dimension.split('=');
+            return [dimensionName, values.split(',')[0] || null];
+        })
+    );
+};
+
 export const useNodeInfo = (target: RetranslateTarget): NodeInfoResult => {
     const { dimensions, workspace, nodeId } = useSelector((state: any) => {
-        const activeDimensions = selectors.CR.ContentDimensions.active(state) ?? {};
         const getNodeByContextPath = selectors.CR.Nodes.nodeByContextPath(state);
         const focusedNodePath = selectors.CR.Nodes.focusedNodePathSelector(state);
         const documentNodePath = state?.cr?.nodes?.documentNode ?? null;
         const focusedNode = focusedNodePath ? getNodeByContextPath(focusedNodePath) : null;
         const documentNode = documentNodePath ? getNodeByContextPath(documentNodePath) : null;
         const activeNode = target === 'document' ? documentNode : focusedNode;
-        const normalizedDimensions = Object.fromEntries(
-            Object.entries(activeDimensions).map(([dimensionName, values]) => [
-                dimensionName,
-                Array.isArray(values) ? values[0] ?? null : null
-            ])
-        ) as Record<string, string | null>;
 
         return {
-            dimensions: normalizedDimensions,
+            dimensions: activeNode?.contextPath ? dimensionsFromContextPath(activeNode.contextPath) : {},
             workspace: state?.cr?.workspaces?.personalWorkspace?.name ?? null,
             nodeId: activeNode?.identifier ?? null
         };
