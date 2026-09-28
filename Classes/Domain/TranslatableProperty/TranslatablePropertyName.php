@@ -18,14 +18,20 @@ class TranslatablePropertyName
      */
     protected $translationConnector;
 
+    protected ?StringTranslationMode $stringTranslationMode;
+
     /**
      * @param string $name
      * @param TranslationConnectorInterface<object>|null $translationConnector
      */
-    public function __construct(string $name, ?TranslationConnectorInterface $translationConnector = null)
-    {
+    public function __construct(
+        string $name,
+        ?TranslationConnectorInterface $translationConnector = null,
+        ?StringTranslationMode $stringTranslationMode = null
+    ) {
         $this->name = $name;
         $this->translationConnector = $translationConnector;
+        $this->stringTranslationMode = $stringTranslationMode;
     }
 
     public function getName(): string
@@ -39,5 +45,10 @@ class TranslatablePropertyName
     public function getTranslationConnector(): ?TranslationConnectorInterface
     {
         return $this->translationConnector;
+    }
+
+    public function getStringTranslationMode(): ?StringTranslationMode
+    {
+        return $this->stringTranslationMode;
     }
 }

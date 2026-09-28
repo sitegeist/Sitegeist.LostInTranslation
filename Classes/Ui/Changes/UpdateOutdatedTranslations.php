@@ -10,6 +10,7 @@ use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\UpdateWorkspaceInfo;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
+use Sitegeist\LostInTranslation\Utility\PlainTextTranslationUtility;
 
 class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
 {
@@ -53,7 +54,9 @@ class UpdateOutdatedTranslations extends AbstractCollectionTranslationChange
                 }
             }
             if (count($propertiesToTranslate) > 0) {
+                $propertiesToTranslate = PlainTextTranslationUtility::encodePlainTextProperties($propertiesToTranslate, $translatableProperties);
                 $translatedProperties = $this->translationService->translate($propertiesToTranslate, $node->getContext()->getTargetDimensions()[$this->languageDimensionName], $referenceNode->getContext()->getTargetDimensions()[$this->languageDimensionName]);
+                $translatedProperties = PlainTextTranslationUtility::decodePlainTextProperties($translatedProperties, $translatableProperties);
                 foreach ($translatedProperties as $propertyName => $propertyValue) {
                     if ($node->getProperty($propertyName) != $propertyValue) {
                         $node->setProperty($propertyName, $propertyValue);

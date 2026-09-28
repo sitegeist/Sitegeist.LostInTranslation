@@ -9,6 +9,7 @@ use Neos\Flow\Tests\UnitTestCase;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyName;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNames;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
+use Sitegeist\LostInTranslation\Domain\TranslatableProperty\StringTranslationMode;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 class TranslatablePropertyNamesFactoryTest extends UnitTestCase
@@ -21,6 +22,8 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
 
         $this->translatablePropertyNamesFactory = new TranslatablePropertyNamesFactory();
         $this->inject($this->translatablePropertyNamesFactory, 'translateInlineEditables', true);
+        $this->inject($this->translatablePropertyNamesFactory, 'defaultInlineEditableTranslationMode', 'html');
+        $this->inject($this->translatablePropertyNamesFactory, 'defaultNonInlineEditableTranslationMode', 'html');
 
     }
 
@@ -54,7 +57,7 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
                 ]
             ]),
             new TranslatablePropertyNames(
-                new TranslatablePropertyName('inlineEditableTextProperty'),
+                new TranslatablePropertyName('inlineEditableTextProperty', null, StringTranslationMode::Html),
             ),
         ];
 
@@ -70,7 +73,41 @@ class TranslatablePropertyNamesFactoryTest extends UnitTestCase
                 ]
             ]),
             new TranslatablePropertyNames(
-                new TranslatablePropertyName('textPropertyWithOptions'),
+                new TranslatablePropertyName('textPropertyWithOptions', null, StringTranslationMode::Html),
+            ),
+        ];
+
+        yield 'plain stringTranslationMode automaticTranslation' => [
+            new NodeType('Example', [], [
+                'properties' => [
+                    'plainTextProperty' => [
+                        'type' => 'string',
+                        'options' => [
+                            'automaticTranslation' => true,
+                            'stringTranslationMode' => 'plain',
+                        ]
+                    ]
+                ]
+            ]),
+            new TranslatablePropertyNames(
+                new TranslatablePropertyName('plainTextProperty', null, StringTranslationMode::Plain),
+            ),
+        ];
+
+        yield 'html stringTranslationMode automaticTranslation' => [
+            new NodeType('Example', [], [
+                'properties' => [
+                    'htmlTextProperty' => [
+                        'type' => 'string',
+                        'options' => [
+                            'automaticTranslation' => true,
+                            'stringTranslationMode' => 'html',
+                        ]
+                    ]
+                ]
+            ]),
+            new TranslatablePropertyNames(
+                new TranslatablePropertyName('htmlTextProperty', null, StringTranslationMode::Html),
             ),
         ];
     }

@@ -6,5 +6,10 @@
       type: string
       ui:
         inlineEditable: true
+    plainTextStringProperty:
+      type: string
+      options:
+        automaticTranslation: true
+        stringTranslationMode: plain
     stringProperty:
       type: string

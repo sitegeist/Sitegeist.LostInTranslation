@@ -140,6 +140,31 @@ class NodeTranslationServiceTest extends AbstractFunctionalTestCase
     /**
      * @test
      * @return void
+     * @throws NodeException
+     */
+    public function plainTextPropertiesAreEncodedBeforeAndDecodedAfterTranslation(): void
+    {
+        $germanString = 'Wellness & Spa';
+        $englishString = 'Wellness &amp; Spa';
+        $this->deeplServiceMock->method('translate')
+            ->with(['plainTextStringProperty' => 'Wellness &amp; Spa'], 'en')
+            ->willReturn(['plainTextStringProperty' => $englishString]);
+
+        $nodeInGerman = $this->createTestNode(['plainTextStringProperty' => $germanString]);
+        $this->userWorkspace->publishNode($nodeInGerman, $this->liveWorkspace);
+
+        $this->saveNodesAndTearDown();
+        $this->setUpWorkspacesAndContexts();
+
+        $nodeInEnglish = $this->englishLiveContext->getNode('/new-node');
+
+        $this->assertTrue(!is_null($nodeInEnglish), 'The node in German was automatically synced into English');
+        $this->assertEquals($germanString, $nodeInEnglish->getProperty('plainTextStringProperty'), 'The plaintext property was stored without encoded entities');
+    }
+
+    /**
+     * @test
+     * @return void
      * @throws NodeException|IllegalObjectTypeException
      */
     public function updatedNodeInGermanIsCorrectlySyncedToEnglish(): void

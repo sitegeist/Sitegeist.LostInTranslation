@@ -16,6 +16,7 @@ use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 use Sitegeist\LostInTranslation\Domain\TranslationServiceInterface;
 use Sitegeist\LostInTranslation\Utility\ArrayFlatteningUtility;
+use Sitegeist\LostInTranslation\Utility\PlainTextTranslationUtility;
 
 /**
  * @Flow\Scope("singleton")
@@ -312,9 +313,18 @@ class NodeTranslationService
 
         if (count($propertiesToTranslate) > 0) {
             $propertiesToTranslateDeflated = ArrayFlatteningUtility::deflate($propertiesToTranslate);
+            $propertiesToTranslateEncoded = PlainTextTranslationUtility::encodePlainTextProperties(
+                $propertiesToTranslateDeflated,
+                $translatableProperties
+            );
             /** @var array<non-empty-string, string> $translatedPropertiesDeflated */
-            $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateDeflated, $targetLanguage, $sourceLanguage);
-            $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDeflated);
+            $translatedPropertiesDeflated = $this->translationService->translate($propertiesToTranslateEncoded, $targetLanguage, $sourceLanguage);
+            $translatedPropertiesDecoded = PlainTextTranslationUtility::decodePlainTextProperties(
+                $translatedPropertiesDeflated,
+                $translatableProperties
+            );
+            /** @var array<non-empty-string, string> $translatedPropertiesDecoded */
+            $translatedProperties = ArrayFlatteningUtility::enflate($translatedPropertiesDecoded);
             $properties = array_merge($translatedProperties, $properties);
         } else {
             $translatedProperties = [];
