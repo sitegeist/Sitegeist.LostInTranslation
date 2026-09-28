@@ -70,7 +70,7 @@ Sitegeist:
       #
       translateInlineEditables: true
       defaultInlineEditableTranslationMode: html
-      defaultNonInlineEditableTranslationMode: html
+      defaultNonInlineEditableTranslationMode: plain
 
       #
       # The name of the language dimension. Usually needs no modification

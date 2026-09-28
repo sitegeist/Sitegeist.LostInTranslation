@@ -7,27 +7,37 @@ namespace Sitegeist\LostInTranslation\Domain\TranslatableProperty;
 use Sitegeist\LostInTranslation\Domain\TranslationConnectorInterface;
 
 /**
- * @implements \IteratorAggregate<int, TranslatablePropertyName>
+ * @implements \IteratorAggregate<string, TranslatablePropertyName>
  */
 class TranslatablePropertyNames implements \IteratorAggregate
 {
     /**
-     * @var TranslatablePropertyName[]
+     * @var array<string, TranslatablePropertyName>
      */
     protected $translatableProperties;
+
     public function __construct(TranslatablePropertyName ...$translatableProperties)
     {
-        $this->translatableProperties = $translatableProperties;
+        $this->translatableProperties = [];
+        foreach ($translatableProperties as $translatableProperty) {
+            $this->translatableProperties[$translatableProperty->getName()] = $translatableProperty;
+        }
     }
 
     public function isTranslatable(string $propertyName): bool
     {
-        foreach ($this->translatableProperties as $translatableProperty) {
-            if ($translatableProperty->getName() == $propertyName) {
-                return true;
-            }
+        if (array_key_exists($propertyName, $this->translatableProperties)) {
+            return true;
         }
         return false;
+    }
+
+    public function getByPropertyName(string $propertyName): ?TranslatablePropertyName
+    {
+        if (array_key_exists($propertyName, $this->translatableProperties)) {
+            return $this->translatableProperties[$propertyName];
+        }
+        return null;
     }
 
     /**
@@ -36,26 +46,22 @@ class TranslatablePropertyNames implements \IteratorAggregate
      */
     public function getTranslationObjectConnector(string $propertyName): ?TranslationConnectorInterface
     {
-        foreach ($this->translatableProperties as $translatableProperty) {
-            if ($translatableProperty->getName() == $propertyName) {
-                return $translatableProperty->getTranslationConnector();
-            }
+        if (array_key_exists($propertyName, $this->translatableProperties)) {
+            return $this->translatableProperties[$propertyName]->getTranslationConnector();
         }
         return null;
     }
 
     public function hasStringTranslationMode(string $propertyName, StringTranslationMode $stringTranslationMode): bool
     {
-        foreach ($this->translatableProperties as $translatableProperty) {
-            if ($translatableProperty->getName() == $propertyName) {
-                return $translatableProperty->getStringTranslationMode() === $stringTranslationMode;
-            }
+        if (array_key_exists($propertyName, $this->translatableProperties)) {
+            return $this->translatableProperties[$propertyName]->getStringTranslationMode() === $stringTranslationMode;
         }
         return false;
     }
 
     /**
-     * @return \ArrayIterator<int, TranslatablePropertyName>
+     * @return \ArrayIterator<string, TranslatablePropertyName>
      */
     public function getIterator(): \Iterator
     {

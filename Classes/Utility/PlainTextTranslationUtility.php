@@ -16,7 +16,7 @@ class PlainTextTranslationUtility
     public static function encodePlainTextProperties(array $properties, TranslatablePropertyNames $translatableProperties): array
     {
         foreach ($properties as $name => $value) {
-            if ($translatableProperties->hasStringTranslationMode($name, StringTranslationMode::Plain)) {
+            if ($translatableProperties->getByPropertyName($name)?->getStringTranslationMode() === StringTranslationMode::Plain) {
                 $properties[$name] = htmlspecialchars(
                     $value,
                     ENT_QUOTES | ENT_SUBSTITUTE | ENT_XML1,
@@ -35,7 +35,7 @@ class PlainTextTranslationUtility
     public static function decodePlainTextProperties(array $properties, TranslatablePropertyNames $translatableProperties): array
     {
         foreach ($properties as $name => $value) {
-            if ($translatableProperties->hasStringTranslationMode($name, StringTranslationMode::Plain)) {
+            if ($translatableProperties->getByPropertyName($name)?->getStringTranslationMode() === StringTranslationMode::Plain) {
                 $properties[$name] = htmlspecialchars_decode($value, ENT_QUOTES | ENT_XML1);
             }
         }
