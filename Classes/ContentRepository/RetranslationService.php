@@ -10,6 +10,9 @@ use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\Service\ContentContext;
 use Neos\Neos\Domain\Service\ContentContextFactory;
 use Neos\Neos\Domain\Service\ContentDimensionPresetSourceInterface;
+use Sitegeist\LostInTranslation\Domain\Retranslation\Discrepancy;
+use Sitegeist\LostInTranslation\Domain\Retranslation\DiscrepancyCollection;
+use Sitegeist\LostInTranslation\Domain\Retranslation\InterdimensionalModificationComparisonResult;
 use Sitegeist\LostInTranslation\Domain\TranslatableProperty\TranslatablePropertyNamesFactory;
 
 /**
@@ -70,21 +73,36 @@ class RetranslationService
         Node $sourceNode,
         ContentContext $sourceContext,
         ContentContext $targetContext
-    ): ?\DateTimeInterface {
+    ): InterdimensionalModificationComparisonResult {
         /** @var ?Node $targetNode */
         $targetNode = $targetContext->getNodeByIdentifier($sourceNode->getIdentifier());
         $sourceReferenceDate = $sourceNode->getLastModificationDateTime();
+        $comparisonResult = new InterdimensionalModificationComparisonResult(
+            $sourceNode,
+            $targetNode
+        );
         if (!$targetNode) {
-            return $sourceReferenceDate;
+            $comparisonResult->addOneDiscrepancy(
+                new Discrepancy(
+                    $sourceNode,
+                    null,
+                    $sourceReferenceDate,
+                    'Target node is missing'
+                )
+            );
+            return $comparisonResult;
         }
 
-        /**
-         * @var \DateTimeInterface[] $possibleModificationDates
-         */
-        $possibleModificationDates = [];
         $targetReferenceDate = $targetNode->getLastModificationDateTime();
         if ($targetReferenceDate < $sourceReferenceDate) {
-            $possibleModificationDates[] = $sourceReferenceDate;
+            $comparisonResult->addOneDiscrepancy(
+                new Discrepancy(
+                    $sourceNode,
+                    $targetNode,
+                    $sourceReferenceDate,
+                    'Source node is more current than target node'
+                )
+            );
         }
 
         /**
@@ -94,9 +112,9 @@ class RetranslationService
         foreach ($sourceNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $sourceChildNode) {
             $sourceNodeByIdentifier[$sourceChildNode->getIdentifier()] = $sourceChildNode;
             /** @var Node $sourceChildNode */
-            $updateDate = $this->findFirstUpdateDateOnNodeOrDescendants($sourceChildNode, $sourceContext, $targetContext);
-            if ($updateDate) {
-                $possibleModificationDates[] = $updateDate;
+            $subResult = $this->findFirstUpdateDateOnNodeOrDescendants($sourceChildNode, $sourceContext, $targetContext);
+            if ($subResult->hasDiscrepancies()) {
+                $comparisonResult->addSubResult($subResult);
             }
         }
 
@@ -104,21 +122,29 @@ class RetranslationService
             if (array_key_exists($targetChildNode->getIdentifier(), $sourceNodeByIdentifier)) {
                 $sourceNode = $sourceNodeByIdentifier[$targetChildNode->getIdentifier()];
                 if ($targetChildNode->getIndex() !== $sourceNode->getIndex()) {
-                    $possibleModificationDates[] = $targetNode->getLastModificationDateTime();
+                    $comparisonResult->addOneDiscrepancy(
+                        new Discrepancy(
+                            $sourceNode,
+                            $targetNode,
+                            $targetChildNode->getLastModificationDateTime(),
+                            'Source node has been moved'
+                        )
+                    );
                 }
             } else {
                 // we do not know the date of the deletion so we decide it was just now
                 // this will be improved for neos 9
-                $possibleModificationDates[] = new \DateTimeImmutable();
-            }
+                $comparisonResult->addOneDiscrepancy(
+                    new Discrepancy(
+                        $sourceNode,
+                        $targetNode,
+                        new \DateTimeImmutable(),
+                        'Source node has been deleted'
+                    )
+                );            }
         }
 
-        if (count($possibleModificationDates) > 0) {
-            sort($possibleModificationDates);
-            return reset($possibleModificationDates);
-        }
-
-        return null;
+        return $comparisonResult;
     }
 
     /**
@@ -177,10 +203,7 @@ class RetranslationService
                         }
                     }
                 }
-                // sync node position
-                if ($this->synchronizeNodePosition && $node->getIndex() !== $targetNode->getIndex()) {
-                    $targetNode->setIndex($node->getIndex());
-                }
+
                 if ($this->synchronizeNodeVisibility) {
                     // sync visibility properties
                     if ($node->isHidden() !== $targetNode->isHidden()) {
@@ -193,6 +216,11 @@ class RetranslationService
                         $targetNode->setHiddenAfterDateTime($node->getHiddenAfterDateTime());
                     }
                 }
+            }
+
+            // sync node position
+            if ($this->synchronizeNodePosition && $node->getIndex() !== $targetNode->getIndex()) {
+                $targetNode->setIndex($node->getIndex());
             }
         }
 

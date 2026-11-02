@@ -36,14 +36,14 @@ class RetranslationController extends ActionController
             throw new \Exception('Node not found in workspace and dimension space point');
         }
 
-        $sourceUpdateDate = null;
+        $comparisonResult = null;
         $sourceLanguagePreset = null;
         if ($sourceLanguage) {
             $sourceContentContext = $this->retranslationService->getReferenceContentContext($workspaceName, $targetCoordinates);
             /** @var ?Node $sourceNode */
             $sourceNode = $sourceContentContext->getNodeByIdentifier($nodeAggregateId);
             if ($sourceNode instanceof Node) {
-                $sourceUpdateDate = $this->retranslationService->findFirstUpdateDateOnNodeOrDescendants(
+                $comparisonResult = $this->retranslationService->findFirstUpdateDateOnNodeOrDescendants(
                     $sourceNode,
                     $sourceContentContext,
                     $targetContentContext
@@ -57,11 +57,12 @@ class RetranslationController extends ActionController
 
         return \json_encode(
             [
-                'isUpToDate' => $sourceUpdateDate === null,
+                'isUpToDate' => $comparisonResult->hasDiscrepancies() === false,
                 'referenceLanguage' => $sourceLanguage
                     ? [
                         'label' => $sourceLanguagePreset ? $sourceLanguagePreset['label'] : null,
-                        'dateModified' => $sourceUpdateDate?->format(\DateTime::ATOM),
+                        'dateModified' => $comparisonResult->getEarliestDiscrepancyDate()?->format(\DateTime::ATOM),
+                        'discrepancies' => $comparisonResult->discrepancies->asArray(),
                     ]
                     : null,
             ],
