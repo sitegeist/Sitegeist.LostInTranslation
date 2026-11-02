@@ -102,9 +102,9 @@ class RetranslationService
 
         foreach ($targetNode->getChildNodes('Neos.Neos:Content,Neos.Neos:ContentCollection') as $targetChildNode) {
             if (array_key_exists($targetChildNode->getIdentifier(), $sourceNodeByIdentifier)) {
-                $sourceNode = $sourceNodeByIdentifier[$targetChildNode->getIdentifier()];
-                if ($targetChildNode->getIndex() !== $sourceNode->getIndex()) {
-                    $possibleModificationDates[] = $targetNode->getLastModificationDateTime();
+                $sourceChildNode = $sourceNodeByIdentifier[$targetChildNode->getIdentifier()];
+                if ($targetChildNode->getIndex() !== $sourceChildNode->getIndex()) {
+                    $possibleModificationDates[] = $targetChildNode->getLastModificationDateTime();
                 }
             } else {
                 // we do not know the date of the deletion so we decide it was just now
@@ -177,10 +177,7 @@ class RetranslationService
                         }
                     }
                 }
-                // sync node position
-                if ($this->synchronizeNodePosition && $node->getIndex() !== $targetNode->getIndex()) {
-                    $targetNode->setIndex($node->getIndex());
-                }
+
                 if ($this->synchronizeNodeVisibility) {
                     // sync visibility properties
                     if ($node->isHidden() !== $targetNode->isHidden()) {
@@ -193,6 +190,11 @@ class RetranslationService
                         $targetNode->setHiddenAfterDateTime($node->getHiddenAfterDateTime());
                     }
                 }
+            }
+
+            // sync node position
+            if ($this->synchronizeNodePosition && $node->getIndex() !== $targetNode->getIndex()) {
+                $targetNode->setIndex($node->getIndex());
             }
         }
 
